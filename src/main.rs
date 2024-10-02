@@ -41,6 +41,13 @@ fn spawn_drawing_thread(pair: Arc<(Mutex<bool>, Condvar)>) -> JoinHandle<Result<
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
+        let size = terminal.size().unwrap();
+        if size.width < 48 || size.height < 11 {
+            let width = size.width;
+            let height = size.height;
+            unsafe { state::ERROR = String::from(format!("Terminal size requires at least 48x11.\nCurrent size: {width}x{height}")) };
+        }
+
         while unsafe { state::RUNNING } {
             let (lock, cvar) = &*pair;
             let mut redraw = lock.lock().unwrap();

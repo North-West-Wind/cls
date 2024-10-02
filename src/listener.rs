@@ -34,6 +34,15 @@ fn notify_redraw(pair: Arc<(Mutex<bool>, Condvar)>) {
 }
 
 fn on_resize(pair: Arc<(Mutex<bool>, Condvar)>, width: u16, height: u16) {
-	unsafe { state::ERROR = String::from(format!("Size: {width}x{height}")) };
-	notify_redraw(pair);
+	if width < 48 || height < 11 {
+		unsafe { state::ERROR = String::from(format!("Terminal size requires at least 48x11.\nCurrent size: {width}x{height}")) };
+		notify_redraw(pair);
+	} else {
+		unsafe {
+			if !state::ERROR.is_empty() {
+				state::ERROR = String::new();
+				notify_redraw(pair);
+			}
+		};
+	}
 }

@@ -30,7 +30,7 @@ pub fn ui(f: &mut Frame) {
 			 .border_type(BorderType::Rounded);
 	f.render_widget(block, chunks[1]);
 	let block = Block::default()
-			 .title("File")
+			 .title("Files")
 			 .borders(Borders::ALL)
 			 .border_type(BorderType::Rounded);
 	f.render_widget(block, chunks[2]);
