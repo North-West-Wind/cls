@@ -1,0 +1,9 @@
+[package]
+name = "cls"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crossterm = "0.28"
+inputbot = "0.6"
+ratatui = "0.28.1"
