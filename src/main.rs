@@ -16,8 +16,11 @@ mod renderer;
 mod listener;
 mod state;
 mod config;
+mod constant;
 
 fn main() -> Result<(), io::Error> {
+    let _ = config::load();
+
     state::set_running(true);
 
     let pair = Arc::new((Mutex::new(init_shared_condvar()), Condvar::new()));

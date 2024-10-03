@@ -1,7 +1,7 @@
 use std::{io, time::Duration, cmp::{min, max}};
 use crossterm::event::{poll, read, Event, KeyCode, KeyEvent};
 
-use crate::state::{get_block_selected, get_error, get_running, get_selection_layer, set_block_selected, set_error, set_running, set_selection_layer, CondvarPair, SelectionLayer};
+use crate::state::{get_block_selected, get_error, get_last_selection_layer, get_popup, get_running, get_selection_layer, set_block_selected, set_error, set_popup, set_running, set_selection_layer, CondvarPair, Popup, SelectionLayer};
 
 pub fn listen_events(pair: CondvarPair) -> io::Result<()> {
 	while get_running() {
@@ -44,25 +44,43 @@ fn on_resize(pair: CondvarPair, width: u16, height: u16) {
 }
 
 fn on_key(pair: CondvarPair, event: KeyEvent) {
-	let mut need_redraw = false;
-	match event.code {
-		KeyCode::Up => need_redraw = key_navigate(0, -1),
-		KeyCode::Down => need_redraw = key_navigate(0, 1),
-		KeyCode::Enter => need_redraw = navigate_layer(false),
-		KeyCode::Char('q')|KeyCode::Esc => need_redraw = navigate_layer(true),
-		_ => ()
+	let need_redraw: bool;
+	if get_popup() == Popup::QUIT {
+		need_redraw = handle_quit(event);
+	} else {
+		need_redraw = match event.code {
+			KeyCode::Up => key_navigate(0, -1),
+			KeyCode::Down => key_navigate(0, 1),
+			KeyCode::Enter => navigate_layer(false),
+			KeyCode::Char('q')|KeyCode::Esc => navigate_layer(true),
+			KeyCode::Char('?') => navigate_popup(Popup::HELP),
+			_ => false
+		};
 	}
 	if need_redraw {
 		notify_redraw(pair);
 	}
 }
 
+fn handle_quit(event: KeyEvent) -> bool {
+	match event.code {
+		KeyCode::Char('y') => {
+			set_running(false);
+			return false
+		},
+		_ => navigate_layer(true)
+	}
+}
+
 fn key_navigate(dx: i16, dy: i16) -> bool {
 	if dx == 0 && dy == 0 { return false }
-	if get_selection_layer() == SelectionLayer::BLOCK {
+	let layer = get_selection_layer();
+	if layer == SelectionLayer::BLOCK {
 		navigate_block(dx, dy)
-	} else {
+	} else if layer == SelectionLayer::CONTENT {
 		navigate_content(dx, dy)
+	} else {
+		false
 	}
 }
 
@@ -93,12 +111,17 @@ fn navigate_layer(escape: bool) -> bool {
 	if escape {
 		match get_selection_layer() {
 			SelectionLayer::BLOCK => {
-				set_running(false);
-				return false
+				navigate_popup(Popup::QUIT);
+				return true
 			},
 			SelectionLayer::CONTENT => {
 				set_selection_layer(SelectionLayer::BLOCK);
 				return true
+			},
+			SelectionLayer::POPUP => {
+				set_selection_layer(get_last_selection_layer());
+				set_popup(Popup::NONE);
+				return true;
 			}
 		}
 	} else {
@@ -107,7 +130,19 @@ fn navigate_layer(escape: bool) -> bool {
 				set_selection_layer(SelectionLayer::CONTENT);
 				return true
 			},
-			SelectionLayer::CONTENT => return false,
+			SelectionLayer::CONTENT|SelectionLayer::POPUP => return false,
 		}
 	}
+}
+
+fn navigate_popup(popup: Popup) -> bool {
+	let old_popup = get_popup();
+	if old_popup != popup {
+		set_popup(popup);
+		if popup != Popup::NONE {
+			set_selection_layer(SelectionLayer::POPUP);
+		}
+		return true;
+	}
+	false
 }

@@ -1,6 +1,8 @@
 use std::{default::Default, vec::Vec};
 use serde::{Serialize, Deserialize};
 
+use crate::constant::APP_NAME;
+
 #[derive(Serialize, Deserialize)]
 struct SoundboardConfig {
 	tabs: Vec<String>,
@@ -14,18 +16,20 @@ impl Default for SoundboardConfig {
 	}
 }
 
-static mut CONFIG: Option<SoundboardConfig> = Option::None;
+static mut CONFIG: SoundboardConfig = SoundboardConfig {
+	tabs: vec![]
+};
 
 pub fn load() -> Result<(), Box<dyn std::error::Error>> {
-	let cfg: SoundboardConfig = confy::load("cls", "config")?;
-	unsafe { CONFIG = Option::Some(cfg) };
+	unsafe { CONFIG = confy::load(APP_NAME, "config")? };
 	Ok(())
 }
 
-pub fn save() {
+pub fn save() -> Result<(), Box<dyn std::error::Error>> {
 	unsafe {
-		if CONFIG.is_some() {
-			confy::store("cls", "cfg", CONFIG.unwrap());
-		}
+		let mut cfg = SoundboardConfig::default();
+		cfg.tabs = CONFIG.tabs.clone();
+		confy::store(APP_NAME, "config", cfg)?;
 	}
+	Ok(())
 }
