@@ -7,11 +7,11 @@ use ratatui::{
     Terminal
 };
 use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    event::{poll, read, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use state::set_running;
+use state::{get_running, init_shared_condvar, set_error, set_running, CondvarPair, SharedCondvar};
 mod renderer;
 mod listener;
 mod state;
@@ -19,20 +19,18 @@ mod state;
 fn main() -> Result<(), io::Error> {
     state::set_running(true);
 
-    let pair = Arc::new((Mutex::new(true), Condvar::new()));
+    let pair = Arc::new((Mutex::new(init_shared_condvar()), Condvar::new()));
     let pair2 = Arc::clone(&pair);
 
     let draw_thread = spawn_drawing_thread(pair);
     let listen_thread = spawn_listening_thread(pair2);
-    thread::sleep(Duration::from_millis(5000));
-    set_running(false);
     listen_thread.join().unwrap()?;
     draw_thread.join().unwrap()?;
 
     Ok(())
 }
 
-fn spawn_drawing_thread(pair: Arc<(Mutex<bool>, Condvar)>) -> JoinHandle<Result<(), io::Error>> {
+fn spawn_drawing_thread(pair: CondvarPair) -> JoinHandle<Result<(), io::Error>> {
     return thread::spawn(move || -> Result<(), io::Error> {
         // setup terminal
         enable_raw_mode()?;
@@ -45,16 +43,15 @@ fn spawn_drawing_thread(pair: Arc<(Mutex<bool>, Condvar)>) -> JoinHandle<Result<
         if size.width < 48 || size.height < 11 {
             let width = size.width;
             let height = size.height;
-            unsafe { state::ERROR = String::from(format!("Terminal size requires at least 48x11.\nCurrent size: {width}x{height}")) };
+            set_error(String::from(format!("Terminal size requires at least 48x11.\nCurrent size: {width}x{height}")));
         }
-
-        while unsafe { state::RUNNING } {
+        while get_running() {
             let (lock, cvar) = &*pair;
-            let mut redraw = lock.lock().unwrap();
-            while !*redraw {
-                redraw = cvar.wait(redraw).unwrap();
+            let mut shared = lock.lock().unwrap();
+            while !(*shared).redraw {
+                shared = cvar.wait(shared).unwrap();
             }
-            *redraw = false;
+            (*shared).redraw = false;
             terminal.draw(|f| {
                 /*let size = f.size();
                 let block = Block::default()
@@ -77,7 +74,7 @@ fn spawn_drawing_thread(pair: Arc<(Mutex<bool>, Condvar)>) -> JoinHandle<Result<
     });
 }
 
-fn spawn_listening_thread(pair: Arc<(Mutex<bool>, Condvar)>) -> JoinHandle<Result<(), io::Error>> {
+fn spawn_listening_thread(pair: CondvarPair) -> JoinHandle<Result<(), io::Error>> {
     return thread::spawn(move || -> Result<(), io::Error> {
         listen_events(pair)?;
         Ok(())
