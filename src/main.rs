@@ -15,6 +15,7 @@ use state::{get_running, init_shared_condvar, set_error, set_running, CondvarPai
 mod renderer;
 mod listener;
 mod state;
+mod config;
 
 fn main() -> Result<(), io::Error> {
     state::set_running(true);
