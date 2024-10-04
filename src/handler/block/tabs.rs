@@ -37,7 +37,7 @@ fn handle_move(right: bool) -> bool {
 	let delta = if right { 1 } else { -1 };
 	let app = get_mut_app();
 	let tab_selected = app.tab_selected as i32;
-	let new_selected = min(app.config.tabs.len() as i32, max(0, tab_selected + delta));
+	let new_selected = min(app.config.tabs.len() as i32 - 1, max(0, tab_selected + delta));
 	if tab_selected != new_selected {
 		app.tab_selected = new_selected as usize;
 		return true;
@@ -50,4 +50,7 @@ pub fn delete_tab() {
 	let tab_selected = app.tab_selected;
 	app.files.as_mut().unwrap().remove(&app.config.tabs[tab_selected]);
 	app.config.tabs.remove(tab_selected);
+	if app.tab_selected >= app.config.tabs.len() {
+		app.tab_selected = app.config.tabs.len() - 1;
+	}
 }

@@ -21,7 +21,10 @@ fn handle_quit(event: KeyEvent) -> bool {
 			app.running = false;
 			return false
 		},
-		_ => navigate_layer(true)
+		_ => {
+			exit_popup();
+			return true
+		}
 	}
 }
 
@@ -29,7 +32,7 @@ fn handle_help(event: KeyEvent) -> bool {
 	let app = get_mut_app();
 	match event.code {
 		KeyCode::Char('q')|KeyCode::Esc => {
-			app.popup = Popup::NONE;
+			exit_popup();
 			return true
 		},
 		_ => false
@@ -37,13 +40,17 @@ fn handle_help(event: KeyEvent) -> bool {
 }
 
 fn handle_delete_tab(event: KeyEvent) -> bool {
-	let app = get_mut_app();
 	match event.code {
 		KeyCode::Char('y') => {
-			app.popup = Popup::NONE;
+			exit_popup();
 			delete_tab();
 			return true
 		},
 		_ => navigate_layer(true)
 	}
+}
+
+fn exit_popup() {
+	let app = get_mut_app();
+	app.popup = Popup::NONE;
 }

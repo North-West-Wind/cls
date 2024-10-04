@@ -1,25 +1,22 @@
-use std::{collections::HashMap, fs, path::Path, process::Command};
+use std::{collections::HashMap, fs, path::Path, time::Duration};
 
 use crate::state::get_mut_app;
 
-fn is_media(path: &str) -> bool {
-	let output = Command::new("ffprobe").args([
-		"-loglevel",
-		"quiet",
-		"-select_streams",
-		"a",
-		"-show_entries",
-		"stream=codec_type",
-		"-of",
-		"csv=p=0",
-		path.trim()
-	]).output().unwrap();
-
-	if !output.status.success() {
-		return false;
+fn ffprobe_info(path: &str) -> Option<Option<Duration>> {
+	let result = ffprobe::ffprobe(path);
+	match result {
+		Ok(info) => {
+			if info.streams.iter().filter(|stream| stream.codec_type == Option::Some("audio".to_string())).count() > 0 {
+				return Option::Some(info.format.get_duration());
+			} else {
+				return Option::None;
+			}
+		},
+		Err(_err) => {
+			// not a media file
+			return Option::None;
+		}
 	}
-	let out = String::from_utf8(output.stdout).unwrap();
-	return out.trim() == "audio";
 }
 
 pub fn scan_tab(index: usize) -> Result<(), std::io::Error> {
@@ -36,8 +33,16 @@ pub fn scan_tab(index: usize) -> Result<(), std::io::Error> {
 			let longpath = file.path();
 			let filename = longpath.file_name().unwrap().to_os_string().into_string().unwrap();
 			let filepath = longpath.into_os_string().into_string().unwrap();
-			if is_media(filepath.as_str()) {
-				files.push(filename);
+			let info = ffprobe_info(filepath.as_str());
+			if info.is_some() {
+				let duration = info.unwrap();
+				let duration_str: String;
+				if duration.is_some() {
+					duration_str = humantime::format_duration(duration.unwrap()).to_string();
+				} else {
+					duration_str = String::new();
+				}
+				files.push((filename, duration_str));
 			}
 		}
 		app.files.as_mut().unwrap().insert(tab, files);

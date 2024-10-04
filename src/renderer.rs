@@ -1,8 +1,9 @@
 use std::{cmp::max, path::Path};
 
 use ratatui::{
-	layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, BorderType, Borders, Padding, Paragraph}, Frame
+	layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph, Widget}, Frame
 };
+use substring::Substring;
 
 use crate::{constant::{APP_NAME, APP_VERSION}, state::{self, get_app, AwaitInput, InputMode, Popup, Scanning, SelectionLayer}};
 
@@ -146,8 +147,23 @@ fn draw_files_block(f: &mut Frame, area: Rect) {
 			paragraph = Paragraph::new("There are no playable files in this directory :<");
 		} else {
 			let mut lines = vec![];
-			for file in files.unwrap() {
-				lines.push(Line::from(file.clone()));
+			for (ii, (file, duration)) in files.unwrap().iter().enumerate() {
+				let mut spans = vec![];
+				if duration.len() == 0 {
+					spans.push(Span::from(file));
+				} else if file.len() + duration.len() > area.width as usize - 6 {
+					spans.push(Span::from(file.substring(0, area.width as usize - 10 - duration.len())));
+					spans.push(Span::from("... ".to_owned() + duration));
+				} else {
+					spans.push(Span::from(file.clone()));
+					spans.push(Span::from(vec![" "; area.width as usize - 6 - file.len() - duration.len()].join("")));
+					spans.push(Span::from(duration.clone()));
+				}
+				lines.push(Line::from(spans).centered().style(if app.file_selected == ii {
+					Style::default().fg(Color::LightBlue).add_modifier(Modifier::REVERSED)
+				} else {
+					Style::default().fg(Color::Cyan)
+				}));
 			}
 			paragraph = Paragraph::new(lines);
 		}
@@ -197,6 +213,7 @@ fn draw_help_block(f: &mut Frame) {
 		width,
 		height
 	};
+	Clear.render(popup_area, f.buffer_mut());
 	f.render_widget(Paragraph::new(text).block(Block::bordered().padding(Padding::uniform(1)).border_type(BorderType::Rounded)), popup_area);
 }
 
@@ -214,6 +231,7 @@ fn draw_quit_block(f: &mut Frame) {
 		width,
 		height
 	};
+	Clear.render(popup_area, f.buffer_mut());
 	f.render_widget(Paragraph::new(text).block(Block::bordered().title("Quit?").padding(Padding::horizontal(1)).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::Yellow))), popup_area);
 }
 
@@ -231,6 +249,7 @@ fn draw_delete_tab_block(f: &mut Frame) {
 		width,
 		height
 	};
+	Clear.render(popup_area, f.buffer_mut());
 	f.render_widget(Paragraph::new(text).block(Block::bordered().title("Delete?").padding(Padding::horizontal(1)).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::Yellow))), popup_area);
 }
 
@@ -256,6 +275,7 @@ fn draw_input(f: &mut Frame) {
 		width: width + 5,
 		height
 	};
+	Clear.render(input_area, f.buffer_mut());
 	f.render_widget(input_para, input_area);
 	f.set_cursor_position((
 		input_area.x + ((input.visual_cursor()).max(scroll) - scroll) as u16 + 2,

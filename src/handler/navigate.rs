@@ -7,8 +7,6 @@ pub fn key_navigate(dx: i16, dy: i16) -> bool {
 	let app = get_app();
 	if app.selection_layer == SelectionLayer::BLOCK {
 		navigate_block(dx, dy)
-	} else if app.selection_layer == SelectionLayer::CONTENT {
-		navigate_content(dx, dy)
 	} else {
 		false
 	}
@@ -31,10 +29,6 @@ pub fn navigate_block(dx: i16, dy: i16) -> bool {
 		app.block_selected = new_block as u8;
 		return true
 	}
-	false
-}
-
-pub fn navigate_content(_dx: i16, _dy: i16) -> bool {
 	false
 }
 

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}};
+use std::{collections::HashMap, ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}, time::Duration};
 
 use tui_input::Input;
 
@@ -64,7 +64,7 @@ pub struct App {
 	pub input_mode: InputMode,
 	pub await_input: AwaitInput,
 	pub tab_selected: usize,
-	pub files: Option<HashMap<String, Vec<String>>>,
+	pub files: Option<HashMap<String, Vec<(String, String)>>>,
 	pub scanning: Scanning,
 	pub file_selected: usize,
 }
