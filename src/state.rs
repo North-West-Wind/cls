@@ -1,5 +1,6 @@
 use std::{collections::HashMap, ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}, time::Duration};
 
+use pulsectl::controllers::SinkController;
 use tui_input::Input;
 
 use crate::config::{create_config, SoundboardConfig};
@@ -67,6 +68,7 @@ pub struct App {
 	pub files: Option<HashMap<String, Vec<(String, String)>>>,
 	pub scanning: Scanning,
 	pub file_selected: usize,
+	pub sink_controller: Option<SinkController>
 }
 
 impl Default for App {
@@ -95,6 +97,7 @@ const fn create_app() -> App {
 		files: Option::None,
 		scanning: Scanning::NONE,
 		file_selected: 0,
+		sink_controller: Option::None
 	}
 }
 

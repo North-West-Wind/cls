@@ -1,7 +1,7 @@
-use std::{cmp::max, path::Path};
+use std::{cmp::{max, min}, path::Path};
 
 use ratatui::{
-	layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph, Widget}, Frame
+	layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style, Styled}, text::{Line, Span, Text}, widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph, Widget}, Frame
 };
 use substring::Substring;
 
@@ -75,13 +75,26 @@ fn border_type(id: u8) -> BorderType {
 
 fn draw_volume_block(f: &mut Frame, area: Rect) {
 	let app = get_app();
-	let module_num = app.module_num.clone();
 	let block = Block::default()
 		.title("Volume")
 		.borders(Borders::ALL)
 		.border_type(border_type(0))
-		.border_style(border_style(0));
-	let paragraph = Paragraph::new(format!("Loaded null-sink as module {module_num}"))
+		.border_style(border_style(0))
+		.padding(Padding::horizontal(1));
+	let mut spans = vec![];
+	spans.push(Span::from(format!("Sink Volume ({:0>3}%) ", app.config.volume)));
+	let verticals = min(app.config.volume as usize, 100);
+	spans.push(Span::from(vec!["|"; verticals].join("")).style(Style::default().fg(if app.config.volume > 100 {
+		Color::Red
+	} else {
+		Color::LightGreen
+	})));
+	spans.push(Span::from(vec!["-"; 100 - verticals].join("")).style(Style::default().fg(if app.config.volume > 100 {
+		Color::Red
+	} else {
+		Color::Green
+	})));
+	let paragraph = Paragraph::new(Line::from(spans))
 		.block(block);
 	f.render_widget(paragraph, area);
 }

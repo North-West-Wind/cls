@@ -6,6 +6,7 @@ use crate::{constant::APP_NAME, state::{get_app, get_mut_app}};
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SoundboardConfig {
 	pub tabs: Vec<String>,
+	pub volume: u32,
 }
 
 impl Default for SoundboardConfig {
@@ -16,7 +17,8 @@ impl Default for SoundboardConfig {
 
 pub const fn create_config() -> SoundboardConfig {
 	SoundboardConfig {
-		tabs: vec![]
+		tabs: vec![],
+		volume: 100,
 	}
 }
 

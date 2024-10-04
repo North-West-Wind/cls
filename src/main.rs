@@ -1,5 +1,6 @@
 use std::{io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}};
-use handler::pulseaudio::{load_null_sink, unload_null_sink};
+use constant::{MIN_HEIGHT, MIN_WIDTH};
+use handler::pulseaudio::{load_null_sink, load_sink_controller, set_volume_percentage, unload_null_sink};
 use listener::listen_events;
 use ratatui::{
     backend::CrosstermBackend,
@@ -24,8 +25,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = config::load();
 
     let app = state::get_mut_app();
+    app.sink_controller = Option::Some(load_sink_controller()?);
     app.module_num = load_null_sink()?;
     app.input = Option::Some(Input::default());
+    set_volume_percentage(app.config.volume);
 
     app.running = true;
 
@@ -54,11 +57,11 @@ fn spawn_drawing_thread(pair: CondvarPair) -> JoinHandle<Result<(), io::Error>> 
         let mut terminal = Terminal::new(backend)?;
 
         let size = terminal.size().unwrap();
-        if size.width < 48 || size.height < 11 {
+        if size.width < MIN_WIDTH || size.height < MIN_HEIGHT {
             let width = size.width;
             let height = size.height;
             let app = state::get_mut_app();
-            app.error = String::from(format!("Terminal size requires at least 48x11.\nCurrent size: {width}x{height}"));
+            app.error = String::from(format!("Terminal size requires at least {MIN_WIDTH}x{MIN_HEIGHT}.\nCurrent size: {width}x{height}"));
         }
 
         let app = state::get_app();

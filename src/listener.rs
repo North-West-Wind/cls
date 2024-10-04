@@ -1,7 +1,7 @@
 use std::{io, time::Duration};
 use crossterm::event::{poll, read, Event, KeyEvent};
 
-use crate::{handler::{block::handle_block_key_event, input::{handle_input_key_event, handle_paste}, layer::handle_layer_key_event, popup::handle_popup_key_event}, state::{self, CondvarPair, InputMode, Popup, SelectionLayer}};
+use crate::{constant::{MIN_HEIGHT, MIN_WIDTH}, handler::{block::handle_block_key_event, input::{handle_input_key_event, handle_paste}, layer::handle_layer_key_event, popup::handle_popup_key_event}, state::{self, CondvarPair, InputMode, Popup, SelectionLayer}};
 
 pub fn listen_events(pair: CondvarPair) -> io::Result<()> {
 	let app = state::get_app();
@@ -34,22 +34,21 @@ fn notify_redraw(pair: CondvarPair) {
 
 fn on_resize(pair: CondvarPair, width: u16, height: u16) {
 	let app = state::get_mut_app();
-	if width < 48 || height < 11 {
-		app.error = String::from(format!("Terminal size requires at least 48x11.\nCurrent size: {width}x{height}"));
-		notify_redraw(pair);
+	if width < MIN_WIDTH || height < MIN_HEIGHT {
+		app.error = String::from(format!("Terminal size requires at least {MIN_WIDTH}x{MIN_HEIGHT}.\nCurrent size: {width}x{height}"));
 	} else {
 		if !app.error.is_empty() {
 			app.error = String::new();
-			notify_redraw(pair);
 		}
 	}
+	notify_redraw(pair);
 }
 
 fn on_key(pair: CondvarPair, event: KeyEvent) {
 	let app = state::get_app();
 	let need_redraw: bool;
 	if app.input_mode == InputMode::EDITING {
-		need_redraw = handle_input_key_event(event);
+		need_redraw = handle_input_key_event(pair.clone(), event);
 	} else if app.popup != Popup::NONE {
 		need_redraw = handle_popup_key_event(event);
 	} else {

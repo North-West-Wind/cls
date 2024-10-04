@@ -1,14 +1,14 @@
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use tui_input::{backend::crossterm::EventHandler, Input};
 
-use crate::state::{get_mut_app, AwaitInput, InputMode};
+use crate::state::{get_mut_app, AwaitInput, CondvarPair, InputMode};
 
 use super::block::handle_input_return;
 
-pub fn handle_input_key_event(event: KeyEvent) -> bool {
+pub fn handle_input_key_event(pair: CondvarPair, event: KeyEvent) -> bool {
 	match event.code {
-		KeyCode::Enter => complete(true),
-		KeyCode::Esc => complete(false),
+		KeyCode::Enter => complete(pair, true),
+		KeyCode::Esc => complete(pair, false),
 		_ => {
 			get_mut_app().input.as_mut().unwrap().handle_event(&Event::Key(event));
 		}
@@ -16,11 +16,11 @@ pub fn handle_input_key_event(event: KeyEvent) -> bool {
 	return true
 }
 
-fn complete(send: bool) {
+fn complete(pair: CondvarPair, send: bool) {
 	let app = get_mut_app();
 	let input = get_mut_app().input.as_mut().unwrap();
 	if send {
-		handle_input_return();
+		handle_input_return(pair);
 	}
 	app.await_input = AwaitInput::NONE;
 	app.input_mode = InputMode::NORMAL;
