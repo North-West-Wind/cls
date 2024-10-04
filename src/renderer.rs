@@ -4,7 +4,7 @@ use ratatui::{
 	layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, BorderType, Borders, Padding, Paragraph}, Frame
 };
 
-use crate::{constant::{APP_NAME, APP_VERSION}, state::{self, get_app, AwaitInput, InputMode, Popup, SelectionLayer}};
+use crate::{constant::{APP_NAME, APP_VERSION}, state::{self, get_app, AwaitInput, InputMode, Popup, Scanning, SelectionLayer}};
 
 pub fn ui(f: &mut Frame) {
 	let app = state::get_app();
@@ -90,20 +90,26 @@ fn draw_tabs_block(f: &mut Frame, area: Rect) {
 	let tabs = app.config.tabs.clone();
 	let tab_selected = app.tab_selected as usize;
 
+	let mut total_length: usize = 0;
 	let mut spans: Vec<Span> = vec![];
 	for (ii, tab) in tabs.iter().enumerate() {
+		if total_length as u16 >= area.width - 7 {
+			spans.push(Span::from("...").style(Style::default().fg(Color::Green)));
+			break;
+		}
 		let path = Path::new(tab.as_str());
 		let basename = path.file_name();
 		spans.push(Span::from(basename.unwrap().to_str().unwrap().to_string())
 			.style(if ii == tab_selected {
-				Style::default().add_modifier(Modifier::REVERSED)
+				Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)
 			} else {
-				Style::default()
+				Style::default().fg(Color::Green)
 			})
 		);
 		if ii < tabs.len() - 1 {
 			spans.push(Span::from(" | "));
 		}
+		total_length += basename.unwrap().len() + 3;
 	}
 	
 	let block = Block::default()
@@ -120,8 +126,33 @@ fn draw_files_block(f: &mut Frame, area: Rect) {
 		.title("Files")
 		.borders(Borders::ALL)
 		.border_type(border_type(2))
-		.border_style(border_style(2));
-	f.render_widget(block, area);
+		.border_style(border_style(2))
+		.padding(Padding::new(2, 2, 1, 1));
+
+	let app = get_app();
+	let paragraph: Paragraph;
+	if app.scanning == Scanning::ALL {
+		paragraph = Paragraph::new("Performing initial scan...");
+	} else if app.config.tabs.len() == 0 {
+		paragraph = Paragraph::new("Add a tab to get started :>");
+	} else if app.scanning == Scanning::ONE(app.tab_selected) {
+		paragraph = Paragraph::new("Scanning this directory...\nComeback later :>");
+	} else {
+		let tab = app.config.tabs[app.tab_selected].clone();
+		let files = app.files.as_ref().unwrap().get(&tab);
+		if files.is_none() {
+			paragraph = Paragraph::new("Failed to read this directory :<\nDoes it exist? Is it readable?");
+		} else if files.unwrap().len() == 0 {
+			paragraph = Paragraph::new("There are no playable files in this directory :<");
+		} else {
+			let mut lines = vec![];
+			for file in files.unwrap() {
+				lines.push(Line::from(file.clone()));
+			}
+			paragraph = Paragraph::new(lines);
+		}
+	}
+	f.render_widget(paragraph.block(block), area);
 }
 
 fn draw_help_message(f: &mut Frame, area: Rect) {
@@ -137,10 +168,11 @@ fn draw_help_block(f: &mut Frame) {
 		Line::from(APP_VERSION).centered(),
 		Line::from(""),
 
-		Line::from("Global Key Binds").centered(),
+		Line::from("Root Key Binds").centered(),
 		Line::from("? - Help"),
 		Line::from("q / esc - Escape / Quit"),
 		Line::from("arrow keys - Navigate"),
+		Line::from("enter - Select block"),
 
 		Line::from("Volume Key Binds").centered(),
 		Line::from("left - Decrease volume by 1%"),
@@ -154,7 +186,7 @@ fn draw_help_block(f: &mut Frame) {
 
 		Line::from("Files Key Binds").centered(),
 		Line::from("r - Refresh"),
-		Line::from("return - Play file"),
+		Line::from("enter - Play file"),
 	]);
 	let area = f.area();
 	let width = max((text.width() as u16) + 4, area.width / 3);

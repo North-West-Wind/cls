@@ -1,24 +1,24 @@
 use std::{io, time::Duration};
 use crossterm::event::{poll, read, Event, KeyEvent};
 
-use crate::{handler::{block::handle_block_key_event, input::handle_input_key_event, layer::handle_layer_key_event, popup::handle_popup_key_event}, state::{self, CondvarPair, InputMode, Popup, SelectionLayer}};
+use crate::{handler::{block::handle_block_key_event, input::{handle_input_key_event, handle_paste}, layer::handle_layer_key_event, popup::handle_popup_key_event}, state::{self, CondvarPair, InputMode, Popup, SelectionLayer}};
 
 pub fn listen_events(pair: CondvarPair) -> io::Result<()> {
 	let app = state::get_app();
 	while app.running {
 		// `poll()` waits for an `Event` for a given time period
 		if poll(Duration::from_millis(500))? {
-				// It's guaranteed that the `read()` won't block when the `poll()`
-				// function returns `true`
-				match read()? {
-						//Event::FocusGained => println!("FocusGained"),
-						//Event::FocusLost => println!("FocusLost"),
-						Event::Key(event) => on_key(pair.clone(), event),
-						//Event::Mouse(event) => println!("{:?}", event),
-						//Event::Paste(data) => println!("Pasted {:?}", data),
-						Event::Resize(width, height) => on_resize(pair.clone(), width, height),
-						_ => (),
-				}
+			// It's guaranteed that the `read()` won't block when the `poll()`
+			// function returns `true`
+			match read()? {
+				//Event::FocusGained => println!("FocusGained"),
+				//Event::FocusLost => println!("FocusLost"),
+				Event::Key(event) => on_key(pair.clone(), event),
+				//Event::Mouse(event) => println!("{:?}", event),
+				Event::Paste(data) => on_paste(pair.clone(), &data),
+				Event::Resize(width, height) => on_resize(pair.clone(), width, height),
+				_ => (),
+			}
 		}
 	}
 	notify_redraw(pair);
@@ -55,10 +55,18 @@ fn on_key(pair: CondvarPair, event: KeyEvent) {
 	} else {
 		need_redraw = match app.selection_layer {
 			SelectionLayer::BLOCK => handle_layer_key_event(event),
-			SelectionLayer::CONTENT => handle_block_key_event(event)
+			SelectionLayer::CONTENT => handle_block_key_event(pair.clone(), event)
 		}
 	}
 	if need_redraw {
+		notify_redraw(pair);
+	}
+}
+
+fn on_paste(pair: CondvarPair, data: &String) {
+	let app = state::get_app();
+	if app.input_mode == InputMode::EDITING {
+		handle_paste(data);
 		notify_redraw(pair);
 	}
 }

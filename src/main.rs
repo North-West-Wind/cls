@@ -10,7 +10,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use state::{CondvarPair, SharedCondvar};
+use state::{get_mut_app, CondvarPair, Scanning, SharedCondvar};
 use tui_input::Input;
 mod renderer;
 mod listener;
@@ -18,6 +18,7 @@ mod state;
 mod config;
 mod constant;
 mod handler;
+mod util;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = config::load();
@@ -25,16 +26,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = state::get_mut_app();
     app.module_num = load_null_sink()?;
     app.input = Option::Some(Input::default());
+
     app.running = true;
 
     let pair = Arc::new((Mutex::new(SharedCondvar::default()), Condvar::new()));
     let pair2 = Arc::clone(&pair);
+    let pair3 = Arc::clone(&pair);
 
+    spawn_scan_thread(pair3, Scanning::ALL);
     let draw_thread = spawn_drawing_thread(pair);
     let listen_thread = spawn_listening_thread(pair2);
     listen_thread.join().unwrap()?;
     draw_thread.join().unwrap()?;
-    
+
     unload_null_sink()?;
     config::save()?;
     Ok(())
@@ -91,5 +95,25 @@ fn spawn_listening_thread(pair: CondvarPair) -> JoinHandle<Result<(), io::Error>
     return thread::spawn(move || -> Result<(), io::Error> {
         listen_events(pair)?;
         Ok(())
+    });
+}
+
+fn spawn_scan_thread(pair: CondvarPair, mode: Scanning) {
+    if mode == Scanning::NONE {
+        return;
+    }
+    thread::spawn(move || {
+        let app = get_mut_app();
+        app.scanning = mode;
+        let _ = match mode {
+            Scanning::ALL => util::scan_tabs(),
+            Scanning::ONE(index) => util::scan_tab(index),
+            _ => Ok(())
+        };
+        app.scanning = Scanning::NONE;
+        let (lock, cvar) = &*pair;
+        let mut shared = lock.lock().unwrap();
+        (*shared).redraw = true;
+        cvar.notify_all();
     });
 }

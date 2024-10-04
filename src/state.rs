@@ -1,4 +1,4 @@
-use std::{ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}};
+use std::{collections::HashMap, ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}};
 
 use tui_input::Input;
 
@@ -44,6 +44,13 @@ pub enum AwaitInput {
 	ADD_TAB,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum Scanning {
+	NONE,
+	ALL,
+	ONE(usize)
+}
+
 pub struct App {
 	pub config: SoundboardConfig,
 	pub running: bool,
@@ -57,6 +64,9 @@ pub struct App {
 	pub input_mode: InputMode,
 	pub await_input: AwaitInput,
 	pub tab_selected: usize,
+	pub files: Option<HashMap<String, Vec<String>>>,
+	pub scanning: Scanning,
+	pub file_selected: usize,
 }
 
 impl Default for App {
@@ -82,6 +92,9 @@ const fn create_app() -> App {
 		input_mode: InputMode::NORMAL,
 		await_input: AwaitInput::NONE,
 		tab_selected: 0,
+		files: Option::None,
+		scanning: Scanning::NONE,
+		file_selected: 0,
 	}
 }
 

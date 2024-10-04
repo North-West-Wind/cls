@@ -1,5 +1,5 @@
 use crossterm::event::{Event, KeyCode, KeyEvent};
-use tui_input::backend::crossterm::EventHandler;
+use tui_input::{backend::crossterm::EventHandler, Input};
 
 use crate::state::{get_mut_app, AwaitInput, InputMode};
 
@@ -25,4 +25,11 @@ fn complete(send: bool) {
 	app.await_input = AwaitInput::NONE;
 	app.input_mode = InputMode::NORMAL;
 	input.reset();
+}
+
+pub fn handle_paste(data: &String) {
+	let app = get_mut_app();
+	let input = get_mut_app().input.as_mut().unwrap();
+	let new_str = input.value().to_owned() + data.as_str();
+	app.input = Option::Some(Input::new(new_str));
 }
