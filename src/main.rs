@@ -1,36 +1,42 @@
-use std::{io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}, time::Duration};
+use std::{io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}};
+use handler::pulseaudio::{load_null_sink, unload_null_sink};
 use listener::listen_events;
 use ratatui::{
     backend::CrosstermBackend,
-    widgets::{Widget, Block, Borders},
-    layout::{Layout, Constraint, Direction},
     Terminal
 };
 use crossterm::{
-    event::{poll, read, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use state::{get_running, init_shared_condvar, set_error, set_running, CondvarPair, SharedCondvar};
+use state::{CondvarPair, SharedCondvar};
+use tui_input::Input;
 mod renderer;
 mod listener;
 mod state;
 mod config;
 mod constant;
+mod handler;
 
-fn main() -> Result<(), io::Error> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = config::load();
 
-    state::set_running(true);
+    let app = state::get_mut_app();
+    app.module_num = load_null_sink()?;
+    app.input = Option::Some(Input::default());
+    app.running = true;
 
-    let pair = Arc::new((Mutex::new(init_shared_condvar()), Condvar::new()));
+    let pair = Arc::new((Mutex::new(SharedCondvar::default()), Condvar::new()));
     let pair2 = Arc::clone(&pair);
 
     let draw_thread = spawn_drawing_thread(pair);
     let listen_thread = spawn_listening_thread(pair2);
     listen_thread.join().unwrap()?;
     draw_thread.join().unwrap()?;
-
+    
+    unload_null_sink()?;
+    config::save()?;
     Ok(())
 }
 
@@ -47,9 +53,12 @@ fn spawn_drawing_thread(pair: CondvarPair) -> JoinHandle<Result<(), io::Error>> 
         if size.width < 48 || size.height < 11 {
             let width = size.width;
             let height = size.height;
-            set_error(String::from(format!("Terminal size requires at least 48x11.\nCurrent size: {width}x{height}")));
+            let app = state::get_mut_app();
+            app.error = String::from(format!("Terminal size requires at least 48x11.\nCurrent size: {width}x{height}"));
         }
-        while get_running() {
+
+        let app = state::get_app();
+        while app.running {
             let (lock, cvar) = &*pair;
             let mut shared = lock.lock().unwrap();
             while !(*shared).redraw {

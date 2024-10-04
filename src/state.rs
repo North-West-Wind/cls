@@ -1,4 +1,8 @@
-use std::sync::{Arc, Condvar, Mutex};
+use std::{ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}};
+
+use tui_input::Input;
+
+use crate::config::{create_config, SoundboardConfig};
 
 pub type CondvarPair = Arc<(Mutex<SharedCondvar>, Condvar)>;
 
@@ -6,17 +10,18 @@ pub struct SharedCondvar {
 	pub redraw: bool,
 }
 
-pub fn init_shared_condvar() -> SharedCondvar {
-	return SharedCondvar {
-		redraw: true,
+impl Default for SharedCondvar {
+	fn default() -> Self {
+		Self {
+			redraw: true
+		}
 	}
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum SelectionLayer {
 	BLOCK,
-	CONTENT,
-	POPUP
+	CONTENT
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -24,62 +29,66 @@ pub enum Popup {
 	NONE,
 	HELP,
 	QUIT,
-	INPUT
+	DELETE_TAB,
 }
 
-// Global variables
-static mut RUNNING: bool = false;
-static mut ERROR: String = String::new();
-static mut SELECTION_LAYER: SelectionLayer = SelectionLayer::BLOCK;
-static mut BLOCK_SELECTED: u8 = 0;
-static mut POPUP: Popup = Popup::NONE;
-static mut LAST_SELECTION_LAYER: SelectionLayer = SelectionLayer::BLOCK;
-
-pub fn get_running() -> bool {
-	unsafe { RUNNING }
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum InputMode {
+	NORMAL,
+	EDITING
 }
 
-pub fn set_running(b: bool) {
-	unsafe { RUNNING = b };
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum AwaitInput {
+	NONE,
+	ADD_TAB,
 }
 
-pub fn get_error() -> String {
-	unsafe { ERROR.clone() }
+pub struct App {
+	pub config: SoundboardConfig,
+	pub running: bool,
+	pub error: String,
+	pub selection_layer: SelectionLayer,
+	pub block_selected: u8,
+	pub popup: Popup,
+	pub last_selection_layer: SelectionLayer,
+	pub module_num: String,
+	pub input: Option<Input>,
+	pub input_mode: InputMode,
+	pub await_input: AwaitInput,
+	pub tab_selected: usize,
 }
 
-pub fn set_error(s: String) {
-	unsafe { ERROR = s };
-}
-
-pub fn get_selection_layer() -> SelectionLayer {
-	unsafe { SELECTION_LAYER }
-}
-
-pub fn set_selection_layer(s: SelectionLayer) {
-	unsafe {
-		if SELECTION_LAYER != s {
-			LAST_SELECTION_LAYER = SELECTION_LAYER;
-			SELECTION_LAYER = s;
-		}
+impl Default for App {
+	fn default() -> Self {
+		create_app()
 	}
 }
 
-pub fn get_block_selected() -> u8 {
-	unsafe { BLOCK_SELECTED }
+// Global variables
+static mut APP: App = create_app();
+
+const fn create_app() -> App {
+	App {
+		config: create_config(),
+		running: false,
+		error: String::new(),
+		selection_layer: SelectionLayer::BLOCK,
+		block_selected: 0,
+		popup: Popup::NONE,
+		last_selection_layer: SelectionLayer::BLOCK,
+		module_num: String::new(),
+		input: Option::None,
+		input_mode: InputMode::NORMAL,
+		await_input: AwaitInput::NONE,
+		tab_selected: 0,
+	}
 }
 
-pub fn set_block_selected(u: u8) {
-	unsafe { BLOCK_SELECTED = u };
+pub fn get_mut_app() -> &'static mut App {
+	unsafe { &mut *(addr_of_mut!(APP)) }
 }
 
-pub fn get_popup() -> Popup {
-	unsafe { POPUP }
-}
-
-pub fn set_popup(p: Popup) {
-	unsafe { POPUP = p };
-}
-
-pub fn get_last_selection_layer() -> SelectionLayer {
-	unsafe { LAST_SELECTION_LAYER }
+pub fn get_app() -> &'static App {
+	unsafe { &*(addr_of!(APP)) }
 }

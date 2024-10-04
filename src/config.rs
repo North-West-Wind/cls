@@ -1,35 +1,34 @@
 use std::{default::Default, vec::Vec};
 use serde::{Serialize, Deserialize};
 
-use crate::constant::APP_NAME;
+use crate::{constant::APP_NAME, state::{get_app, get_mut_app}};
 
-#[derive(Serialize, Deserialize)]
-struct SoundboardConfig {
-	tabs: Vec<String>,
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SoundboardConfig {
+	pub tabs: Vec<String>,
 }
 
 impl Default for SoundboardConfig {
 	fn default() -> Self {
-			Self {
-				tabs: vec![]
-			}
+		create_config()
 	}
 }
 
-static mut CONFIG: SoundboardConfig = SoundboardConfig {
-	tabs: vec![]
-};
+pub const fn create_config() -> SoundboardConfig {
+	SoundboardConfig {
+		tabs: vec![]
+	}
+}
 
 pub fn load() -> Result<(), Box<dyn std::error::Error>> {
-	unsafe { CONFIG = confy::load(APP_NAME, "config")? };
+	let app = get_mut_app();
+	let cfg: SoundboardConfig = confy::load(APP_NAME, "config")?;
+	(*app).config = cfg;
 	Ok(())
 }
 
 pub fn save() -> Result<(), Box<dyn std::error::Error>> {
-	unsafe {
-		let mut cfg = SoundboardConfig::default();
-		cfg.tabs = CONFIG.tabs.clone();
-		confy::store(APP_NAME, "config", cfg)?;
-	}
+	let app = get_app();
+	confy::store(APP_NAME, "config", (*app).config.clone())?;
 	Ok(())
 }
