@@ -1,9 +1,9 @@
-use std::{process::Command, thread};
+use std::{process::{Command, Stdio}, thread};
 
 use libpulse_binding::volume::{ChannelVolumes, Volume};
 use pulsectl::controllers::{DeviceControl, SinkController};
 
-use crate::{constant::APP_NAME, state::{get_app, get_mut_app, CondvarPair}};
+use crate::{constant::APP_NAME, state::{get_app, get_mut_app, CondvarPair}, util::ffprobe_info};
 
 
 pub fn load_sink_controller() -> Result<SinkController, Box<dyn std::error::Error>> {
@@ -69,11 +69,31 @@ pub fn play_file(pair: CondvarPair, path: &str) {
 		cvar.notify_all();
 		std::mem::drop(shared);
 
-		let _ = Command::new("paplay").args([
-			"-d",
-			APP_NAME,
-			string.as_str()
-		]).output();
+		let info = ffprobe_info(string.as_str());
+		if info.is_some() {
+			let info = info.unwrap();
+			let stream = info.streams.iter().find(|stream| stream.codec_type == Option::Some("audio".to_string()));
+			if stream.is_some() {
+				let stream = stream.unwrap();
+
+				let ffmpeg_child = Command::new("ffmpeg").args([
+					"-loglevel",
+					"-8",
+					"-i",
+					string.as_str(),
+					"-f",
+					"s16le",
+					"-"
+				]).stdout(Stdio::piped()).spawn().unwrap();
+		
+				let _ = Command::new("pacat").args([
+					"-d",
+					APP_NAME,
+					format!("--channels={}", stream.channels.unwrap_or(2)).as_str(),
+					format!("--rate={}", stream.sample_rate.clone().unwrap()).as_str()
+				]).stdin(Stdio::from(ffmpeg_child.stdout.unwrap())).stdout(Stdio::piped()).spawn().unwrap().wait();
+			}
+		}
 
 		let (lock, cvar) = &*pair;
 		let mut shared = lock.lock().unwrap();

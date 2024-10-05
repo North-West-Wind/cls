@@ -29,7 +29,6 @@ fn handle_quit(event: KeyEvent) -> bool {
 }
 
 fn handle_help(event: KeyEvent) -> bool {
-	let app = get_mut_app();
 	match event.code {
 		KeyCode::Char('q')|KeyCode::Esc => {
 			exit_popup();

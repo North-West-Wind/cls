@@ -1,13 +1,15 @@
-use std::{collections::HashMap, fs, path::Path, time::Duration};
+use std::{collections::HashMap, fs, path::Path};
 
-use crate::state::get_mut_app;
+use ffprobe::FfProbe;
 
-fn ffprobe_info(path: &str) -> Option<Option<Duration>> {
+use crate::state::{get_app, get_mut_app};
+
+pub fn ffprobe_info(path: &str) -> Option<FfProbe> {
 	let result = ffprobe::ffprobe(path);
 	match result {
 		Ok(info) => {
-			if info.streams.iter().filter(|stream| stream.codec_type == Option::Some("audio".to_string())).count() > 0 {
-				return Option::Some(info.format.get_duration());
+			if info.streams.iter().any(|stream| stream.codec_type == Option::Some("audio".to_string())) {
+				return Option::Some(info);
 			} else {
 				return Option::None;
 			}
@@ -35,7 +37,7 @@ pub fn scan_tab(index: usize) -> Result<(), std::io::Error> {
 			let filepath = longpath.into_os_string().into_string().unwrap();
 			let info = ffprobe_info(filepath.as_str());
 			if info.is_some() {
-				let duration = info.unwrap();
+				let duration = info.unwrap().format.get_duration();
 				let duration_str: String;
 				if duration.is_some() {
 					duration_str = humantime::format_duration(duration.unwrap()).to_string();
@@ -45,6 +47,7 @@ pub fn scan_tab(index: usize) -> Result<(), std::io::Error> {
 				files.push((filename, duration_str));
 			}
 		}
+    files.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
 		app.files.as_mut().unwrap().insert(tab, files);
 	}
 	Ok(())
@@ -57,4 +60,24 @@ pub fn scan_tabs() -> Result<(), std::io::Error> {
 		scan_tab(ii)?;
 	}
 	Ok(())
+}
+
+pub fn selected_file_path() -> String {
+	let app = get_app();
+	if app.files.is_none() {
+		return String::new();
+	}
+	if app.tab_selected >= app.config.tabs.len() {
+		return String::new();
+	}
+	let tab = app.config.tabs[app.tab_selected].clone();
+	let files = app.files.as_ref().unwrap().get(&tab);
+	if files.is_none() {
+		return String::new();
+	}
+	let unwrapped = files.unwrap();
+	if app.file_selected >= unwrapped.len() {
+		return String::new();
+	}
+	return Path::new(&tab).join(&unwrapped[app.file_selected].0).into_os_string().into_string().unwrap();
 }

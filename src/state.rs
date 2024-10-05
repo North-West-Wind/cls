@@ -53,22 +53,32 @@ pub enum Scanning {
 }
 
 pub struct App {
+	// config
 	pub config: SoundboardConfig,
+	// states
 	pub running: bool,
 	pub error: String,
-	pub selection_layer: SelectionLayer,
+	// render states: root
 	pub block_selected: u8,
-	pub popup: Popup,
+	pub selection_layer: SelectionLayer,
 	pub last_selection_layer: SelectionLayer,
+	pub popup: Popup,
+	// pulseaudio
 	pub module_num: String,
+	pub sink_controller: Option<SinkController>,
+	// input
 	pub input: Option<Input>,
 	pub input_mode: InputMode,
 	pub await_input: AwaitInput,
+	// render states: volume
+	pub volume_selected: usize,
+	// render states: tab
 	pub tab_selected: usize,
+	// render states: files
 	pub files: Option<HashMap<String, Vec<(String, String)>>>,
-	pub scanning: Scanning,
 	pub file_selected: usize,
-	pub sink_controller: Option<SinkController>,
+	pub scanning: Scanning,
+	// render states: playing
 	pub playing: VecDeque<String>,
 }
 
@@ -83,22 +93,32 @@ static mut APP: App = create_app();
 
 const fn create_app() -> App {
 	App {
+		// config
 		config: create_config(),
+		// states
 		running: false,
 		error: String::new(),
-		selection_layer: SelectionLayer::BLOCK,
+		// render states: root
 		block_selected: 0,
-		popup: Popup::NONE,
+		selection_layer: SelectionLayer::BLOCK,
 		last_selection_layer: SelectionLayer::BLOCK,
+		popup: Popup::NONE,
+		// pulseaudio
+		sink_controller: Option::None,
 		module_num: String::new(),
+		// input
 		input: Option::None,
 		input_mode: InputMode::NORMAL,
 		await_input: AwaitInput::NONE,
+		// render states: volume
+		volume_selected: 0,
+		// render states: tab
 		tab_selected: 0,
+		// render states: files
 		files: Option::None,
-		scanning: Scanning::NONE,
 		file_selected: 0,
-		sink_controller: Option::None,
+		scanning: Scanning::NONE,
+		// render states: playing
 		playing: VecDeque::new(),
 	}
 }

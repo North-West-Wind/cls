@@ -5,7 +5,7 @@ use ratatui::{
 };
 use substring::Substring;
 
-use crate::{constant::{APP_NAME, APP_VERSION}, state::{self, get_app, AwaitInput, InputMode, Popup, Scanning, SelectionLayer}};
+use crate::{constant::{APP_NAME, APP_VERSION}, state::{self, get_app, AwaitInput, InputMode, Popup, Scanning, SelectionLayer}, util::selected_file_path};
 
 pub fn ui(f: &mut Frame) {
 	let app = state::get_app();
@@ -74,9 +74,10 @@ fn border_type(id: u8) -> BorderType {
 	}
 }
 
-fn volume_line(title: String, volume: usize, width: u16) -> Line<'static> {
+fn volume_line(title: String, volume: usize, width: u16, highlight: bool) -> Line<'static> {
 	let mut spans = vec![];
-	spans.push(Span::from(title));
+	spans.push(Span::from(title).style(if highlight { Style::default().fg(Color::LightCyan).add_modifier(Modifier::REVERSED) } else { Style::default() }));
+	spans.push(Span::from(format!(" ({:0>3}%) ", volume)));
 	let verticals: usize;
 	let full: usize;
 	if width >= 122 {
@@ -111,16 +112,24 @@ fn draw_volume_block(f: &mut Frame, area: Rect) {
 		.border_style(border_style(0))
 		.padding(Padding::horizontal(1));
 	let mut lines = vec![
-		volume_line(format!("Sink Volume ({:0>3}%) ", app.config.volume), app.config.volume as usize, area.width)
+		volume_line("Sink Volume".to_string(), app.config.volume as usize, area.width, app.volume_selected == 0)
 	];
-	if app.tab_selected < app.config.tabs.len() && app.files.as_ref().is_some_and(|files| { files.get(&app.config.tabs[app.tab_selected]).is_some_and(|paths| { app.file_selected < paths.len() }) }) {
+	let path = selected_file_path();
+	if !path.is_empty() {
 		lines.push(Line::from(""));
-		let path = app.files.as_ref().unwrap().get(&app.config.tabs[app.tab_selected]).unwrap().get(app.file_selected).unwrap().0.clone();
 		lines.push(Line::from(vec![
 			Span::from("Selected "),
-			Span::from(path).style(Style::default().fg(Color::LightGreen))
+			Span::from(path.clone()).style(Style::default().fg(Color::LightGreen))
 		]));
-		lines.push(volume_line(format!("File Volume ({:0>3}%) ", 100), 100, area.width));
+		let mut volume = 100;
+		let file_volume = app.config.file_volume.as_ref();
+		if file_volume.is_some() {
+			let val = file_volume.unwrap().get(&path);
+			if val.is_some() {
+				volume = *val.unwrap();
+			}
+		}
+		lines.push(volume_line("File Volume".to_string(), volume, area.width, app.volume_selected == 1));
 	}
 	let paragraph = Paragraph::new(Text::from(lines))
 		.block(block);
