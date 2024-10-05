@@ -40,6 +40,7 @@ fn handle_move(right: bool) -> bool {
 	let new_selected = min(app.config.tabs.len() as i32 - 1, max(0, tab_selected + delta));
 	if tab_selected != new_selected {
 		app.tab_selected = new_selected as usize;
+		app.file_selected = 0;
 		return true;
 	}
 	false

@@ -5,7 +5,7 @@ use ratatui::{
 };
 use substring::Substring;
 
-use crate::{constant::{APP_NAME, APP_VERSION}, global_input::keyboard_to_string, state::{self, get_app, AwaitInput, InputMode, Popup, Scanning, SelectionLayer}, util::selected_file_path};
+use crate::{constant::{APP_NAME, APP_VERSION}, global_input::keyboard_to_string, state::{self, get_app, get_mut_app, AwaitInput, InputMode, Popup, Scanning, SelectionLayer}, util::selected_file_path};
 
 pub fn ui(f: &mut Frame) {
 	let app = state::get_app();
@@ -138,17 +138,12 @@ fn draw_volume_block(f: &mut Frame, area: Rect) {
 }
 
 fn draw_tabs_block(f: &mut Frame, area: Rect) {
-	let app = get_app();
+	let app = get_mut_app();
 	let tabs = app.config.tabs.clone();
 	let tab_selected = app.tab_selected as usize;
 
-	let mut total_length: usize = 0;
 	let mut spans: Vec<Span> = vec![];
 	for (ii, tab) in tabs.iter().enumerate() {
-		if total_length as u16 >= area.width - 7 {
-			spans.push(Span::from("...").style(Style::default().fg(Color::Green)));
-			break;
-		}
 		let path = Path::new(tab.as_str());
 		let basename = path.file_name();
 		spans.push(Span::from(basename.unwrap().to_str().unwrap().to_string())
@@ -161,7 +156,49 @@ fn draw_tabs_block(f: &mut Frame, area: Rect) {
 		if ii < tabs.len() - 1 {
 			spans.push(Span::from(" | "));
 		}
-		total_length += basename.unwrap().len() + 3;
+	}
+
+	let mut width = area.width as i32 - 4;
+	let mut count = 0;
+	if app.tabs_range.0 == -1 {
+		for (ii, span) in spans.iter().enumerate() {
+			if ii % 2 == 1 {
+				// skip separator
+				continue;
+			}
+			width -= span.width() as i32;
+			count += 1;
+			if width < 0 {
+				break;
+			}
+		}
+		app.tabs_range = (0, count - 1);
+	} else if app.tab_selected < app.tabs_range.0 as usize {
+		for (ii, span) in spans.iter().enumerate() {
+			if ii % 2 == 1 || ii < app.tab_selected * 2 {
+				// skip separator
+				continue;
+			}
+			width -= span.width() as i32;
+			count += 1;
+			if width < 0 {
+				break;
+			}
+		}
+		app.tabs_range = (app.tab_selected as i32, app.tab_selected as i32 + count - 1);
+	} else if app.tab_selected >= app.tabs_range.1 as usize {
+		for (ii, span) in spans.iter().rev().enumerate() {
+			if ii % 2 == 1 || ii < spans.len() - app.tab_selected * 2 - 1 {
+				// skip separator
+				continue;
+			}
+			width -= span.width() as i32;
+			count += 1;
+			if width < 0 {
+				break;
+			}
+		}
+		app.tabs_range = (app.tab_selected as i32 - count + 1, app.tab_selected as i32);
 	}
 	
 	let block = Block::default()
@@ -169,7 +206,14 @@ fn draw_tabs_block(f: &mut Frame, area: Rect) {
 		.borders(Borders::ALL)
 		.border_type(border_type(1))
 		.border_style(border_style(1));
-	let paragraph = Paragraph::new(Line::from(spans)).block(block.padding(Padding::horizontal(1)));
+	let mut length = 0;
+	for (ii, span) in spans.iter().enumerate() {
+		if ii >= app.tabs_range.0 as usize * 2 {
+			break;
+		}
+		length += span.width();
+	}
+	let paragraph = Paragraph::new(Line::from(spans)).block(block.padding(Padding::horizontal(1))).scroll((0, length as u16));
 	f.render_widget(paragraph, area);
 }
 
@@ -181,7 +225,10 @@ fn draw_files_block(f: &mut Frame, area: Rect) {
 		.border_style(border_style(2))
 		.padding(Padding::new(2, 2, 1, 1));
 
-	let app = get_app();
+	let app = get_mut_app();
+	if app.files_range.0 == -1 {
+		app.files_range = (0, area.height as i32 - 5);
+	}
 	let paragraph: Paragraph;
 	if app.scanning == Scanning::ALL {
 		paragraph = Paragraph::new("Performing initial scan...");
@@ -231,7 +278,12 @@ fn draw_files_block(f: &mut Frame, area: Rect) {
 					Style::default().fg(Color::Cyan)
 				}));
 			}
-			paragraph = Paragraph::new(lines);
+			if app.file_selected < app.files_range.0 as usize {
+				app.files_range = (app.file_selected as i32, app.file_selected as i32 + area.height as i32 - 5);
+			} else if app.file_selected > app.files_range.1 as usize {
+				app.files_range = (app.file_selected as i32 - area.height as i32 + 5, app.file_selected as i32);
+			}
+			paragraph = Paragraph::new(lines).scroll((app.files_range.0 as u16, 0));
 		}
 	}
 	f.render_widget(paragraph.block(block), area);
@@ -256,7 +308,7 @@ fn draw_play_block(f: &mut Frame) {
 	for ii in 0..inner_height {
 		lines.push(Line::from(app.playing.get(ii as usize).unwrap().as_str()).style(Style::default().fg(Color::LightGreen)));
 	}
-	let paragraph = Paragraph::new(Text::from(lines)).block(Block::bordered().border_type(BorderType::Rounded).title(format!("Playing ({len})")));
+	let paragraph = Paragraph::new(Text::from(lines)).block(Block::bordered().border_type(BorderType::Rounded).title(format!("Playing ({len})")).padding(Padding::horizontal(1)));
 	f.render_widget(paragraph, block_area);
 }
 

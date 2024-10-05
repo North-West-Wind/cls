@@ -2,7 +2,7 @@ use std::{collections::HashMap, default::Default, str::FromStr, vec::Vec};
 use mki::Keyboard;
 use serde::{Serialize, Deserialize};
 
-use crate::{constant::APP_NAME, state::{get_app, get_mut_app}};
+use crate::{constant::APP_NAME, global_input::string_to_keyboard, state::{get_app, get_mut_app}};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SoundboardConfig {
@@ -38,9 +38,11 @@ pub fn load() -> Result<(), Box<dyn std::error::Error>> {
 			let mut keyboard = vec![];
 			let key_len = keys.len();
 			for key in keys {
-				let result = Keyboard::from_str(key.as_str());
-				if result.is_ok() {
+				let result = string_to_keyboard(key);
+				if result.is_some() {
 					keyboard.push(result.unwrap());
+				} else {
+					break;
 				}
 			}
 			if keyboard.len() != key_len {

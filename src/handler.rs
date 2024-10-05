@@ -16,7 +16,6 @@ pub fn handle_inputbot(pair: CondvarPair, key: Keyboard) {
 		use Keyboard::*;
 		match key {
 			Enter|Escape => false,
-			Other(_c) => false,
 			_ => app.recorded.as_mut().unwrap().insert(key)
 		};
 

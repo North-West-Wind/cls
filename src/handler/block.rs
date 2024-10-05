@@ -37,7 +37,11 @@ pub fn handle_input_return(pair: CondvarPair) {
 
 fn handle_input_return_add_tab(pair: CondvarPair, str: String) {
 	let app = get_mut_app();
-	app.config.tabs.push(Path::new(&str).normalize().unwrap().into_os_string().into_string().unwrap());
+	let norm = Path::new(&str).normalize();
+	if norm.is_err() {
+		return;
+	}
+	app.config.tabs.push(norm.unwrap().into_os_string().into_string().unwrap());
 	app.tab_selected = app.config.tabs.len() - 1;
 	spawn_scan_thread(pair);
 }

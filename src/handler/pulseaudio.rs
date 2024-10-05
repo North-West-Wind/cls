@@ -86,12 +86,20 @@ pub fn play_file(path: &str) {
 					"s16le",
 					"-"
 				]).stdout(Stdio::piped()).spawn().unwrap();
+
+				let volume: u16;
+				if app.config.file_volume.is_some() {
+					volume = (app.config.file_volume.as_ref().unwrap().get(&string).unwrap_or(&100) * 65535 / 100) as u16;
+				} else {
+					volume = 65535;
+				}
 		
 				let _ = Command::new("pacat").args([
 					"-d",
 					APP_NAME,
 					format!("--channels={}", stream.channels.unwrap_or(2)).as_str(),
-					format!("--rate={}", stream.sample_rate.clone().unwrap()).as_str()
+					format!("--rate={}", stream.sample_rate.clone().unwrap()).as_str(),
+					format!("--volume={}", volume).as_str(),
 				]).stdin(Stdio::from(ffmpeg_child.stdout.unwrap())).stdout(Stdio::piped()).spawn().unwrap().wait();
 			}
 		}

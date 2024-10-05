@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use mki::Keyboard;
 
 pub fn keyboard_to_string(keyboard: Keyboard) -> String {
@@ -13,6 +15,22 @@ pub fn keyboard_to_string(keyboard: Keyboard) -> String {
 		Number7 => "7".to_string(),
 		Number8 => "8".to_string(),
 		Number9 => "9".to_string(),
+		Other(code) => match code {
+			56 => "LeftAlt".to_string(),
+			100 => "RightAlt".to_string(),
+			125 => "LeftSuper".to_string(),
+			_ => format!("{:?}", keyboard)
+		},
 		_ => format!("{:?}", keyboard)
 	}
+}
+
+pub fn string_to_keyboard(string: String) -> Option<Keyboard> {
+	match string.as_str() {
+		"LeftAlt" => Option::Some(Keyboard::Other(56)),
+		"RightAlt" => Option::Some(Keyboard::Other(100)),
+		"LeftSuper" => Option::Some(Keyboard::Other(125)),
+		_ => Keyboard::from_str(&string).ok()
+	}
+	
 }
