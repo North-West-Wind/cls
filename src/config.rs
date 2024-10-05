@@ -1,4 +1,4 @@
-use std::{default::Default, vec::Vec};
+use std::{collections::HashMap, default::Default, vec::Vec};
 use serde::{Serialize, Deserialize};
 
 use crate::{constant::APP_NAME, state::{get_app, get_mut_app}};
@@ -7,6 +7,7 @@ use crate::{constant::APP_NAME, state::{get_app, get_mut_app}};
 pub struct SoundboardConfig {
 	pub tabs: Vec<String>,
 	pub volume: u32,
+	pub file_volume: Option<HashMap<String, usize>>
 }
 
 impl Default for SoundboardConfig {
@@ -19,6 +20,7 @@ pub const fn create_config() -> SoundboardConfig {
 	SoundboardConfig {
 		tabs: vec![],
 		volume: 100,
+		file_volume: Option::None
 	}
 }
 

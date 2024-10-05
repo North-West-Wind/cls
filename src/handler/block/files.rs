@@ -1,8 +1,8 @@
-use std::cmp::{max, min};
+use std::{cmp::{max, min}, path::Path};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::{state::{get_app, get_mut_app, CondvarPair, Scanning}, util};
+use crate::{handler::pulseaudio, state::{get_app, get_mut_app, CondvarPair, Scanning}, util};
 
 pub fn handle_files(pair: CondvarPair, event: KeyEvent) -> bool {
 	let app = get_app();
@@ -13,6 +13,7 @@ pub fn handle_files(pair: CondvarPair, event: KeyEvent) -> bool {
 		KeyCode::Char('r') => reload_tab(pair),
 		KeyCode::Up => navigate_file(-1),
 		KeyCode::Down => navigate_file(1),
+		KeyCode::Enter => play_file(pair),
 		_ => false,
 	}
 }
@@ -56,4 +57,25 @@ fn navigate_file(dy: i32) -> bool {
 		return true;
 	}
 	false
+}
+
+fn play_file(pair: CondvarPair) -> bool {
+	let app = get_app();
+	if app.files.is_none() {
+		return false;
+	}
+	if app.tab_selected >= app.config.tabs.len() {
+		return false;
+	}
+	let tab = app.config.tabs[app.tab_selected].clone();
+	let files = app.files.as_ref().unwrap().get(&tab);
+	if files.is_none() {
+		return false;
+	}
+	let unwrapped = files.unwrap();
+	if app.file_selected >= unwrapped.len() {
+		return false;
+	}
+	pulseaudio::play_file(pair, &Path::new(&tab).join(&unwrapped[app.file_selected].0).into_os_string().into_string().unwrap());
+	return true;
 }

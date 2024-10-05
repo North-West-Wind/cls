@@ -1,7 +1,7 @@
 use std::{cmp::{max, min}, path::Path};
 
 use ratatui::{
-	layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style, Styled}, text::{Line, Span, Text}, widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph, Widget}, Frame
+	layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph, Widget}, Frame
 };
 use substring::Substring;
 
@@ -17,7 +17,7 @@ pub fn ui(f: &mut Frame) {
 		.margin(1)
 		.constraints(
 			[
-				Constraint::Length(5),
+				Constraint::Length(6),
 				Constraint::Length(3),
 				Constraint::Fill(1),
 				Constraint::Length(1)
@@ -28,6 +28,7 @@ pub fn ui(f: &mut Frame) {
 	draw_tabs_block(f, chunks[1]);
 	draw_files_block(f, chunks[2]);
 	draw_help_message(f, chunks[3]);
+	draw_play_block(f);
 	if app.input_mode == InputMode::EDITING {
 		draw_input(f);
 	} else {
@@ -73,6 +74,34 @@ fn border_type(id: u8) -> BorderType {
 	}
 }
 
+fn volume_line(title: String, volume: usize, width: u16) -> Line<'static> {
+	let mut spans = vec![];
+	spans.push(Span::from(title));
+	let verticals: usize;
+	let full: usize;
+	if width >= 122 {
+		verticals = min(volume as usize, 100);
+		full = 100;
+	} else if width >= 72 {
+		verticals = min(volume as usize, 100) / 2;
+		full = 50;
+	} else {
+		verticals = min(volume as usize, 100) / 5;
+		full = 20;
+	}
+	spans.push(Span::from(vec!["|"; verticals].join("")).style(Style::default().fg(if volume > 100 {
+		Color::Red
+	} else {
+		Color::LightGreen
+	})));
+	spans.push(Span::from(vec!["-"; full - verticals].join("")).style(Style::default().fg(if volume > 100 {
+		Color::Red
+	} else {
+		Color::Green
+	})));
+	Line::from(spans)
+}
+
 fn draw_volume_block(f: &mut Frame, area: Rect) {
 	let app = get_app();
 	let block = Block::default()
@@ -81,20 +110,19 @@ fn draw_volume_block(f: &mut Frame, area: Rect) {
 		.border_type(border_type(0))
 		.border_style(border_style(0))
 		.padding(Padding::horizontal(1));
-	let mut spans = vec![];
-	spans.push(Span::from(format!("Sink Volume ({:0>3}%) ", app.config.volume)));
-	let verticals = min(app.config.volume as usize, 100);
-	spans.push(Span::from(vec!["|"; verticals].join("")).style(Style::default().fg(if app.config.volume > 100 {
-		Color::Red
-	} else {
-		Color::LightGreen
-	})));
-	spans.push(Span::from(vec!["-"; 100 - verticals].join("")).style(Style::default().fg(if app.config.volume > 100 {
-		Color::Red
-	} else {
-		Color::Green
-	})));
-	let paragraph = Paragraph::new(Line::from(spans))
+	let mut lines = vec![
+		volume_line(format!("Sink Volume ({:0>3}%) ", app.config.volume), app.config.volume as usize, area.width)
+	];
+	if app.tab_selected < app.config.tabs.len() && app.files.as_ref().is_some_and(|files| { files.get(&app.config.tabs[app.tab_selected]).is_some_and(|paths| { app.file_selected < paths.len() }) }) {
+		lines.push(Line::from(""));
+		let path = app.files.as_ref().unwrap().get(&app.config.tabs[app.tab_selected]).unwrap().get(app.file_selected).unwrap().0.clone();
+		lines.push(Line::from(vec![
+			Span::from("Selected "),
+			Span::from(path).style(Style::default().fg(Color::LightGreen))
+		]));
+		lines.push(volume_line(format!("File Volume ({:0>3}%) ", 100), 100, area.width));
+	}
+	let paragraph = Paragraph::new(Text::from(lines))
 		.block(block);
 	f.render_widget(paragraph, area);
 }
@@ -182,6 +210,29 @@ fn draw_files_block(f: &mut Frame, area: Rect) {
 		}
 	}
 	f.render_widget(paragraph.block(block), area);
+}
+
+fn draw_play_block(f: &mut Frame) {
+	let app = get_app();
+	if app.playing.len() == 0 {
+		return;
+	}
+	let len = app.playing.len();
+	let area = f.area();
+	let inner_height = min(5, len as u16);
+	let block_area = Rect {
+		x: 1,
+		y: area.height - (4 + inner_height),
+		width: area.width - 2,
+		height: 2 + inner_height
+	};
+	Clear.render(block_area, f.buffer_mut());
+	let mut lines = vec![];
+	for ii in 0..inner_height {
+		lines.push(Line::from(app.playing.get(ii as usize).unwrap().as_str()).style(Style::default().fg(Color::LightGreen)));
+	}
+	let paragraph = Paragraph::new(Text::from(lines)).block(Block::bordered().border_type(BorderType::Rounded).title(format!("Playing ({len})")));
+	f.render_widget(paragraph, block_area);
 }
 
 fn draw_help_message(f: &mut Frame, area: Rect) {

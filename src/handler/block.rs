@@ -16,7 +16,6 @@ mod volume;
 
 pub fn handle_block_key_event(pair: CondvarPair, event: KeyEvent) -> bool {
 	match event.code {
-		KeyCode::Enter => navigate_layer(false),
 		KeyCode::Char('q')|KeyCode::Esc => navigate_layer(true),
 		KeyCode::Char('?') => navigate_popup(Popup::HELP),
 		_ => match get_app().block_selected {

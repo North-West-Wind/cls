@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}, time::Duration};
+use std::{collections::{HashMap, VecDeque}, ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}, time::Duration};
 
 use pulsectl::controllers::SinkController;
 use tui_input::Input;
@@ -68,7 +68,8 @@ pub struct App {
 	pub files: Option<HashMap<String, Vec<(String, String)>>>,
 	pub scanning: Scanning,
 	pub file_selected: usize,
-	pub sink_controller: Option<SinkController>
+	pub sink_controller: Option<SinkController>,
+	pub playing: VecDeque<String>,
 }
 
 impl Default for App {
@@ -97,7 +98,8 @@ const fn create_app() -> App {
 		files: Option::None,
 		scanning: Scanning::NONE,
 		file_selected: 0,
-		sink_controller: Option::None
+		sink_controller: Option::None,
+		playing: VecDeque::new(),
 	}
 }
 
