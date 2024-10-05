@@ -1,7 +1,8 @@
-use std::{io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}};
+use std::{collections::HashSet, io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}};
 use constant::{MIN_HEIGHT, MIN_WIDTH};
-use handler::pulseaudio::{load_null_sink, load_sink_controller, set_volume_percentage, unload_null_sink};
+use handler::{handle_inputbot, pulseaudio::{load_null_sink, load_sink_controller, set_volume_percentage, unload_null_sink}};
 use listener::listen_events;
+use mki::Action;
 use ratatui::{
     backend::CrosstermBackend,
     Terminal
@@ -20,25 +21,31 @@ mod config;
 mod constant;
 mod handler;
 mod util;
+mod global_input;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let _ = config::load();
-
     let app = state::get_mut_app();
+
+    let pair = Arc::new((Mutex::new(SharedCondvar::default()), Condvar::new()));
+    app.pair = Option::Some(pair.clone());
+
+    let _ = config::load();
     app.sink_controller = Option::Some(load_sink_controller()?);
     app.module_num = load_null_sink()?;
     app.input = Option::Some(Input::default());
+    app.recorded = Option::Some(HashSet::new());
     set_volume_percentage(app.config.volume);
 
     app.running = true;
 
-    let pair = Arc::new((Mutex::new(SharedCondvar::default()), Condvar::new()));
     let pair2 = Arc::clone(&pair);
     let pair3 = Arc::clone(&pair);
+    let pair4 = Arc::clone(&pair);
 
     spawn_scan_thread(pair3, Scanning::ALL);
     let draw_thread = spawn_drawing_thread(pair);
     let listen_thread = spawn_listening_thread(pair2);
+    spawn_inputbot_thread(pair4);
     listen_thread.join().unwrap()?;
     draw_thread.join().unwrap()?;
 
@@ -119,4 +126,10 @@ fn spawn_scan_thread(pair: CondvarPair, mode: Scanning) {
         (*shared).redraw = true;
         cvar.notify_all();
     });
+}
+
+fn spawn_inputbot_thread(pair: CondvarPair) {
+    mki::bind_any_key(Action::handle_kb(move |key| {
+        handle_inputbot(pair.clone(), key);
+    }));
 }

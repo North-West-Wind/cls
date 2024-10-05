@@ -11,8 +11,8 @@ pub fn listen_events(pair: CondvarPair) -> io::Result<()> {
 			// It's guaranteed that the `read()` won't block when the `poll()`
 			// function returns `true`
 			match read()? {
-				//Event::FocusGained => println!("FocusGained"),
-				//Event::FocusLost => println!("FocusLost"),
+				//Event::FocusGained => on_focus(true),
+				//Event::FocusLost => on_focus(false),
 				Event::Key(event) => on_key(pair.clone(), event),
 				//Event::Mouse(event) => println!("{:?}", event),
 				Event::Paste(data) => on_paste(pair.clone(), &data),

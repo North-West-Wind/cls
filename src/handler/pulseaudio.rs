@@ -1,9 +1,9 @@
 use std::{process::{Command, Stdio}, thread};
 
-use libpulse_binding::volume::{ChannelVolumes, Volume};
+use libpulse_binding::volume::Volume;
 use pulsectl::controllers::{DeviceControl, SinkController};
 
-use crate::{constant::APP_NAME, state::{get_app, get_mut_app, CondvarPair}, util::ffprobe_info};
+use crate::{constant::APP_NAME, state::{get_app, get_mut_app}, util::ffprobe_info};
 
 
 pub fn load_sink_controller() -> Result<SinkController, Box<dyn std::error::Error>> {
@@ -57,10 +57,11 @@ pub fn set_volume_percentage(percentage: u32) {
 	controller.set_device_volume_by_name(APP_NAME, device.volume.set(device.volume.len(), Volume(Volume::NORMAL.0 * percentage / 100)));
 }
 
-pub fn play_file(pair: CondvarPair, path: &str) {
+pub fn play_file(path: &str) {
 	let string = path.trim().to_string();
 	thread::spawn(move || {
 		let app = get_mut_app();
+		let pair = app.pair.as_ref().unwrap().clone();
 
 		let (lock, cvar) = &*pair;
 		let mut shared = lock.lock().unwrap();

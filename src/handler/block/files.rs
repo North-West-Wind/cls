@@ -2,7 +2,7 @@ use std::{cmp::{max, min}, path::Path};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::{handler::pulseaudio, state::{get_app, get_mut_app, CondvarPair, Scanning}, util};
+use crate::{handler::pulseaudio, state::{get_app, get_mut_app, CondvarPair, Popup, Scanning}, util};
 
 pub fn handle_files(pair: CondvarPair, event: KeyEvent) -> bool {
 	let app = get_app();
@@ -13,7 +13,8 @@ pub fn handle_files(pair: CondvarPair, event: KeyEvent) -> bool {
 		KeyCode::Char('r') => reload_tab(pair),
 		KeyCode::Up => navigate_file(-1),
 		KeyCode::Down => navigate_file(1),
-		KeyCode::Enter => play_file(pair),
+		KeyCode::Enter => play_file(),
+		KeyCode::Char('x') => set_global_key_bind(),
 		_ => false,
 	}
 }
@@ -59,7 +60,7 @@ fn navigate_file(dy: i32) -> bool {
 	false
 }
 
-fn play_file(pair: CondvarPair) -> bool {
+fn play_file() -> bool {
 	let app = get_app();
 	if app.files.is_none() {
 		return false;
@@ -76,6 +77,12 @@ fn play_file(pair: CondvarPair) -> bool {
 	if app.file_selected >= unwrapped.len() {
 		return false;
 	}
-	pulseaudio::play_file(pair, &Path::new(&tab).join(&unwrapped[app.file_selected].0).into_os_string().into_string().unwrap());
+	pulseaudio::play_file(&Path::new(&tab).join(&unwrapped[app.file_selected].0).into_os_string().into_string().unwrap());
+	return true;
+}
+
+fn set_global_key_bind() -> bool {
+	let app = get_mut_app();
+	app.popup = Popup::KEY_BIND;
 	return true;
 }

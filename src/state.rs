@@ -1,5 +1,6 @@
-use std::{collections::{HashMap, VecDeque}, ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}, time::Duration};
+use std::{collections::{HashMap, HashSet, VecDeque}, ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}};
 
+use mki::Keyboard;
 use pulsectl::controllers::SinkController;
 use tui_input::Input;
 
@@ -31,6 +32,7 @@ pub enum Popup {
 	HELP,
 	QUIT,
 	DELETE_TAB,
+	KEY_BIND,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -55,9 +57,11 @@ pub enum Scanning {
 pub struct App {
 	// config
 	pub config: SoundboardConfig,
+	pub hotkey: Option<HashMap<String, Vec<Keyboard>>>,
 	// states
 	pub running: bool,
 	pub error: String,
+	pub pair: Option<CondvarPair>,
 	// render states: root
 	pub block_selected: u8,
 	pub selection_layer: SelectionLayer,
@@ -80,6 +84,12 @@ pub struct App {
 	pub scanning: Scanning,
 	// render states: playing
 	pub playing: VecDeque<String>,
+	// render states: key bind popup
+	pub recording: bool,
+	pub recorded: Option<HashSet<Keyboard>>,
+	// render states: scroll range
+	pub tabs_range: (i32, i32),
+	pub files_range: (i32, i32),
 }
 
 impl Default for App {
@@ -95,9 +105,11 @@ const fn create_app() -> App {
 	App {
 		// config
 		config: create_config(),
+		hotkey: Option::None,
 		// states
 		running: false,
 		error: String::new(),
+		pair: Option::None,
 		// render states: root
 		block_selected: 0,
 		selection_layer: SelectionLayer::BLOCK,
@@ -120,6 +132,12 @@ const fn create_app() -> App {
 		scanning: Scanning::NONE,
 		// render states: playing
 		playing: VecDeque::new(),
+		// render states: key bind popup
+		recording: false,
+		recorded: Option::None,
+		// render states: scroll range
+		tabs_range: (-1, -1),
+		files_range: (-1, -1),
 	}
 }
 

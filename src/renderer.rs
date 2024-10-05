@@ -5,7 +5,7 @@ use ratatui::{
 };
 use substring::Substring;
 
-use crate::{constant::{APP_NAME, APP_VERSION}, state::{self, get_app, AwaitInput, InputMode, Popup, Scanning, SelectionLayer}, util::selected_file_path};
+use crate::{constant::{APP_NAME, APP_VERSION}, global_input::keyboard_to_string, state::{self, get_app, AwaitInput, InputMode, Popup, Scanning, SelectionLayer}, util::selected_file_path};
 
 pub fn ui(f: &mut Frame) {
 	let app = state::get_app();
@@ -36,6 +36,7 @@ pub fn ui(f: &mut Frame) {
 			Popup::HELP => draw_help_block(f),
 			Popup::QUIT => draw_quit_block(f),
 			Popup::DELETE_TAB => draw_delete_tab_block(f),
+			Popup::KEY_BIND => draw_key_bind_block(f),
 			_ => ()
 		}
 	}
@@ -199,14 +200,29 @@ fn draw_files_block(f: &mut Frame, area: Rect) {
 			let mut lines = vec![];
 			for (ii, (file, duration)) in files.unwrap().iter().enumerate() {
 				let mut spans = vec![];
+				if app.config.file_key.is_some() {
+					let keys = app.config.file_key.as_ref().unwrap().get(&Path::new(&app.config.tabs[app.tab_selected]).join(file).into_os_string().into_string().unwrap());
+					if keys.is_some() {
+						let keys = keys.unwrap();
+						spans.push(Span::from(format!("({}) ", keys.join("+"))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
+					}
+				}
 				if duration.len() == 0 {
 					spans.push(Span::from(file));
 				} else if file.len() + duration.len() > area.width as usize - 6 {
-					spans.push(Span::from(file.substring(0, area.width as usize - 10 - duration.len())));
+					let mut extra = 0;
+					if spans.len() > 0 {
+						extra += spans[0].width();
+					}
+					spans.push(Span::from(file.substring(0, area.width as usize - 10 - extra - duration.len())));
 					spans.push(Span::from("... ".to_owned() + duration));
 				} else {
+					let mut extra = 0;
+					if spans.len() > 0 {
+						extra += spans[0].width();
+					}
 					spans.push(Span::from(file.clone()));
-					spans.push(Span::from(vec![" "; area.width as usize - 6 - file.len() - duration.len()].join("")));
+					spans.push(Span::from(vec![" "; area.width as usize - 6 - extra - file.len() - duration.len()].join("")));
 					spans.push(Span::from(duration.clone()));
 				}
 				lines.push(Line::from(spans).centered().style(if app.file_selected == ii {
@@ -253,33 +269,37 @@ fn draw_help_message(f: &mut Frame, area: Rect) {
 fn draw_help_block(f: &mut Frame) {
 	let appname = APP_NAME;
 	let text = Text::from(vec![
-		Line::from(format!("{appname} - Command Line Soundboard")).centered(),
-		Line::from(APP_VERSION).centered(),
+		Line::from(format!("{appname} - Command Line Soundboard")).style(Style::default().add_modifier(Modifier::BOLD)).centered(),
+		Line::from(APP_VERSION).style(Style::default().add_modifier(Modifier::BOLD)).centered(),
 		Line::from(""),
 
-		Line::from("Root Key Binds").centered(),
+		Line::from("Root Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
 		Line::from("? - Help"),
 		Line::from("q / esc - Escape / Quit"),
 		Line::from("arrow keys - Navigate"),
 		Line::from("enter - Select block"),
 
-		Line::from("Volume Key Binds").centered(),
+		Line::from(""),
+		Line::from("Volume Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
 		Line::from("left - Decrease volume by 1%"),
 		Line::from("right - Increase volume by 1%"),
 		Line::from("ctrl + left - Decrease volume by 5%"),
 		Line::from("ctrl + right - Increase volume by 5%"),
 
-		Line::from("Tabs Key Binds").centered(),
+		Line::from(""),
+		Line::from("Tabs Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
 		Line::from("a - Add directory"),
 		Line::from("d - Remove directory"),
 
-		Line::from("Files Key Binds").centered(),
+		Line::from(""),
+		Line::from("Files Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
 		Line::from("r - Refresh"),
 		Line::from("enter - Play file"),
+		Line::from("x - Set global key bind"),
 	]);
 	let area = f.area();
-	let width = max((text.width() as u16) + 4, area.width / 3);
-	let height = max((text.height() as u16) + 2, area.height / 3);
+	let width = (text.width() as u16) + 4;
+	let height = (text.height() as u16) + 4;
 	let popup_area: Rect = Rect {
 		x: (area.width - width) / 2,
 		y: (area.height - height) / 2,
@@ -324,6 +344,27 @@ fn draw_delete_tab_block(f: &mut Frame) {
 	};
 	Clear.render(popup_area, f.buffer_mut());
 	f.render_widget(Paragraph::new(text).block(Block::bordered().title("Delete?").padding(Padding::horizontal(1)).border_type(BorderType::Rounded).border_style(Style::default().fg(Color::Yellow))), popup_area);
+}
+
+fn draw_key_bind_block(f: &mut Frame) {
+	let app = get_app();
+	let mut lines = vec![];
+	lines.push(Line::from("enter: record / confirm | esc: stop | r: reset"));
+	lines.push(Line::from(format!("> {}", app.recorded.as_ref().unwrap().into_iter().map(|key| { keyboard_to_string(*key) }).collect::<Vec<String>>().join(" + "))));
+	let width = max(lines[0].width(), lines[1].width()) as u16 + 4;
+	let height = 4;
+	let area = f.area();
+	let popup_area = Rect {
+		x: (area.width - width) / 2,
+		y: (area.height - height) / 2,
+		width,
+		height
+	};
+	Clear.render(popup_area, f.buffer_mut());
+	let paragraph = Paragraph::new(lines)
+		.style(if app.recording { Style::default().fg(Color::Yellow) } else { Style::default() })
+		.block(Block::bordered().border_type(BorderType::Rounded).title("Key Bind").padding(Padding::horizontal(1)));
+	f.render_widget(paragraph, popup_area);
 }
 
 fn draw_input(f: &mut Frame) {
