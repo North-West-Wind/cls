@@ -85,3 +85,13 @@ pub fn selected_file_path() -> String {
 	}
 	return Path::new(&tab).join(&unwrapped[app.file_selected].0).into_os_string().into_string().unwrap();
 }
+
+pub fn notify_redraw() {
+	let app = get_app();
+	let pair = app.pair.clone().unwrap();
+	let (lock, cvar) = &*pair;
+	let mut shared = lock.lock().unwrap();
+	shared.redraw = true;
+	cvar.notify_all();
+	std::mem::drop(shared);
+}

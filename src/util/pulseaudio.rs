@@ -2,8 +2,11 @@ use std::{process::{Command, Stdio}, thread};
 
 use libpulse_binding::volume::Volume;
 use pulsectl::controllers::{DeviceControl, SinkController};
+use uuid::Uuid;
 
 use crate::{constant::APP_NAME, state::{get_app, get_mut_app}, util::ffprobe_info};
+
+use super::notify_redraw;
 
 
 pub fn load_sink_controller() -> Result<SinkController, Box<dyn std::error::Error>> {
@@ -60,15 +63,10 @@ pub fn set_volume_percentage(percentage: u32) {
 pub fn play_file(path: &str) {
 	let string = path.trim().to_string();
 	thread::spawn(move || {
+		let uuid = Uuid::new_v4();
 		let app = get_mut_app();
-		let pair = app.pair.as_ref().unwrap().clone();
-
-		let (lock, cvar) = &*pair;
-		let mut shared = lock.lock().unwrap();
-		(*shared).redraw = true;
-		app.playing.push_back(string.clone());
-		cvar.notify_all();
-		std::mem::drop(shared);
+		app.playing.as_mut().unwrap().insert(uuid, string.clone());
+		notify_redraw();
 
 		let info = ffprobe_info(string.as_str());
 		if info.is_some() {
@@ -103,11 +101,7 @@ pub fn play_file(path: &str) {
 				]).stdin(Stdio::from(ffmpeg_child.stdout.unwrap())).stdout(Stdio::piped()).spawn().unwrap().wait();
 			}
 		}
-
-		let (lock, cvar) = &*pair;
-		let mut shared = lock.lock().unwrap();
-		(*shared).redraw = true;
-		app.playing.pop_front();
-		cvar.notify_all();
+		app.playing.as_mut().unwrap().remove(&uuid);
+		notify_redraw();
 	});
 }

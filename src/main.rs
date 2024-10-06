@@ -1,4 +1,4 @@
-use std::{io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}};
+use std::{collections::HashMap, io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}};
 use component::block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, tabs::TabsBlock, volume::VolumeBlock, BlockComponent};
 use constant::{MIN_HEIGHT, MIN_WIDTH};
 use util::pulseaudio::{load_null_sink, load_sink_controller, set_volume_percentage, unload_null_sink};
@@ -12,7 +12,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use state::{CondvarPair, Scanning, SharedCondvar};
+use state::{Scanning, SharedCondvar};
 use util::threads::spawn_scan_thread;
 mod renderer;
 mod listener;
@@ -24,9 +24,7 @@ mod component;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = state::get_mut_app();
-
-    let pair = Arc::new((Mutex::new(SharedCondvar::default()), Condvar::new()));
-    app.pair = Option::Some(pair.clone());
+    app.pair = Option::Some(Arc::new((Mutex::new(SharedCondvar::default()), Condvar::new())));
 
     app.blocks = vec![
 		BlockComponent::Volume(VolumeBlock::default()),
@@ -35,6 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		BlockComponent::Help(HelpBlock::default()),
         BlockComponent::Playing(PlayingBlock::default()),
     ];
+    app.playing = Option::Some(HashMap::new());
 
     let _ = config::load();
     app.sink_controller = Option::Some(load_sink_controller()?);
@@ -43,11 +42,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     app.running = true;
 
-    let pair2 = Arc::clone(&pair);
-
     spawn_scan_thread(Scanning::All);
-    let draw_thread = spawn_drawing_thread(pair);
-    let listen_thread = spawn_listening_thread(pair2);
+    let draw_thread = spawn_drawing_thread();
+    let listen_thread = spawn_listening_thread();
     listen_thread.join().unwrap()?;
     draw_thread.join().unwrap()?;
 
@@ -56,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn spawn_drawing_thread(pair: CondvarPair) -> JoinHandle<Result<(), io::Error>> {
+fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
     return thread::spawn(move || -> Result<(), io::Error> {
         // setup terminal
         enable_raw_mode()?;
@@ -74,6 +71,7 @@ fn spawn_drawing_thread(pair: CondvarPair) -> JoinHandle<Result<(), io::Error>> 
         }
 
         let app = state::get_app();
+        let pair = app.pair.clone().unwrap();
         while app.running {
             let (lock, cvar) = &*pair;
             let mut shared = lock.lock().unwrap();
@@ -103,10 +101,10 @@ fn spawn_drawing_thread(pair: CondvarPair) -> JoinHandle<Result<(), io::Error>> 
     });
 }
 
-fn spawn_listening_thread(pair: CondvarPair) -> JoinHandle<Result<(), io::Error>> {
+fn spawn_listening_thread() -> JoinHandle<Result<(), io::Error>> {
     return thread::spawn(move || -> Result<(), io::Error> {
         listen_global_input();
-        listen_events(pair)?;
+        listen_events()?;
         Ok(())
     });
 }

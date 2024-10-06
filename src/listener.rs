@@ -2,9 +2,9 @@ use std::{io, time::Duration};
 use crossterm::event::{poll, read, Event, KeyEvent};
 use mki::Action;
 
-use crate::{component::{block::BlockHandleKey, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{self, get_mut_app, CondvarPair, SelectionLayer}, util::pulseaudio::play_file};
+use crate::{component::{block::BlockHandleKey, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{self, get_mut_app, SelectionLayer}, util::{notify_redraw, pulseaudio::play_file}};
 
-pub fn listen_events(pair: CondvarPair) -> io::Result<()> {
+pub fn listen_events() -> io::Result<()> {
 	let app = state::get_app();
 	while app.running {
 		// `poll()` waits for an `Event` for a given time period
@@ -14,29 +14,24 @@ pub fn listen_events(pair: CondvarPair) -> io::Result<()> {
 			match read()? {
 				//Event::FocusGained => on_focus(true),
 				//Event::FocusLost => on_focus(false),
-				Event::Key(event) => on_key(pair.clone(), event),
+				Event::Key(event) => on_key(event),
 				//Event::Mouse(event) => println!("{:?}", event),
-				Event::Paste(data) => on_paste(pair.clone(), data),
-				Event::Resize(width, height) => on_resize(pair.clone(), width, height),
+				Event::Paste(data) => on_paste(data),
+				Event::Resize(width, height) => on_resize(width, height),
 				_ => (),
 			}
 		}
 	}
-	notify_redraw(pair);
+	notify_redraw();
 	Ok(())
 }
 
 pub fn listen_global_input() {
 	mki::bind_any_key(Action::handle_kb(move |key| {
 		let app = get_mut_app();
-		let pair = app.pair.as_ref().unwrap().clone();
 		if app.popup.as_ref().is_some_and(|popup| { popup.has_global_key_handler() }) {
 			app.popup.as_mut().unwrap().handle_global_key(key);
-	
-			let (lock, cvar) = &*pair;
-			let mut shared = lock.lock().unwrap();
-			(*shared).redraw = true;
-			cvar.notify_all();
+			notify_redraw();
 		} else {
 			for (path, keys) in app.hotkey.as_ref().unwrap() {
 				if keys.iter().all(|key| { key.is_pressed() }) {
@@ -47,14 +42,7 @@ pub fn listen_global_input() {
 	}));
 }
 
-fn notify_redraw(pair: CondvarPair) {
-	let (lock, cvar) = &*pair;
-	let mut shared = lock.lock().unwrap();
-	(*shared).redraw = true;
-	cvar.notify_all();
-}
-
-fn on_resize(pair: CondvarPair, width: u16, height: u16) {
+fn on_resize(width: u16, height: u16) {
 	let app = state::get_mut_app();
 	if width < MIN_WIDTH || height < MIN_HEIGHT {
 		app.error = String::from(format!("Terminal size requires at least {MIN_WIDTH}x{MIN_HEIGHT}.\nCurrent size: {width}x{height}"));
@@ -63,10 +51,10 @@ fn on_resize(pair: CondvarPair, width: u16, height: u16) {
 			app.error = String::new();
 		}
 	}
-	notify_redraw(pair);
+	notify_redraw();
 }
 
-fn on_key(pair: CondvarPair, event: KeyEvent) {
+fn on_key(event: KeyEvent) {
 	let app = state::get_mut_app();
 	let need_redraw: bool;
 	if app.popup.is_some() {
@@ -78,15 +66,15 @@ fn on_key(pair: CondvarPair, event: KeyEvent) {
 		}
 	}
 	if need_redraw {
-		notify_redraw(pair);
+		notify_redraw();
 	}
 }
 
-fn on_paste(pair: CondvarPair, data: String) {
+fn on_paste(data: String) {
 	let app = state::get_mut_app();
 	if app.popup.is_some() {
 		if app.popup.as_mut().unwrap().handle_paste(data) {
-			notify_redraw(pair);
+			notify_redraw();
 		}
 	}
 }

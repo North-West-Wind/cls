@@ -1,7 +1,8 @@
-use std::{collections::{HashMap, VecDeque}, ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}};
+use std::{collections::HashMap, ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}};
 
 use mki::Keyboard;
 use pulsectl::controllers::SinkController;
+use uuid::Uuid;
 
 use crate::{component::{block::BlockComponent, popup::PopupComponent}, config::{create_config, SoundboardConfig}};
 
@@ -65,7 +66,7 @@ pub struct App {
 	pub file_selected: usize,
 	pub scanning: Scanning,
 	// render states: playing
-	pub playing: VecDeque<String>,
+	pub playing: Option<HashMap<Uuid, String>>,
 }
 
 impl Default for App {
@@ -105,7 +106,7 @@ const fn create_app() -> App {
 		file_selected: 0,
 		scanning: Scanning::None,
 		// render states: playing
-		playing: VecDeque::new(),
+		playing: Option::None,
 	}
 }
 

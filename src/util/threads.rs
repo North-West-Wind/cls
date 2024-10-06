@@ -1,6 +1,8 @@
 use std::thread;
 
-use crate::{component::popup::{save::SavePopup, set_popup, PopupComponent}, config, state::{get_app, get_mut_app, Scanning}, util};
+use crate::{component::popup::{save::SavePopup, set_popup, PopupComponent}, config, state::{get_mut_app, Scanning}, util};
+
+use super::notify_redraw;
 
 pub fn spawn_scan_thread(mode: Scanning) {
 	if mode == Scanning::None {
@@ -15,29 +17,16 @@ pub fn spawn_scan_thread(mode: Scanning) {
 				_ => Ok(())
 		};
 		app.scanning = Scanning::None;
-		let pair = app.pair.as_ref().unwrap().clone();
-		let (lock, cvar) = &*pair;
-		let mut shared = lock.lock().unwrap();
-		(*shared).redraw = true;
-		cvar.notify_all();
+		notify_redraw();
 	});
 }
 
 pub fn spawn_save_thread() {
 	thread::spawn(move || {
-		let app = get_app();
-		let pair = app.pair.as_ref().unwrap().clone();
 		set_popup(PopupComponent::Save(SavePopup::new(false)));
-		let (lock, cvar) = &*pair;
-		let mut shared = lock.lock().unwrap();
-		(*shared).redraw = true;
-		cvar.notify_all();
-		std::mem::drop(shared);
+		notify_redraw();
 		let _ = config::save();
 		set_popup(PopupComponent::Save(SavePopup::new(true)));
-		let (lock, cvar) = &*pair;
-		let mut shared = lock.lock().unwrap();
-		(*shared).redraw = true;
-		cvar.notify_all();
+		notify_redraw();
 	});
 }
