@@ -1,8 +1,7 @@
-use std::{collections::HashMap, default::Default, str::FromStr, vec::Vec};
-use mki::Keyboard;
+use std::{collections::HashMap, default::Default, vec::Vec};
 use serde::{Serialize, Deserialize};
 
-use crate::{constant::APP_NAME, global_input::string_to_keyboard, state::{get_app, get_mut_app}};
+use crate::{constant::APP_NAME, util::global_input::string_to_keyboard, state::{get_app, get_mut_app}};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SoundboardConfig {

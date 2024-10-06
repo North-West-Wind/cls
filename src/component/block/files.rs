@@ -1,0 +1,178 @@
+use std::{cmp::{max, min}, path::Path};
+
+use crate::{component::popup::{key_bind::KeyBindPopup, set_popup, PopupComponent}, state::{get_app, get_mut_app, Scanning}, util::threads::spawn_scan_thread, util::{self, selected_file_path}};
+
+use super::{border_style, border_type, BlockHandleKey, BlockRenderArea};
+
+use crossterm::event::KeyCode;
+use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
+use substring::Substring;
+
+pub struct FilesBlock {
+	title: String,
+	id: u8,
+}
+
+impl Default for FilesBlock {
+	fn default() -> Self {
+		Self {
+			title: "Files".to_string(),
+			id: 2,
+		}
+	}
+}
+
+impl BlockRenderArea for FilesBlock {
+	fn render_area(&self, f: &mut Frame, area: Rect) {
+		let block = Block::default()
+			.title(self.title.clone())
+			.borders(Borders::ALL)
+			.border_type(border_type(self.id))
+			.border_style(border_style(self.id))
+			.padding(Padding::new(2, 2, 1, 1));
+	
+		let app = get_mut_app();
+		if app.files_range.0 == -1 {
+			app.files_range = (0, area.height as i32 - 5);
+		}
+		let paragraph: Paragraph;
+		if app.scanning == Scanning::All {
+			paragraph = Paragraph::new("Performing initial scan...");
+		} else if app.config.tabs.len() == 0 {
+			paragraph = Paragraph::new("Add a tab to get started :>");
+		} else if app.scanning == Scanning::One(app.tab_selected) {
+			paragraph = Paragraph::new("Scanning this directory...\nComeback later :>");
+		} else {
+			let tab = app.config.tabs[app.tab_selected].clone();
+			let files = app.files.as_ref().unwrap().get(&tab);
+			if files.is_none() {
+				paragraph = Paragraph::new("Failed to read this directory :<\nDoes it exist? Is it readable?");
+			} else if files.unwrap().len() == 0 {
+				paragraph = Paragraph::new("There are no playable files in this directory :<");
+			} else {
+				let mut lines = vec![];
+				for (ii, (file, duration)) in files.unwrap().iter().enumerate() {
+					let mut spans = vec![];
+					if app.config.file_key.is_some() {
+						let keys = app.config.file_key.as_ref().unwrap().get(&Path::new(&app.config.tabs[app.tab_selected]).join(file).into_os_string().into_string().unwrap());
+						if keys.is_some() {
+							let keys = keys.unwrap();
+							spans.push(Span::from(format!("({}) ", keys.join("+"))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
+						}
+					}
+					if duration.len() == 0 {
+						spans.push(Span::from(file));
+					} else if file.len() + duration.len() > area.width as usize - 6 {
+						let mut extra = 0;
+						if spans.len() > 0 {
+							extra += spans[0].width();
+						}
+						spans.push(Span::from(file.substring(0, area.width as usize - 10 - extra - duration.len())));
+						spans.push(Span::from("... ".to_owned() + duration));
+					} else {
+						let mut extra = 0;
+						if spans.len() > 0 {
+							extra += spans[0].width();
+						}
+						spans.push(Span::from(file.clone()));
+						spans.push(Span::from(vec![" "; area.width as usize - 6 - extra - file.len() - duration.len()].join("")));
+						spans.push(Span::from(duration.clone()));
+					}
+					lines.push(Line::from(spans).centered().style(if app.file_selected == ii {
+						Style::default().fg(Color::LightBlue).add_modifier(Modifier::REVERSED)
+					} else {
+						Style::default().fg(Color::Cyan)
+					}));
+				}
+				if app.file_selected < app.files_range.0 as usize {
+					app.files_range = (app.file_selected as i32, app.file_selected as i32 + area.height as i32 - 5);
+				} else if app.file_selected > app.files_range.1 as usize {
+					app.files_range = (app.file_selected as i32 - area.height as i32 + 5, app.file_selected as i32);
+				}
+				paragraph = Paragraph::new(lines).scroll((app.files_range.0 as u16, 0));
+			}
+		}
+		f.render_widget(paragraph.block(block), area);
+	}
+}
+
+impl BlockHandleKey for FilesBlock {
+	fn handle_key(&self, event: crossterm::event::KeyEvent) -> bool {
+		let app = get_app();
+		if app.scanning == Scanning::All || app.scanning == Scanning::One(app.tab_selected) {
+			return false;
+		}
+		match event.code {
+			KeyCode::Char('r') => reload_tab(),
+			KeyCode::Up => navigate_file(-1),
+			KeyCode::Down => navigate_file(1),
+			KeyCode::Enter => play_file(),
+			KeyCode::Char('x') => set_global_key_bind(),
+			KeyCode::Char('z') => unset_global_key_bind(),
+			_ => false,
+		}
+	}
+}
+
+fn reload_tab() -> bool {
+	let app = get_app();
+	if app.tab_selected < app.config.tabs.len() {
+		spawn_scan_thread(Scanning::One(app.tab_selected));
+		return true;
+	}
+	false
+}
+
+fn navigate_file(dy: i32) -> bool {
+	let app = get_mut_app();
+	let files = app.files.as_ref().unwrap().get(&app.config.tabs[app.tab_selected]);
+	if files.is_none() {
+		return false;
+	}
+	let new_selected = min(files.unwrap().len() as i32 - 1, max(0, app.file_selected as i32 + dy)) as usize;
+	if new_selected != app.file_selected {
+		app.file_selected = new_selected;
+		return true;
+	}
+	false
+}
+
+fn play_file() -> bool {
+	let app = get_app();
+	if app.files.is_none() {
+		return false;
+	}
+	if app.tab_selected >= app.config.tabs.len() {
+		return false;
+	}
+	let tab = app.config.tabs[app.tab_selected].clone();
+	let files = app.files.as_ref().unwrap().get(&tab);
+	if files.is_none() {
+		return false;
+	}
+	let unwrapped = files.unwrap();
+	if app.file_selected >= unwrapped.len() {
+		return false;
+	}
+	util::pulseaudio::play_file(&Path::new(&tab).join(&unwrapped[app.file_selected].0).into_os_string().into_string().unwrap());
+	return true;
+}
+
+fn set_global_key_bind() -> bool {
+	set_popup(PopupComponent::KeyBind(KeyBindPopup::default()));
+	return true;
+}
+
+fn unset_global_key_bind() -> bool {
+	let path = selected_file_path();
+	if path.is_empty() {
+		return false;
+	}
+	let app = get_mut_app();
+	if app.config.file_key.is_none() {
+		return false;
+	}
+	app.config.file_key.as_mut().unwrap().remove(&path);
+	app.hotkey.as_mut().unwrap().remove(&path);
+	return true;
+}

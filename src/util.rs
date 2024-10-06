@@ -4,6 +4,10 @@ use ffprobe::FfProbe;
 
 use crate::state::{get_app, get_mut_app};
 
+pub mod global_input;
+pub mod pulseaudio;
+pub mod threads;
+
 pub fn ffprobe_info(path: &str) -> Option<FfProbe> {
 	let result = ffprobe::ffprobe(path);
 	match result {

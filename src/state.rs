@@ -1,10 +1,9 @@
-use std::{collections::{HashMap, HashSet, VecDeque}, ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}};
+use std::{collections::{HashMap, VecDeque}, ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}};
 
 use mki::Keyboard;
 use pulsectl::controllers::SinkController;
-use tui_input::Input;
 
-use crate::config::{create_config, SoundboardConfig};
+use crate::{component::{block::BlockComponent, popup::PopupComponent}, config::{create_config, SoundboardConfig}};
 
 pub type CondvarPair = Arc<(Mutex<SharedCondvar>, Condvar)>;
 
@@ -22,36 +21,21 @@ impl Default for SharedCondvar {
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum SelectionLayer {
-	BLOCK,
-	CONTENT
-}
-
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub enum Popup {
-	NONE,
-	HELP,
-	QUIT,
-	DELETE_TAB,
-	KEY_BIND,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub enum InputMode {
-	NORMAL,
-	EDITING
+	Block,
+	Content
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum AwaitInput {
-	NONE,
-	ADD_TAB,
+	None,
+	AddTab,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Scanning {
-	NONE,
-	ALL,
-	ONE(usize)
+	None,
+	All,
+	One(usize)
 }
 
 pub struct App {
@@ -63,16 +47,14 @@ pub struct App {
 	pub error: String,
 	pub pair: Option<CondvarPair>,
 	// render states: root
+	pub blocks: Vec<BlockComponent>,
 	pub block_selected: u8,
 	pub selection_layer: SelectionLayer,
-	pub last_selection_layer: SelectionLayer,
-	pub popup: Popup,
+	pub popup: Option<PopupComponent>,
 	// pulseaudio
 	pub module_num: String,
 	pub sink_controller: Option<SinkController>,
 	// input
-	pub input: Option<Input>,
-	pub input_mode: InputMode,
 	pub await_input: AwaitInput,
 	// render states: volume
 	pub volume_selected: usize,
@@ -84,9 +66,6 @@ pub struct App {
 	pub scanning: Scanning,
 	// render states: playing
 	pub playing: VecDeque<String>,
-	// render states: key bind popup
-	pub recording: bool,
-	pub recorded: Option<HashSet<Keyboard>>,
 	// render states: scroll range
 	pub tabs_range: (i32, i32),
 	pub files_range: (i32, i32),
@@ -111,17 +90,15 @@ const fn create_app() -> App {
 		error: String::new(),
 		pair: Option::None,
 		// render states: root
+		blocks: vec![],
 		block_selected: 0,
-		selection_layer: SelectionLayer::BLOCK,
-		last_selection_layer: SelectionLayer::BLOCK,
-		popup: Popup::NONE,
+		selection_layer: SelectionLayer::Block,
+		popup: Option::None,
 		// pulseaudio
 		sink_controller: Option::None,
 		module_num: String::new(),
 		// input
-		input: Option::None,
-		input_mode: InputMode::NORMAL,
-		await_input: AwaitInput::NONE,
+		await_input: AwaitInput::None,
 		// render states: volume
 		volume_selected: 0,
 		// render states: tab
@@ -129,12 +106,9 @@ const fn create_app() -> App {
 		// render states: files
 		files: Option::None,
 		file_selected: 0,
-		scanning: Scanning::NONE,
+		scanning: Scanning::None,
 		// render states: playing
 		playing: VecDeque::new(),
-		// render states: key bind popup
-		recording: false,
-		recorded: Option::None,
 		// render states: scroll range
 		tabs_range: (-1, -1),
 		files_range: (-1, -1),

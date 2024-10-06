@@ -1,8 +1,8 @@
-use std::{collections::HashSet, io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}};
+use std::{io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}};
+use component::block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, tabs::TabsBlock, volume::VolumeBlock, BlockComponent};
 use constant::{MIN_HEIGHT, MIN_WIDTH};
-use handler::{handle_inputbot, pulseaudio::{load_null_sink, load_sink_controller, set_volume_percentage, unload_null_sink}};
-use listener::listen_events;
-use mki::Action;
+use util::pulseaudio::{load_null_sink, load_sink_controller, set_volume_percentage, unload_null_sink};
+use listener::{listen_events, listen_global_input};
 use ratatui::{
     backend::CrosstermBackend,
     Terminal
@@ -12,16 +12,15 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use state::{get_mut_app, CondvarPair, Scanning, SharedCondvar};
-use tui_input::Input;
+use state::{CondvarPair, Scanning, SharedCondvar};
+use util::threads::spawn_scan_thread;
 mod renderer;
 mod listener;
 mod state;
 mod config;
 mod constant;
-mod handler;
 mod util;
-mod global_input;
+mod component;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = state::get_mut_app();
@@ -29,23 +28,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pair = Arc::new((Mutex::new(SharedCondvar::default()), Condvar::new()));
     app.pair = Option::Some(pair.clone());
 
+    app.blocks = vec![
+		BlockComponent::Volume(VolumeBlock::default()),
+		BlockComponent::Tabs(TabsBlock::default()),
+		BlockComponent::Files(FilesBlock::default()),
+		BlockComponent::Help(HelpBlock::default()),
+        BlockComponent::Playing(PlayingBlock::default()),
+    ];
+
     let _ = config::load();
     app.sink_controller = Option::Some(load_sink_controller()?);
     app.module_num = load_null_sink()?;
-    app.input = Option::Some(Input::default());
-    app.recorded = Option::Some(HashSet::new());
     set_volume_percentage(app.config.volume);
 
     app.running = true;
 
     let pair2 = Arc::clone(&pair);
-    let pair3 = Arc::clone(&pair);
-    let pair4 = Arc::clone(&pair);
 
-    spawn_scan_thread(pair3, Scanning::ALL);
+    spawn_scan_thread(Scanning::All);
     let draw_thread = spawn_drawing_thread(pair);
     let listen_thread = spawn_listening_thread(pair2);
-    spawn_inputbot_thread(pair4);
     listen_thread.join().unwrap()?;
     draw_thread.join().unwrap()?;
 
@@ -103,33 +105,8 @@ fn spawn_drawing_thread(pair: CondvarPair) -> JoinHandle<Result<(), io::Error>> 
 
 fn spawn_listening_thread(pair: CondvarPair) -> JoinHandle<Result<(), io::Error>> {
     return thread::spawn(move || -> Result<(), io::Error> {
+        listen_global_input();
         listen_events(pair)?;
         Ok(())
     });
-}
-
-fn spawn_scan_thread(pair: CondvarPair, mode: Scanning) {
-    if mode == Scanning::NONE {
-        return;
-    }
-    thread::spawn(move || {
-        let app = get_mut_app();
-        app.scanning = mode;
-        let _ = match mode {
-            Scanning::ALL => util::scan_tabs(),
-            Scanning::ONE(index) => util::scan_tab(index),
-            _ => Ok(())
-        };
-        app.scanning = Scanning::NONE;
-        let (lock, cvar) = &*pair;
-        let mut shared = lock.lock().unwrap();
-        (*shared).redraw = true;
-        cvar.notify_all();
-    });
-}
-
-fn spawn_inputbot_thread(pair: CondvarPair) {
-    mki::bind_any_key(Action::handle_kb(move |key| {
-        handle_inputbot(pair.clone(), key);
-    }));
 }
