@@ -1,6 +1,6 @@
 use std::{cmp::{max, min}, i32, path::Path};
 
-use crate::{component::popup::{key_bind::KeyBindPopup, set_popup, PopupComponent}, state::{get_app, get_mut_app, Scanning}, util::threads::spawn_scan_thread, util::{self, selected_file_path}};
+use crate::{component::popup::{key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, state::{get_app, get_mut_app, Scanning}, util::{self, selected_file_path, threads::spawn_scan_thread}};
 
 use super::{border_style, border_type, BlockHandleKey, BlockRenderArea};
 
@@ -168,7 +168,7 @@ fn play_file() -> bool {
 }
 
 fn set_global_key_bind() -> bool {
-	set_popup(PopupComponent::KeyBind(KeyBindPopup::default()));
+	set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::File)));
 	return true;
 }
 

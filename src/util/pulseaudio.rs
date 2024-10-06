@@ -65,8 +65,6 @@ pub fn play_file(path: &str) {
 	thread::spawn(move || {
 		let uuid = Uuid::new_v4();
 		let app = get_mut_app();
-		app.playing.as_mut().unwrap().insert(uuid, string.clone());
-		notify_redraw();
 
 		let info = ffprobe_info(string.as_str());
 		if info.is_some() {
@@ -92,13 +90,18 @@ pub fn play_file(path: &str) {
 					volume = 65535;
 				}
 		
-				let _ = Command::new("pacat").args([
+				let mut pacat_child = Command::new("pacat").args([
 					"-d",
 					APP_NAME,
 					format!("--channels={}", stream.channels.unwrap_or(2)).as_str(),
 					format!("--rate={}", stream.sample_rate.clone().unwrap()).as_str(),
 					format!("--volume={}", volume).as_str(),
-				]).stdin(Stdio::from(ffmpeg_child.stdout.unwrap())).stdout(Stdio::piped()).spawn().unwrap().wait();
+				]).stdin(Stdio::from(ffmpeg_child.stdout.unwrap())).stdout(Stdio::piped()).spawn().unwrap();
+
+				app.playing.as_mut().unwrap().insert(uuid, (string.clone(), pacat_child.id()));
+				notify_redraw();
+
+				let _ = pacat_child.wait();
 			}
 		}
 		app.playing.as_mut().unwrap().remove(&uuid);

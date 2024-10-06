@@ -9,6 +9,7 @@ pub struct SoundboardConfig {
 	pub volume: u32,
 	pub file_volume: Option<HashMap<String, usize>>,
 	pub file_key: Option<HashMap<String, Vec<String>>>,
+	pub stop_key: Option<Vec<String>>,
 }
 
 impl Default for SoundboardConfig {
@@ -23,6 +24,7 @@ pub const fn create_config() -> SoundboardConfig {
 		volume: 100,
 		file_volume: Option::None,
 		file_key: Option::None,
+		stop_key: Option::None
 	}
 }
 
@@ -48,6 +50,21 @@ pub fn load() -> Result<(), Box<dyn std::error::Error>> {
 				continue;
 			}
 			app.hotkey.as_mut().unwrap().insert(path, keyboard);
+		}
+	}
+
+	if cfg.stop_key.is_some() {
+		let mut keyboard = vec![];
+		for key in cfg.stop_key.clone().unwrap() {
+			let result = string_to_keyboard(key);
+			if result.is_some() {
+				keyboard.push(result.unwrap());
+			} else {
+				break;
+			}
+		}
+		if keyboard.len() == cfg.stop_key.unwrap().len() {
+			app.stopkey = Option::Some(keyboard);
 		}
 	}
 

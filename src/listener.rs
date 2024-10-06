@@ -1,6 +1,7 @@
 use std::{io, time::Duration};
 use crossterm::event::{poll, read, Event, KeyEvent};
 use mki::Action;
+use nix::{sys::signal::{self, Signal}, unistd::Pid};
 
 use crate::{component::{block::BlockHandleKey, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{self, get_mut_app, SelectionLayer}, util::{notify_redraw, pulseaudio::play_file}};
 
@@ -41,6 +42,15 @@ pub fn listen_global_input() {
 			for (path, keys) in app.hotkey.as_ref().unwrap() {
 				if keys.iter().all(|key| { key.is_pressed() }) {
 					play_file(path);
+				}
+			}
+			if app.stopkey.is_some() {
+				if app.stopkey.as_ref().unwrap().iter().all(|key| { key.is_pressed() }) {
+					let playing = app.playing.as_mut().unwrap();
+					for (_, id) in playing.values() {
+						signal::kill(Pid::from_raw(*id as i32), Signal::SIGTERM).unwrap();
+					}
+					playing.clear();
 				}
 			}
 		}

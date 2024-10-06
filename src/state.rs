@@ -43,6 +43,7 @@ pub struct App {
 	// config
 	pub config: SoundboardConfig,
 	pub hotkey: Option<HashMap<String, Vec<Keyboard>>>,
+	pub stopkey: Option<Vec<Keyboard>>,
 	// states
 	pub running: bool,
 	pub error: String,
@@ -66,7 +67,7 @@ pub struct App {
 	pub file_selected: usize,
 	pub scanning: Scanning,
 	// render states: playing
-	pub playing: Option<HashMap<Uuid, String>>,
+	pub playing: Option<HashMap<Uuid, (String, u32)>>,
 }
 
 impl Default for App {
@@ -83,6 +84,7 @@ const fn create_app() -> App {
 		// config
 		config: create_config(),
 		hotkey: Option::None,
+		stopkey: Option::None,
 		// states
 		running: false,
 		error: String::new(),
