@@ -5,7 +5,7 @@ use ratatui::{
 use crate::{component::{block::{BlockRender, BlockRenderArea}, popup::PopupRender}, state};
 
 pub fn ui(f: &mut Frame) {
-	let app = state::get_app();
+	let app = state::get_mut_app();
 	if !app.error.is_empty() {
 		return draw_error(f);
 	}

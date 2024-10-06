@@ -29,7 +29,7 @@ pub trait BlockRender {
 }
 
 pub trait BlockRenderArea {
-	fn render_area(&self, f: &mut Frame, area: Rect);
+	fn render_area(&mut self, f: &mut Frame, area: Rect);
 }
 
 pub trait BlockHandleKey {
@@ -46,7 +46,7 @@ impl BlockRender for BlockComponent {
 }
 
 impl BlockRenderArea for BlockComponent {
-	fn render_area(&self, f: &mut Frame, area: Rect) {
+	fn render_area(&mut self, f: &mut Frame, area: Rect) {
 		match self {
 			BlockComponent::Volume(block) => block.render_area(f, area),
 			BlockComponent::Tabs(block) => block.render_area(f, area),

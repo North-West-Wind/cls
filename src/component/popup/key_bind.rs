@@ -80,6 +80,9 @@ impl PopupHandleKey for KeyBindPopup {
 
 impl PopupHandleGlobalKey for KeyBindPopup {
 	fn handle_global_key(&mut self, key: Keyboard) {
+		if !self.recording {
+			return;
+		}
 		use Keyboard::*;
 		match key {
 			Enter|Escape => false,

@@ -4,12 +4,13 @@ use crate::{component::popup::{delete_tab::DeleteTabPopup, input::InputPopup, se
 
 use super::{border_style, border_type, BlockHandleKey, BlockRenderArea};
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 
 pub struct TabsBlock {
 	title: String,
 	id: u8,
+	range: (i32, i32),
 }
 
 impl Default for TabsBlock {
@@ -17,12 +18,13 @@ impl Default for TabsBlock {
 		Self {
 			title: "Tabs".to_string(),
 			id: 1,
+			range: (-1, -1),
 		}
 	}
 }
 
 impl BlockRenderArea for TabsBlock {
-	fn render_area(&self, f: &mut Frame, area: Rect) {
+	fn render_area(&mut self, f: &mut Frame, area: Rect) {
 		let app = get_mut_app();
 		let tabs = app.config.tabs.clone();
 		let tab_selected = app.tab_selected as usize;
@@ -45,7 +47,7 @@ impl BlockRenderArea for TabsBlock {
 	
 		let mut width = area.width as i32 - 4;
 		let mut count = 0;
-		if app.tabs_range.0 == -1 {
+		if self.range.0 == -1 {
 			for (ii, span) in spans.iter().enumerate() {
 				if ii % 2 == 1 {
 					// skip separator
@@ -57,8 +59,8 @@ impl BlockRenderArea for TabsBlock {
 					break;
 				}
 			}
-			app.tabs_range = (0, count - 1);
-		} else if app.tab_selected < app.tabs_range.0 as usize {
+			self.range = (0, count - 1);
+		} else if app.tab_selected < self.range.0 as usize {
 			for (ii, span) in spans.iter().enumerate() {
 				if ii % 2 == 1 || ii < app.tab_selected * 2 {
 					// skip separator
@@ -70,8 +72,8 @@ impl BlockRenderArea for TabsBlock {
 					break;
 				}
 			}
-			app.tabs_range = (app.tab_selected as i32, app.tab_selected as i32 + count - 1);
-		} else if app.tab_selected >= app.tabs_range.1 as usize {
+			self.range = (app.tab_selected as i32, app.tab_selected as i32 + count - 1);
+		} else if app.tab_selected >= self.range.1 as usize {
 			for (ii, span) in spans.iter().rev().enumerate() {
 				if ii % 2 == 1 || ii < spans.len() - app.tab_selected * 2 - 1 {
 					// skip separator
@@ -83,7 +85,7 @@ impl BlockRenderArea for TabsBlock {
 					break;
 				}
 			}
-			app.tabs_range = (app.tab_selected as i32 - count + 1, app.tab_selected as i32);
+			self.range = (app.tab_selected as i32 - count + 1, app.tab_selected as i32);
 		}
 		
 		let block = Block::default()
@@ -93,7 +95,7 @@ impl BlockRenderArea for TabsBlock {
 			.border_style(border_style(self.id));
 		let mut length = 0;
 		for (ii, span) in spans.iter().enumerate() {
-			if ii >= app.tabs_range.0 as usize * 2 {
+			if ii >= self.range.0 as usize * 2 {
 				break;
 			}
 			length += span.width();
@@ -104,12 +106,12 @@ impl BlockRenderArea for TabsBlock {
 }
 
 impl BlockHandleKey for TabsBlock {
-	fn handle_key(&self, event: crossterm::event::KeyEvent) -> bool {
+	fn handle_key(&self, event: KeyEvent) -> bool {
 		match event.code {
 			KeyCode::Char('a') => handle_add(),
 			KeyCode::Char('d') => handle_remove(),
-			KeyCode::Right => handle_move(true),
-			KeyCode::Left => handle_move(false),
+			KeyCode::Right => handle_move(true, event.modifiers.contains(KeyModifiers::CONTROL)),
+			KeyCode::Left => handle_move(false, event.modifiers.contains(KeyModifiers::CONTROL)),
 			_ => false
 		}
 	}
@@ -132,12 +134,15 @@ fn handle_remove() -> bool {
 	false
 }
 
-fn handle_move(right: bool) -> bool {
+fn handle_move(right: bool, modify: bool) -> bool {
 	let delta = if right { 1 } else { -1 };
 	let app = get_mut_app();
 	let tab_selected = app.tab_selected as i32;
 	let new_selected = min(app.config.tabs.len() as i32 - 1, max(0, tab_selected + delta));
 	if tab_selected != new_selected {
+		if modify {
+			app.config.tabs.swap(tab_selected as usize, new_selected as usize);
+		}
 		app.tab_selected = new_selected as usize;
 		app.file_selected = 0;
 		return true;

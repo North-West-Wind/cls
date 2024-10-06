@@ -1,4 +1,4 @@
-use std::{cmp::{max, min}, path::Path};
+use std::{cmp::{max, min}, i32, path::Path};
 
 use crate::{component::popup::{key_bind::KeyBindPopup, set_popup, PopupComponent}, state::{get_app, get_mut_app, Scanning}, util::threads::spawn_scan_thread, util::{self, selected_file_path}};
 
@@ -11,6 +11,7 @@ use substring::Substring;
 pub struct FilesBlock {
 	title: String,
 	id: u8,
+	range: (i32, i32)
 }
 
 impl Default for FilesBlock {
@@ -18,12 +19,13 @@ impl Default for FilesBlock {
 		Self {
 			title: "Files".to_string(),
 			id: 2,
+			range: (-1, -1)
 		}
 	}
 }
 
 impl BlockRenderArea for FilesBlock {
-	fn render_area(&self, f: &mut Frame, area: Rect) {
+	fn render_area(&mut self, f: &mut Frame, area: Rect) {
 		let block = Block::default()
 			.title(self.title.clone())
 			.borders(Borders::ALL)
@@ -32,8 +34,8 @@ impl BlockRenderArea for FilesBlock {
 			.padding(Padding::new(2, 2, 1, 1));
 	
 		let app = get_mut_app();
-		if app.files_range.0 == -1 {
-			app.files_range = (0, area.height as i32 - 5);
+		if self.range.0 == -1 {
+			self.range = (0, area.height as i32 - 5);
 		}
 		let paragraph: Paragraph;
 		if app.scanning == Scanning::All {
@@ -54,42 +56,45 @@ impl BlockRenderArea for FilesBlock {
 				for (ii, (file, duration)) in files.unwrap().iter().enumerate() {
 					let mut spans = vec![];
 					if app.config.file_key.is_some() {
-						let keys = app.config.file_key.as_ref().unwrap().get(&Path::new(&app.config.tabs[app.tab_selected]).join(file).into_os_string().into_string().unwrap());
+						let keys = app.config.file_key.as_mut().unwrap().get(&Path::new(&app.config.tabs[app.tab_selected]).join(file).into_os_string().into_string().unwrap());
 						if keys.is_some() {
-							let keys = keys.unwrap();
-							spans.push(Span::from(format!("({}) ", keys.join("+"))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
+							let mut keys = keys.unwrap().clone();
+							keys.sort();
+							spans.push(Span::from(format!("({})", keys.join("+"))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
+							spans.push(Span::from(" "));
 						}
 					}
+					let style = if app.file_selected == ii {
+						Style::default().fg(Color::LightBlue).add_modifier(Modifier::REVERSED)
+					} else {
+						Style::default().fg(Color::Cyan)
+					};
 					if duration.len() == 0 {
-						spans.push(Span::from(file));
+						spans.push(Span::from(file).style(style));
 					} else if file.len() + duration.len() > area.width as usize - 6 {
 						let mut extra = 0;
 						if spans.len() > 0 {
 							extra += spans[0].width();
 						}
-						spans.push(Span::from(file.substring(0, area.width as usize - 10 - extra - duration.len())));
-						spans.push(Span::from("... ".to_owned() + duration));
+						spans.push(Span::from(file.substring(0, area.width as usize - 10 - extra - duration.len())).style(style));
+						spans.push(Span::from("... ".to_owned() + duration).style(style));
 					} else {
 						let mut extra = 0;
 						if spans.len() > 0 {
 							extra += spans[0].width();
 						}
-						spans.push(Span::from(file.clone()));
-						spans.push(Span::from(vec![" "; area.width as usize - 6 - extra - file.len() - duration.len()].join("")));
-						spans.push(Span::from(duration.clone()));
+						spans.push(Span::from(file.clone()).style(style));
+						spans.push(Span::from(vec![" "; area.width as usize - 6 - extra - file.len() - duration.len()].join("")).style(style));
+						spans.push(Span::from(duration.clone()).style(style));
 					}
-					lines.push(Line::from(spans).centered().style(if app.file_selected == ii {
-						Style::default().fg(Color::LightBlue).add_modifier(Modifier::REVERSED)
-					} else {
-						Style::default().fg(Color::Cyan)
-					}));
+					lines.push(Line::from(spans));
 				}
-				if app.file_selected < app.files_range.0 as usize {
-					app.files_range = (app.file_selected as i32, app.file_selected as i32 + area.height as i32 - 5);
-				} else if app.file_selected > app.files_range.1 as usize {
-					app.files_range = (app.file_selected as i32 - area.height as i32 + 5, app.file_selected as i32);
+				if app.file_selected < self.range.0 as usize {
+					self.range = (app.file_selected as i32, app.file_selected as i32 + area.height as i32 - 5);
+				} else if app.file_selected > self.range.1 as usize {
+					self.range = (app.file_selected as i32 - area.height as i32 + 5, app.file_selected as i32);
 				}
-				paragraph = Paragraph::new(lines).scroll((app.files_range.0 as u16, 0));
+				paragraph = Paragraph::new(lines).scroll((self.range.0 as u16, 0));
 			}
 		}
 		f.render_widget(paragraph.block(block), area);
@@ -109,6 +114,10 @@ impl BlockHandleKey for FilesBlock {
 			KeyCode::Enter => play_file(),
 			KeyCode::Char('x') => set_global_key_bind(),
 			KeyCode::Char('z') => unset_global_key_bind(),
+			KeyCode::PageUp => navigate_file(-(self.range.1 - self.range.0 + 1)),
+			KeyCode::PageDown => navigate_file(self.range.1 - self.range.0 + 1),
+			KeyCode::Home => navigate_file(-i32::MAX),
+			KeyCode::End => navigate_file(i32::MAX),
 			_ => false,
 		}
 	}

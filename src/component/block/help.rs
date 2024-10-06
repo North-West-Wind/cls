@@ -11,7 +11,7 @@ impl Default for HelpBlock {
 }
 
 impl BlockRenderArea for HelpBlock {
-	fn render_area(&self, f: &mut Frame, area: Rect) {
+	fn render_area(&mut self, f: &mut Frame, area: Rect) {
 		let paragraph = Paragraph::new("? for help, q to quit")
 			.style(Style::default().fg(Color::DarkGray));
 		f.render_widget(paragraph, area);

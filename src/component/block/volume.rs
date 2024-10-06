@@ -22,7 +22,7 @@ impl Default for VolumeBlock {
 }
 
 impl BlockRenderArea for VolumeBlock {
-	fn render_area(&self, f: &mut Frame, area: Rect) {
+	fn render_area(&mut self, f: &mut Frame, area: Rect) {
 		let app = get_app();
 		let block = Block::default()
 			.title(self.title.clone())

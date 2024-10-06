@@ -66,9 +66,6 @@ pub struct App {
 	pub scanning: Scanning,
 	// render states: playing
 	pub playing: VecDeque<String>,
-	// render states: scroll range
-	pub tabs_range: (i32, i32),
-	pub files_range: (i32, i32),
 }
 
 impl Default for App {
@@ -109,9 +106,6 @@ const fn create_app() -> App {
 		scanning: Scanning::None,
 		// render states: playing
 		playing: VecDeque::new(),
-		// render states: scroll range
-		tabs_range: (-1, -1),
-		files_range: (-1, -1),
 	}
 }
 

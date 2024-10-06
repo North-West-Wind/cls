@@ -1,3 +1,5 @@
+use std::cmp::max;
+
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Modifier, Style}, text::{Line, Text}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 
@@ -38,6 +40,7 @@ impl PopupRender for HelpPopup {
 			Line::from("Tabs Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
 			Line::from("a - Add directory"),
 			Line::from("d - Remove directory"),
+			Line::from("ctrl + arrow keys - Move tab"),
 	
 			Line::from(""),
 			Line::from("Files Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
@@ -50,8 +53,8 @@ impl PopupRender for HelpPopup {
 		let width = (text.width() as u16) + 4;
 		let height = (text.height() as u16) + 4;
 		let popup_area: Rect = Rect {
-			x: (area.width - width) / 2,
-			y: (area.height - height) / 2,
+			x: max(0, (area.width - width) / 2),
+			y: max(0, (area.height - height) / 2),
 			width,
 			height
 		};
