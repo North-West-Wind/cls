@@ -39,6 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         print_usage(&program, opts);
         return Ok(());
     }
+    let hidden = matches.opt_present("hidden");
 
     let app = state::get_mut_app();
     app.pair = Option::Some(Arc::new((Mutex::new(SharedCondvar::default()), Condvar::new())));
@@ -61,8 +62,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     spawn_signal_thread()?;
     spawn_scan_thread(Scanning::All);
-    let listen_thread = spawn_listening_thread();
-    if !matches.opt_present("hidden") {
+    let listen_thread = spawn_listening_thread(hidden);
+    if !hidden {
         let draw_thread = spawn_drawing_thread();
         draw_thread.join().unwrap()?;
     }
@@ -121,10 +122,10 @@ fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
     });
 }
 
-fn spawn_listening_thread() -> JoinHandle<Result<(), io::Error>> {
+fn spawn_listening_thread(no_listen: bool) -> JoinHandle<Result<(), io::Error>> {
     return thread::spawn(move || -> Result<(), io::Error> {
         listen_global_input();
-        listen_events()?;
+        listen_events(no_listen)?;
         Ok(())
     });
 }

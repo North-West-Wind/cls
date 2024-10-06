@@ -4,22 +4,27 @@ use mki::Action;
 
 use crate::{component::{block::BlockHandleKey, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{self, get_mut_app, SelectionLayer}, util::{notify_redraw, pulseaudio::play_file}};
 
-pub fn listen_events() -> io::Result<()> {
+pub fn listen_events(no_listen: bool) -> io::Result<()> {
 	let app = state::get_app();
 	while app.running {
-		// `poll()` waits for an `Event` for a given time period
-		if poll(Duration::from_millis(500))? {
-			// It's guaranteed that the `read()` won't block when the `poll()`
-			// function returns `true`
-			match read()? {
-				//Event::FocusGained => on_focus(true),
-				//Event::FocusLost => on_focus(false),
-				Event::Key(event) => on_key(event),
-				//Event::Mouse(event) => println!("{:?}", event),
-				Event::Paste(data) => on_paste(data),
-				Event::Resize(width, height) => on_resize(width, height),
-				_ => (),
+		if !no_listen {
+			// `poll()` waits for an `Event` for a given time period
+			if poll(Duration::from_millis(500))? {
+				// It's guaranteed that the `read()` won't block when the `poll()`
+				// function returns `true`
+				match read()? {
+					//Event::FocusGained => on_focus(true),
+					//Event::FocusLost => on_focus(false),
+					Event::Key(event) => on_key(event),
+					//Event::Mouse(event) => println!("{:?}", event),
+					Event::Paste(data) => on_paste(data),
+					Event::Resize(width, height) => on_resize(width, height),
+					_ => (),
+				}
 			}
+		} else {
+			// this is still required to keep the program from stopping
+			std::thread::sleep(Duration::from_millis(500));
 		}
 	}
 	notify_redraw();
