@@ -59,13 +59,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     app.running = true;
 
-    let signal_thread = spawn_signal_thread()?;
+    spawn_signal_thread()?;
     spawn_scan_thread(Scanning::All);
-    let draw_thread = spawn_drawing_thread();
     let listen_thread = spawn_listening_thread();
+    if !matches.opt_present("hidden") {
+        let draw_thread = spawn_drawing_thread();
+        draw_thread.join().unwrap()?;
+    }
     listen_thread.join().unwrap()?;
-    draw_thread.join().unwrap()?;
-    signal_thread.join().unwrap();
 
     unload_null_sink()?;
     config::save()?;
