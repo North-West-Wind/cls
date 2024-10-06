@@ -2,7 +2,12 @@
 It's just a file manager and command runner.
 
 ### Fun fact
-"cls" is also a abbreviation of a Cantonese swear, 㾒撚線 (meaning "crazy as f*ck"). It is the mental state of a Javascript dev trying to make a soundboard in Rust.
+"cls" is also a abbreviation of a Cantonese swear, 㾒撚線 (meaning "crazy as f*ck"). It was the mental state of a Javascript dev trying to make a soundboard in Rust.
+
+## Features
+- Global Hotkey (also works on Wayland)
+- Play any file that `ffmpeg` supports
+- Directory tabs
 
 ## Usage
 As I told you, this is just a file manager and command runner.
@@ -12,9 +17,9 @@ As I told you, this is just a file manager and command runner.
 - `pulseaudio` / `pipewire-pulse`
 
 ### Setup
-This soundboard is a very bare-bones program. It is not user-friendly at all, so I'll run you down on how to set it up.
+This soundboard is a very bare-bones program. It is built to fit my existing streaming configuration, so I'll run you down on how to set it up.
 
-First of all, this program creates a null-sink from PulseAudio that is called `cls`. If you want the sound to be played somewhere, you'll have to load a few modules.
+First of all, this program creates a null-sink from PulseAudio that is called `cls`, and all sounds are played into this sink. If you want the sound to be played somewhere, you'll have to load a few modules.
 
 #### To Mic
 Redirecting the sink to a source is unreasonably complicated. I wish there was a single module that does it all.
@@ -43,7 +48,18 @@ pactl load-module module-loopback source=cls.monitor sink=out_sfx # redirect cls
 ```
 
 ### TUI
-On the other hand, TUI should be rather intuitive. Press `?` to bring up the help menu for instructions. I may add a few images here later.
+On the other hand, TUI should be rather intuitive. Press `?` to bring up the help menu for instructions.  
+![Screenshot of the TUI](screenshot.png)
+
+### Hidden
+```bash
+cls --hidden
+```
+You can also run `cls` without the TUI, so it will only handle global hotkeys.  
+There is currently no indicator to tell you if it is running, so you will have to kill it using another command.
+```bash
+pkill cls
+```
 
 ## Inspiration
 I was using another soundboard - [Soundux](https://github.com/Soundux/Soundux). It was a solid program, until everyone wants to switch to Wayland. Due to Soundux being Electron-based, global hotkeys doesn't work on Wayland.
