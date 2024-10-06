@@ -1,6 +1,8 @@
 use std::{collections::HashMap, io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}};
 use component::block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, tabs::TabsBlock, volume::VolumeBlock, BlockComponent};
 use constant::{MIN_HEIGHT, MIN_WIDTH};
+use getopts::Options;
+use signal_hook::iterator::Signals;
 use util::pulseaudio::{load_null_sink, load_sink_controller, set_volume_percentage, unload_null_sink};
 use listener::{listen_events, listen_global_input};
 use ratatui::{
@@ -12,7 +14,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use state::{Scanning, SharedCondvar};
+use state::{get_mut_app, Scanning, SharedCondvar};
 use util::threads::spawn_scan_thread;
 mod renderer;
 mod listener;
@@ -23,6 +25,21 @@ mod util;
 mod component;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<String> = std::env::args().collect();
+    let program = args[0].clone();
+
+    let mut opts = Options::new();
+    opts.optflag("h", "help", "print this help menu");
+    opts.optflag("", "hidden", "run the soundboard in the background");
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => { m },
+        Err(f) => { panic!("{}", f.to_string()) }
+    };
+    if matches.opt_present("h") {
+        print_usage(&program, opts);
+        return Ok(());
+    }
+
     let app = state::get_mut_app();
     app.pair = Option::Some(Arc::new((Mutex::new(SharedCondvar::default()), Condvar::new())));
 
@@ -42,11 +59,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     app.running = true;
 
+    let signal_thread = spawn_signal_thread()?;
     spawn_scan_thread(Scanning::All);
     let draw_thread = spawn_drawing_thread();
     let listen_thread = spawn_listening_thread();
     listen_thread.join().unwrap()?;
     draw_thread.join().unwrap()?;
+    signal_thread.join().unwrap();
 
     unload_null_sink()?;
     config::save()?;
@@ -107,4 +126,26 @@ fn spawn_listening_thread() -> JoinHandle<Result<(), io::Error>> {
         listen_events()?;
         Ok(())
     });
+}
+
+fn spawn_signal_thread() -> Result<JoinHandle<()>, Box<dyn std::error::Error>> {
+    use signal_hook::consts::*;
+    let mut signals = Signals::new([SIGINT, SIGTERM])?;
+    return Ok(thread::spawn(move || {
+        for sig in signals.forever() {
+            let app = get_mut_app();
+            match sig {
+                SIGINT|SIGTERM => {
+                    app.running = false;
+                    break;
+                },
+                _ => (),
+            }
+        }
+    }));
+}
+
+fn print_usage(program: &str, opts: Options) {
+    let brief = format!("Usage: {} [options]", program);
+    print!("{}", opts.usage(&brief));
 }

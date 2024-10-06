@@ -17,3 +17,5 @@ pulsectl-rs = "0.3.2"
 libpulse-binding = "2.28.1"
 mki = "0.2.3"
 uuid = { version = "1.10.0", features = ["v4"] }
+getopts = "0.2.21"
+signal-hook = "0.3.17"
