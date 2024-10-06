@@ -1,3 +1,5 @@
+use std::cmp::{max, min};
+
 use crossterm::event::KeyEvent;
 use delete_tab::DeleteTabPopup;
 use help::HelpPopup;
@@ -5,7 +7,7 @@ use input::InputPopup;
 use key_bind::KeyBindPopup;
 use mki::Keyboard;
 use quit::QuitPopup;
-use ratatui::Frame;
+use ratatui::{layout::Rect, Frame};
 use save::SavePopup;
 
 use crate::state::get_mut_app;
@@ -103,4 +105,13 @@ pub fn exit_popup() {
 pub fn set_popup(popup: PopupComponent) {
 	let app = get_mut_app();
 	app.popup = Option::Some(popup);
+}
+
+pub(self) fn safe_centered_rect(width: u16, height: u16, area: Rect) -> Rect {
+	Rect {
+		x: max(0, (area.width as i32 - width as i32) / 2) as u16,
+		y: max(0, (area.height as i32 - height as i32) / 2) as u16,
+		width: min(width, area.width),
+		height: min(height, area.height)
+	}
 }

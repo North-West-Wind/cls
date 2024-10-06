@@ -2,12 +2,12 @@ use std::path::Path;
 
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use normpath::PathExt;
-use ratatui::{layout::Rect, style::{Color, Style}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
+use ratatui::{style::{Color, Style}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 use tui_input::{backend::crossterm::EventHandler, Input};
 
 use crate::{state::{get_app, get_mut_app, AwaitInput, Scanning}, util::threads::spawn_scan_thread};
 
-use super::{exit_popup, PopupHandleKey, PopupHandlePaste, PopupRender};
+use super::{exit_popup, safe_centered_rect, PopupHandleKey, PopupHandlePaste, PopupRender};
 
 pub struct InputPopup {
 	input: Input,
@@ -33,22 +33,17 @@ impl PopupRender for InputPopup {
 	fn render(&self, f: &mut Frame) {
 		let app = get_app();
 		let area = f.area();
-		let width = (area.width / 2).max(5) - 5;
+		let width = (area.width / 2).max(5);
 		let height = 3;
 		let input = &self.input;
-		let scroll = input.visual_scroll(width as usize);
+		let scroll = input.visual_scroll(width as usize - 5);
 		let input_para = Paragraph::new(input.value())
 			.scroll((0, scroll as u16))
 			.block(Block::bordered().border_type(BorderType::Rounded).title(match app.await_input {
 				AwaitInput::AddTab => "Add directory as tab",
 				_ => "Input"
 			}).padding(Padding::horizontal(1)).style(Style::default().fg(Color::Green)));
-		let input_area = Rect {
-			x: (area.width - width + 5) / 2,
-			y: (area.height - height) / 2,
-			width: width + 5,
-			height
-		};
+		let input_area = safe_centered_rect(width, height, area);
 		Clear.render(input_area, f.buffer_mut());
 		f.render_widget(input_para, input_area);
 		f.set_cursor_position((

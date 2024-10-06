@@ -2,11 +2,11 @@ use std::{cmp::max, collections::{HashMap, HashSet}};
 
 use crossterm::event::{KeyCode, KeyEvent};
 use mki::Keyboard;
-use ratatui::{layout::Rect, style::{Color, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
+use ratatui::{style::{Color, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 
 use crate::{util::global_input::keyboard_to_string, state::get_mut_app, util::selected_file_path};
 
-use super::{exit_popup, PopupHandleGlobalKey, PopupHandleKey, PopupRender};
+use super::{exit_popup, safe_centered_rect, PopupHandleGlobalKey, PopupHandleKey, PopupRender};
 
 pub struct KeyBindPopup {
 	recording: bool,
@@ -30,12 +30,7 @@ impl PopupRender for KeyBindPopup {
 		let width = max(lines[0].width(), lines[1].width()) as u16 + 4;
 		let height = 4;
 		let area = f.area();
-		let popup_area = Rect {
-			x: (area.width - width) / 2,
-			y: (area.height - height) / 2,
-			width,
-			height
-		};
+		let popup_area = safe_centered_rect(width, height, area);
 		Clear.render(popup_area, f.buffer_mut());
 		let paragraph = Paragraph::new(lines)
 			.style(if self.recording { Style::default().fg(Color::Yellow) } else { Style::default() })

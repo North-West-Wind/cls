@@ -1,17 +1,21 @@
 use std::cmp::max;
 
 use crossterm::event::{KeyCode, KeyEvent};
-use ratatui::{layout::Rect, style::{Modifier, Style}, text::{Line, Text}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
+use ratatui::{style::{Modifier, Style}, text::{Line, Text}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 
 use crate::constant::{APP_NAME, APP_VERSION};
 
-use super::{exit_popup, PopupHandleKey, PopupRender};
+use super::{exit_popup, safe_centered_rect, PopupHandleKey, PopupRender};
 
-pub struct HelpPopup { }
+pub struct HelpPopup {
+	scroll: (i32, i32)
+}
 
 impl Default for HelpPopup {
 	fn default() -> Self {
-		Self {}
+		Self {
+			scroll: (0, 0)
+		}
 	}
 }
 
@@ -52,14 +56,9 @@ impl PopupRender for HelpPopup {
 		let area = f.area();
 		let width = (text.width() as u16) + 4;
 		let height = (text.height() as u16) + 4;
-		let popup_area: Rect = Rect {
-			x: max(0, (area.width - width) / 2),
-			y: max(0, (area.height - height) / 2),
-			width,
-			height
-		};
+		let popup_area = safe_centered_rect(width, height, area);
 		Clear.render(popup_area, f.buffer_mut());
-		f.render_widget(Paragraph::new(text).block(Block::bordered().padding(Padding::uniform(1)).border_type(BorderType::Rounded)), popup_area);
+		f.render_widget(Paragraph::new(text).block(Block::bordered().padding(Padding::uniform(1)).border_type(BorderType::Rounded)).scroll((max(0, self.scroll.1) as u16, max(0, self.scroll.0) as u16)), popup_area);
 	}
 }
 
@@ -70,7 +69,17 @@ impl PopupHandleKey for HelpPopup {
 				exit_popup();
 				return true
 			},
+			KeyCode::Up => scroll(self, 0, -1),
+			KeyCode::Down => scroll(self, 0, 1),
+			KeyCode::Left => scroll(self, -1, 0),
+			KeyCode::Right => scroll(self, 1, 0),
 			_ => false
 		}
 	}
+}
+
+fn scroll(popup: &mut HelpPopup, dx: i32, dy: i32) -> bool {
+	popup.scroll.0 += dx;
+	popup.scroll.1 += dy;
+	true
 }

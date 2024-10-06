@@ -81,10 +81,10 @@ impl BlockRenderArea for FilesBlock {
 					} else {
 						let mut extra = 0;
 						if spans.len() > 0 {
-							extra += spans[0].width();
+							extra += spans[0].width() as i32;
 						}
 						spans.push(Span::from(file.clone()).style(style));
-						spans.push(Span::from(vec![" "; area.width as usize - 6 - extra - file.len() - duration.len()].join("")).style(style));
+						spans.push(Span::from(vec![" "; max(0, area.width as i32 - 6 - extra - file.len() as i32 - duration.len() as i32) as usize].join("")).style(style));
 						spans.push(Span::from(duration.clone()).style(style));
 					}
 					lines.push(Line::from(spans));
