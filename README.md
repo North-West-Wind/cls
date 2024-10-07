@@ -16,6 +16,19 @@ As I told you, this is just a file manager and command runner.
 - `ffmpeg`
 - `pulseaudio` / `pipewire-pulse`
 
+### Install
+If you are using an Arch Linux-based distro, it's already available on the AUR as [`cls-soundboard`](https://aur.archlinux.org/packages/cls-soundboard) (the `cls` package is already taken by a random script).  
+For other distros, the binary file is provided in release, or you can build it yourself.
+
+### Building
+You'll need `cargo` for this.
+```bash
+git clone https://github.com/North-West-Wind/cls
+cd cls
+cargo build --release
+```
+The binary file will be available as `target/release/cls`
+
 ### Setup
 This soundboard is a very bare-bones program. It is built to fit my existing streaming configuration, so I'll run you down on how to set it up.
 
