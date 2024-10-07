@@ -69,9 +69,7 @@ impl BlockRenderArea for FilesBlock {
 					} else {
 						Style::default().fg(Color::Cyan)
 					};
-					if duration.len() == 0 {
-						spans.push(Span::from(file).style(style));
-					} else if file.len() + duration.len() > area.width as usize - 6 {
+					if file.len() + duration.len() > area.width as usize - 6 {
 						let mut extra = 0;
 						if spans.len() > 0 {
 							extra += spans[0].width();

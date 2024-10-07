@@ -1,6 +1,6 @@
 [package]
 name = "cls"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 
 [dependencies]
@@ -20,3 +20,4 @@ uuid = { version = "1.10.0", features = ["v4"] }
 getopts = "0.2.21"
 signal-hook = "0.3.17"
 nix = { version = "0.29.0", features = ["signal"] }
+file-format = "0.25.0"

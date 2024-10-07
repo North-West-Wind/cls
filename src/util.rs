@@ -1,6 +1,7 @@
-use std::{collections::HashMap, fs, path::Path};
+use std::{collections::HashMap, fs, path::Path, thread};
 
 use ffprobe::FfProbe;
+use file_format::{FileFormat, Kind};
 
 use crate::state::{get_app, get_mut_app};
 
@@ -25,6 +26,31 @@ pub fn ffprobe_info(path: &str) -> Option<FfProbe> {
 	}
 }
 
+fn add_duration(tab: String) {
+	thread::spawn(move || {
+		let app = get_mut_app();
+		let files = app.files.as_ref().unwrap().get(&tab).unwrap();
+		let mut new_files = vec![];
+		for (filename, _) in files {
+			let longpath = Path::new(&tab).join(filename);
+			let filepath = longpath.into_os_string().into_string().unwrap();
+			let info = ffprobe_info(filepath.as_str());
+			if info.is_some() {
+				let duration = info.unwrap().format.get_duration();
+				let duration_str: String;
+				if duration.is_some() {
+					duration_str = humantime::format_duration(duration.unwrap()).to_string();
+				} else {
+					duration_str = String::new();
+				}
+				new_files.push((filename.clone(), duration_str));
+			}
+		}
+		app.files.as_mut().unwrap().insert(tab, new_files);
+		notify_redraw();
+	});
+}
+
 pub fn scan_tab(index: usize) -> Result<(), std::io::Error> {
 	let app = get_mut_app();
 	if index >= app.config.tabs.len() {
@@ -37,22 +63,20 @@ pub fn scan_tab(index: usize) -> Result<(), std::io::Error> {
 		for entry in fs::read_dir(path)? {
 			let file = entry?;
 			let longpath = file.path();
-			let filename = longpath.file_name().unwrap().to_os_string().into_string().unwrap();
-			let filepath = longpath.into_os_string().into_string().unwrap();
-			let info = ffprobe_info(filepath.as_str());
-			if info.is_some() {
-				let duration = info.unwrap().format.get_duration();
-				let duration_str: String;
-				if duration.is_some() {
-					duration_str = humantime::format_duration(duration.unwrap()).to_string();
-				} else {
-					duration_str = String::new();
+			let fmt = FileFormat::from_file(longpath.clone());
+			if fmt.is_ok() {
+				match fmt.unwrap().kind() {
+					Kind::Audio|Kind::Video => {
+						let filename = longpath.file_name().unwrap().to_os_string().into_string().unwrap();
+						files.push((filename, String::new()));
+					},
+					_ => (),
 				}
-				files.push((filename, duration_str));
 			}
 		}
     files.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
-		app.files.as_mut().unwrap().insert(tab, files);
+		app.files.as_mut().unwrap().insert(tab.clone(), files);
+		add_duration(tab);
 	}
 	Ok(())
 }
