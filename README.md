@@ -2,7 +2,7 @@
 It's just a file manager and command runner.
 
 ### Fun fact
-"cls" is also a abbreviation of a Cantonese swear, 㾒撚線 (meaning "f*cking crazy"). It was the mental state of a Javascript dev trying to make a soundboard in Rust.
+"cls" is also a abbreviation of a Cantonese swear, 㾒撚線 (meaning "f*cking crazy"). It was the mental state of a Javascript dev trying to make a soundboard in Rust without prior Rust programming experience.
 
 ## Features
 - Global Hotkey (also works on Wayland)
@@ -10,11 +10,12 @@ It's just a file manager and command runner.
 - Directory tabs
 
 ## Usage
-As I told you, this is just a file manager and command runner.
+As I told you, this is just a file manager and command runner.  
+This only works on Linux with a PulseAudio provider. If you want a soundboard for other platforms or providers similar to this, I recommend [Soundux](https://github.com/Soundux/Soundux).
 
 ### Dependencies
 - `ffmpeg`
-- `pulseaudio` / `pipewire-pulse`
+- `pulseaudio` / `pipewire-pulse` / anything to provides `pactl` and `pacat`
 
 ### Install
 If you are using an Arch Linux-based distro, it's already available on the AUR as [`cls-soundboard`](https://aur.archlinux.org/packages/cls-soundboard) (the `cls` package is already taken by a random script).  
@@ -81,9 +82,9 @@ There is currently no indicator to tell you if it is running, so you will have t
 pkill cls
 ```
 
-## Inspiration
+## Motivation
 I was using another soundboard - [Soundux](https://github.com/Soundux/Soundux). It was a solid program, until everyone wants to switch to Wayland. Due to Soundux being Electron-based, global hotkeys doesn't work on Wayland.
 
 I would wait for them to add support for that, if it weren't for them going through a major rewrite. From the [progress page](https://github.com/Soundux/Soundux/issues/591), it hasn't been updated for like 2 years. Therefore, I took it as a challenge to write my own soundboard (and also learn Rust).
 
-That's why this soundboard is structured like Soundux, except a bunch of missing features, such as passthrough.
+That's why this soundboard is structured like Soundux, except a bunch of missing features, such as passthrough, which I probably won't implement.
