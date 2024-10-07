@@ -2,7 +2,7 @@
 It's just a file manager and command runner.
 
 ### Fun fact
-"cls" is also a abbreviation of a Cantonese swear, 㾒撚線 (meaning "crazy as f*ck"). It was the mental state of a Javascript dev trying to make a soundboard in Rust.
+"cls" is also a abbreviation of a Cantonese swear, 㾒撚線 (meaning "f*cking crazy"). It was the mental state of a Javascript dev trying to make a soundboard in Rust.
 
 ## Features
 - Global Hotkey (also works on Wayland)
@@ -27,10 +27,14 @@ Redirecting the sink to a source is unreasonably complicated. I wish there was a
 We need to create an input mixer.
 
 ```bash
-pactl load-module module-null-sink sink_name=input_mixer # create another null-sink for mixing mic and cls
-pactl load-module module-loopback source=cls.monitor sink=input_mixer latency_msec=10 # redirect cls to the input mixer
-pactl load-module module-loopback source=@DEFAULT_SOURCE@ sink=iput_mixer latency_msec=10 # redirect mic to the input mixer
-pactl load-module module-remap-source master=input_mixer.monitor source_name=mic # redirect input mixer to an actual source
+# create another null-sink for mixing mic and cls
+pactl load-module module-null-sink sink_name=input_mixer
+# redirect cls to the input mixer
+pactl load-module module-loopback source=cls.monitor sink=input_mixer latency_msec=10
+# redirect mic to the input mixer
+pactl load-module module-loopback source=@DEFAULT_SOURCE@ sink=iput_mixer latency_msec=10
+# redirect input mixer to an actual source
+pactl load-module module-remap-source master=input_mixer.monitor source_name=mic
 ```
 
 The last step may not be necessary if you intend to use this for the browser, but other applications may not pick up the input mixer monitor as an input.
@@ -39,12 +43,15 @@ The last step may not be necessary if you intend to use this for the browser, bu
 In comparison, redirecting a sink to another sink is much easier.
 
 ```bash
-pactl load-module module-loopback source=cls.monitor sink=@DEFAULT_SINK@ # redirect cls to the default speaker
+# redirect cls to the default speaker
+pactl load-module module-loopback source=cls.monitor sink=@DEFAULT_SINK@
 ```
 Or, if you need it in a separated sink (for streaming and recording purposes like me):
 ```bash
-pactl load-module module-remap-sink master=@DEFAULT_SINK@ sink_name=out_sfx # create a sink that also plays into the speaker
-pactl load-module module-loopback source=cls.monitor sink=out_sfx # redirect cls to that sink
+# create a sink that also plays into the speaker
+pactl load-module module-remap-sink master=@DEFAULT_SINK@ sink_name=out_sfx
+# redirect cls to that sink
+pactl load-module module-loopback source=cls.monitor sink=out_sfx
 ```
 
 ### TUI
