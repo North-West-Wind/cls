@@ -59,10 +59,10 @@ On the other hand, TUI should be rather intuitive. Press `?` to bring up the hel
 ![Screenshot of the TUI](screenshot.png)
 
 ### Hidden
+You can also run `cls` without the TUI, so it will only handle global hotkeys.  
 ```bash
 cls --hidden
 ```
-You can also run `cls` without the TUI, so it will only handle global hotkeys.  
 There is currently no indicator to tell you if it is running, so you will have to kill it using another command.
 ```bash
 pkill cls
