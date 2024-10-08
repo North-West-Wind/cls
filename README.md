@@ -2,7 +2,7 @@
 It's just a file manager and command runner.
 
 ### Fun fact
-"cls" is also a abbreviation of a Cantonese swear, 㾒撚線 (meaning "f*cking crazy"). It was the mental state of a Javascript dev trying to make a soundboard in Rust without prior Rust programming experience.
+"cls" is also a abbreviation of a Cantonese swear, 痴撚線 (meaning "f*cking crazy"). It was the mental state of a Javascript dev trying to make a soundboard in Rust without prior Rust programming experience.
 
 ## Features
 - Global Hotkey (also works on Wayland)
