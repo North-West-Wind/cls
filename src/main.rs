@@ -70,7 +70,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     listen_thread.join().unwrap()?;
 
     unload_null_sink()?;
-    config::save()?;
+    if !hidden {
+        config::save()?;
+    }
     Ok(())
 }
 
