@@ -18,7 +18,7 @@ This only works on Linux with a PulseAudio provider. If you want a soundboard fo
 - `pulseaudio` / `pipewire-pulse` / anything to provides `pactl` and `pacat`
 
 ### Install
-If you are using an Arch Linux-based distro, it's already available on the AUR as [`cls-soundboard`](https://aur.archlinux.org/packages/cls-soundboard) (the `cls` package is already taken by a random script).  
+If you are using an Arch Linux-based distro, it's already available on the AUR as [`cls-rs`](https://aur.archlinux.org/packages/cls-rs).  
 For other distros, the binary file is provided in release, or you can build it yourself.
 
 ### Building
