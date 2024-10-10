@@ -1,6 +1,7 @@
 use std::{collections::HashMap, io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}};
 use component::block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, tabs::TabsBlock, volume::VolumeBlock, BlockComponent};
 use constant::{MIN_HEIGHT, MIN_WIDTH};
+use external::dbus::start_zbus;
 use getopts::Options;
 use signal_hook::iterator::Signals;
 use util::pulseaudio::{load_null_sink, load_sink_controller, set_volume_percentage, unload_null_sink};
@@ -16,13 +17,14 @@ use crossterm::{
 };
 use state::{get_mut_app, Scanning, SharedCondvar};
 use util::threads::spawn_scan_thread;
-mod renderer;
-mod listener;
-mod state;
+mod component;
 mod config;
 mod constant;
+mod external;
+mod listener;
+mod renderer;
+mod state;
 mod util;
-mod component;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
@@ -31,6 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut opts = Options::new();
     opts.optflag("h", "help", "print this help menu");
     opts.optflag("", "hidden", "run the soundboard in the background");
+    opts.optflag("", "dbus", "allow control over dbus");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m },
         Err(f) => { panic!("{}", f.to_string()) }
@@ -60,6 +63,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     app.running = true;
 
+    if matches.opt_present("dbus") {
+        start_zbus();
+    }
     spawn_signal_thread()?;
     spawn_scan_thread(Scanning::All);
     let listen_thread = spawn_listening_thread(hidden);
