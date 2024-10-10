@@ -34,6 +34,7 @@ impl PopupRender for HelpPopup {
 			Line::from("enter - Select block"),
 			Line::from("c - Set global stop hotkey"),
 			Line::from("v - Remove global stop hotkey"),
+			Line::from("s - Save configuration"),
 	
 			Line::from(""),
 			Line::from("Volume Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
