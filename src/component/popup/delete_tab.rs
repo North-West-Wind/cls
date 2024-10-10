@@ -54,7 +54,7 @@ fn delete_tab() {
 	let tab_selected = app.tab_selected;
 	app.files.as_mut().unwrap().remove(&app.config.tabs[tab_selected]);
 	app.config.tabs.remove(tab_selected);
-	if app.tab_selected >= app.config.tabs.len() {
+	if app.tab_selected >= app.config.tabs.len() && app.config.tabs.len() != 0 {
 		app.tab_selected = app.config.tabs.len() - 1;
 	}
 }
