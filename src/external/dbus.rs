@@ -4,14 +4,23 @@ use event_listener::{Event, Listener};
 use normpath::PathExt;
 use zbus::{blocking::connection, interface};
 
-use crate::{state::{get_app, get_mut_app, Scanning}, util::threads::spawn_scan_thread};
+use crate::{config, state::{get_app, get_mut_app, Scanning}, util::{notify_redraw, threads::spawn_scan_thread}};
 
 struct DBusHandler {
 	done: Event
 }
 
-#[interface(name = "in.northwestw.cls.interface")]
+#[interface(name = "in.northwestw.cls")]
 impl DBusHandler {
+	fn reload_config(&self) -> bool {
+		let result = config::load();
+		if result.is_err() {
+			return false;
+		}
+		notify_redraw();
+		true
+	}
+
 	fn add_tab(&self, path: &str) -> bool {
 		let app = get_mut_app();
 		let norm = Path::new(path).normalize();
