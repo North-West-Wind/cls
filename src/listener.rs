@@ -5,10 +5,10 @@ use nix::{sys::signal::{self, Signal}, unistd::Pid};
 
 use crate::{component::{block::BlockHandleKey, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{self, get_mut_app, SelectionLayer}, util::{notify_redraw, pulseaudio::play_file}};
 
-pub fn listen_events(no_listen: bool) -> io::Result<()> {
+pub fn listen_events() -> io::Result<()> {
 	let app = state::get_app();
 	while app.running {
-		if !no_listen {
+		if !app.hidden {
 			// `poll()` waits for an `Event` for a given time period
 			if poll(Duration::from_millis(500))? {
 				// It's guaranteed that the `read()` won't block when the `poll()`
@@ -44,7 +44,7 @@ pub fn listen_global_input() {
 					play_file(path);
 				}
 			}
-			if app.stopkey.is_some() {
+			if app.stopkey.is_some() && !app.edit {
 				if app.stopkey.as_ref().unwrap().iter().all(|key| { key.is_pressed() }) {
 					let playing = app.playing.as_mut().unwrap();
 					for (_, id) in playing.values() {

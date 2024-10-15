@@ -1,4 +1,4 @@
-use std::{process::{Command, Stdio}, thread};
+use std::{process::{Command, Stdio}, thread, time::Duration};
 
 use libpulse_binding::volume::Volume;
 use pulsectl::controllers::{DeviceControl, SinkController};
@@ -65,6 +65,15 @@ pub fn play_file(path: &str) {
 	thread::spawn(move || {
 		let uuid = Uuid::new_v4();
 		let app = get_mut_app();
+
+		if app.edit {
+			app.playing.as_mut().unwrap().insert(uuid, ("Edit-only mode!".to_string(), 0));
+			notify_redraw();
+			thread::sleep(Duration::from_secs(1));
+			app.playing.as_mut().unwrap().remove(&uuid);
+			notify_redraw();
+			return;
+		}
 
 		let info = ffprobe_info(string.as_str());
 		if info.is_some() {

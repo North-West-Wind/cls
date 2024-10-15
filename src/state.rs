@@ -48,6 +48,9 @@ pub struct App {
 	pub running: bool,
 	pub error: String,
 	pub pair: Option<CondvarPair>,
+	pub socket_holder: bool,
+	pub hidden: bool,
+	pub edit: bool,
 	// render states: root
 	pub blocks: Vec<BlockComponent>,
 	pub block_selected: u8,
@@ -89,6 +92,9 @@ const fn create_app() -> App {
 		running: false,
 		error: String::new(),
 		pair: Option::None,
+		socket_holder: false,
+		hidden: false,
+		edit: false,
 		// render states: root
 		blocks: vec![],
 		block_selected: 0,

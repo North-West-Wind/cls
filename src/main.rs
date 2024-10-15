@@ -1,9 +1,9 @@
-use std::{collections::HashMap, io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}};
+use std::{collections::HashMap, io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}, time::Duration};
 use component::block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, tabs::TabsBlock, volume::VolumeBlock, BlockComponent};
 use constant::{MIN_HEIGHT, MIN_WIDTH};
-use external::dbus::start_zbus;
-use getopts::Options;
+use getopts::{Matches, Options};
 use signal_hook::iterator::Signals;
+use socket::{ensure_socket, listen_socket, send_exit, send_socket};
 use util::pulseaudio::{load_null_sink, load_sink_controller, set_volume_percentage, unload_null_sink};
 use listener::{listen_events, listen_global_input};
 use ratatui::{
@@ -20,9 +20,9 @@ use util::threads::spawn_scan_thread;
 mod component;
 mod config;
 mod constant;
-mod external;
 mod listener;
 mod renderer;
+mod socket;
 mod state;
 mod util;
 
@@ -31,9 +31,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let program = args[0].clone();
 
     let mut opts = Options::new();
+    // flags for this instance
     opts.optflag("h", "help", "print this help menu");
-    opts.optflag("", "hidden", "run the soundboard in the background");
-    opts.optflag("", "dbus", "allow control over dbus");
+    opts.optflag("e", "edit", "run the soundboard in edit mode, meaning you can only modify config and not play anything");
+    opts.optflag("", "hidden", "run the soundboard in the background, basically read-only");
+    // flags for contorlling another instance
+    opts.optflag("", "exit", "exit another instance");
+    opts.optflag("", "reload-config", "reload config for another instance");
+    opts.optopt("", "add-tab", "add a directory tab", "DIR");
+    opts.optflag("", "delete-current-tab", "delete the selected tab");
+    opts.optflag("", "reload-current-tab", "reload the selected tab");
+
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m },
         Err(f) => { panic!("{}", f.to_string()) }
@@ -42,11 +50,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         print_usage(&program, opts);
         return Ok(());
     }
-    let hidden = matches.opt_present("hidden");
-
+    if opts_for_other_instance(matches.clone()) {
+        send_socket(matches)?;
+        return Ok(());
+    }
     let app = state::get_mut_app();
+    app.hidden = matches.opt_present("hidden");
+    app.edit = matches.opt_present("edit");
+
+    if app.hidden && app.edit {
+        println!("`hidden` is read-only, but `edit` is write-only.");
+        println!("You probably don't want this");
+        return Ok(());
+    }
+
     app.pair = Option::Some(Arc::new((Mutex::new(SharedCondvar::default()), Condvar::new())));
 
+    // variables setup
     app.blocks = vec![
 		BlockComponent::Volume(VolumeBlock::default()),
 		BlockComponent::Tabs(TabsBlock::default()),
@@ -55,28 +75,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         BlockComponent::Playing(PlayingBlock::default()),
     ];
     app.playing = Option::Some(HashMap::new());
+    if !app.edit {
+        ensure_socket();
+        if !app.socket_holder {
+            println!("Found existing socket! That probably means another instance is running. Forcing edit mode...");
+            app.edit = true;
+            thread::sleep(Duration::from_secs(3));
+        }
+    }
 
+    // pulseaudio setup
     let _ = config::load();
     app.sink_controller = Option::Some(load_sink_controller()?);
-    app.module_num = load_null_sink()?;
+    if !app.edit {
+        app.module_num = load_null_sink()?;
+    }
     set_volume_percentage(app.config.volume);
 
     app.running = true;
 
-    if matches.opt_present("dbus") {
-        start_zbus();
-    }
     spawn_signal_thread()?;
     spawn_scan_thread(Scanning::All);
-    let listen_thread = spawn_listening_thread(hidden);
-    if !hidden {
+    let listen_thread = spawn_listening_thread();
+    let mut socket_thread = Option::None;
+    if app.socket_holder {
+        socket_thread = Option::Some(spawn_socket_thread());
+    }
+    if !app.hidden {
         let draw_thread = spawn_drawing_thread();
         draw_thread.join().unwrap()?;
     }
     listen_thread.join().unwrap()?;
+    if socket_thread.is_some() {
+        send_exit()?;
+        socket_thread.unwrap().join().unwrap()?;
+    }
 
     unload_null_sink()?;
-    if !hidden {
+    if !app.hidden {
         config::save()?;
     }
     Ok(())
@@ -130,10 +166,10 @@ fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
     });
 }
 
-fn spawn_listening_thread(no_listen: bool) -> JoinHandle<Result<(), io::Error>> {
+fn spawn_listening_thread() -> JoinHandle<Result<(), io::Error>> {
     return thread::spawn(move || -> Result<(), io::Error> {
         listen_global_input();
-        listen_events(no_listen)?;
+        listen_events()?;
         Ok(())
     });
 }
@@ -155,7 +191,23 @@ fn spawn_signal_thread() -> Result<JoinHandle<()>, Box<dyn std::error::Error>> {
     }));
 }
 
+fn spawn_socket_thread() -> JoinHandle<Result<(), io::Error>> {
+    return thread::spawn(move || -> Result<(), io::Error> {
+        listen_socket()?;
+        Ok(())
+    });
+}
+
 fn print_usage(program: &str, opts: Options) {
     let brief = format!("Usage: {} [options]", program);
     print!("{}", opts.usage(&brief));
+}
+
+fn opts_for_other_instance(matches: Matches) -> bool {
+    matches.opts_present(&[
+        "reload-config",
+        "add-tab",
+        "delete-current-tab",
+        "reload-current-tab",
+    ].map(|str| { str.to_string() }))
 }
