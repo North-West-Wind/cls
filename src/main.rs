@@ -1,7 +1,6 @@
 use std::{collections::HashMap, io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}, time::Duration};
 use component::block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, tabs::TabsBlock, volume::VolumeBlock, BlockComponent};
 use constant::{MIN_HEIGHT, MIN_WIDTH};
-use getopts::{Matches, Options};
 use signal_hook::iterator::Signals;
 use socket::{ensure_socket, listen_socket, send_exit, send_socket};
 use util::pulseaudio::{load_null_sink, load_sink_controller, set_volume_percentage, unload_null_sink};
@@ -17,6 +16,7 @@ use crossterm::{
 };
 use state::{get_mut_app, Scanning, SharedCondvar};
 use util::threads::spawn_scan_thread;
+use clap::{command, Arg, ArgAction, Command};
 mod component;
 mod config;
 mod constant;
@@ -27,36 +27,32 @@ mod state;
 mod util;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<String> = std::env::args().collect();
-    let program = args[0].clone();
+    let mut command = command!()
+        .about("Command-Line Soundboard")
+        .disable_help_flag(true)
+        .disable_help_subcommand(true)
+        .arg(Arg::new("help").short('h').long("help").help("print this help menu").action(ArgAction::SetTrue))
+        .arg(Arg::new("edit").short('e').long("edit").help("run the soundboard in edit mode, meaning you can only modify config and not play anything").action(ArgAction::SetTrue))
+        .arg(Arg::new("hidden").long("hidden").help("run the soundboard in the background, basically read-only").action(ArgAction::SetTrue))
+        .subcommand(Command::new("exit").about("exit another instance"))
+        .subcommand(Command::new("reload-config").about("reload config for another instance"))
+        .subcommand(Command::new("add-tab").about("add a directory tab").arg(Arg::new("dir")))
+        .subcommand(Command::new("delete-current-tab").about("delete the selected tab"))
+        .subcommand(Command::new("reload-current-tab").about("reload the selected tab"));
 
-    let mut opts = Options::new();
-    // flags for this instance
-    opts.optflag("h", "help", "print this help menu");
-    opts.optflag("e", "edit", "run the soundboard in edit mode, meaning you can only modify config and not play anything");
-    opts.optflag("", "hidden", "run the soundboard in the background, basically read-only");
-    // flags for contorlling another instance
-    opts.optflag("", "exit", "exit another instance");
-    opts.optflag("", "reload-config", "reload config for another instance");
-    opts.optopt("", "add-tab", "add a directory tab", "DIR");
-    opts.optflag("", "delete-current-tab", "delete the selected tab");
-    opts.optflag("", "reload-current-tab", "reload the selected tab");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => { m },
-        Err(f) => { panic!("{}", f.to_string()) }
-    };
-    if matches.opt_present("h") {
-        print_usage(&program, opts);
+    let matches = command.clone().get_matches();
+    if matches.get_flag("help") {
+        command.print_help()?;
         return Ok(());
     }
-    if opts_for_other_instance(matches.clone()) {
-        send_socket(matches)?;
+    let subcommand = matches.subcommand();
+    if subcommand.is_some() {
+        send_socket(subcommand.unwrap())?;
         return Ok(());
     }
     let app = state::get_mut_app();
-    app.hidden = matches.opt_present("hidden");
-    app.edit = matches.opt_present("edit");
+    app.hidden = matches.get_flag("hidden");
+    app.edit = matches.get_flag("edit");
 
     if app.hidden && app.edit {
         println!("`hidden` is read-only, but `edit` is write-only.");
@@ -196,18 +192,4 @@ fn spawn_socket_thread() -> JoinHandle<Result<(), io::Error>> {
         listen_socket()?;
         Ok(())
     });
-}
-
-fn print_usage(program: &str, opts: Options) {
-    let brief = format!("Usage: {} [options]", program);
-    print!("{}", opts.usage(&brief));
-}
-
-fn opts_for_other_instance(matches: Matches) -> bool {
-    matches.opts_present(&[
-        "reload-config",
-        "add-tab",
-        "delete-current-tab",
-        "reload-current-tab",
-    ].map(|str| { str.to_string() }))
 }
