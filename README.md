@@ -72,15 +72,49 @@ pactl load-module module-loopback source=cls.monitor sink=out_sfx
 On the other hand, TUI should be rather intuitive. Press `?` to bring up the help menu for instructions.  
 ![Screenshot of the TUI](screenshot.png)
 
-### Hidden
+### Hidden & Edit Mode
 You can also run `cls` without the TUI, so it will only handle global hotkeys.  
+It is basically a read-only mode.  
 ```bash
 cls --hidden
 ```
 There is currently no indicator to tell you if it is running, so you will have to kill it using another command.
 ```bash
-pkill cls
+cls exit
 ```
+
+You can also enter "write-only" mode, where you cannot play any files, but edit configurations.  
+```bash
+cls --edit # or `cls -e`
+```
+`cls` is now single-instance, meaning only one `cls` process can play sound files.
+If there's already another instance running, `cls` will automatically enter edit mode.
+
+To simplify, first time launching `cls` will be normal, but second time will be forced `--edit`.
+
+If you want to run multiple instance for some reason (e.g. multi-user system), simply set the `TMPDIR` environment variable to something different when launching. See [Socket Control](#Socket_Control) to see how `TMPDIR` is used.
+
+### Socket Control
+Starting from v1.1.0, `cls` can communicate using a Unix socket located at `$TMPDIR/cls/cls.sock`.
+This allows `cls --hidden` to be controlled without the use of global inputs, and causes `cls` to be single-instance.
+
+The subcommands of `cls` can be used to communicate with this primary instance.  
+Here's the current list of subcommands implemented:
+- `cls exit`: Terminate the instance
+- `cls reload-config`: Reloads the configuration file into memory
+- `cls add-tab <dir>`: Adds a new directory tab
+- `cls delete-tab [--index <index>] [--path <path>] [--name <name>]`: Deletes a directory tab.
+	- If no options are specified, the selected tab is deleted.
+	- `--index` will delete the tab at that index (starting from 0).
+	- `--path` will delete the tab that matches the full path.
+	- `--name` will delete the tab that matches the base name (i.e. the name you see in the `Tabs` block).
+- `cls reload-tab [--index <index>] [--path <path>] [--name <name>]`: Reloads a directory tab. Options serve the same functions as in `delete-tab`.
+- `cls play <path>`: Plays a file.
+- `cls stop`: Stops all the audio files that are playing.
+- `cls set-volume <volume> [--increment] [--path <path>]`: Set the volume for the `cls` sink or a specific file.
+	- If `--increment` is **NOT** set, the volume is set to `<volume>` provided.
+	- If `--increment` is **SET**, the volume is incremented by `<volume>` (can be negative).
+	- If `--path` is provided, volume is set for the file instead of the sink.
 
 ## Motivation
 I was using another soundboard - [Soundux](https://github.com/Soundux/Soundux). It was a solid program, until everyone wants to switch to Wayland. Due to Soundux being Electron-based, global hotkeys doesn't work on Wayland.
