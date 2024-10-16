@@ -1,9 +1,8 @@
 use std::{io, time::Duration};
 use crossterm::event::{poll, read, Event, KeyEvent};
 use mki::Action;
-use nix::{sys::signal::{self, Signal}, unistd::Pid};
 
-use crate::{component::{block::BlockHandleKey, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{self, get_mut_app, SelectionLayer}, util::{notify_redraw, pulseaudio::play_file}};
+use crate::{component::{block::BlockHandleKey, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{self, get_mut_app, SelectionLayer}, util::{notify_redraw, pulseaudio::{play_file, stop_all}}};
 
 pub fn listen_events() -> io::Result<()> {
 	let app = state::get_app();
@@ -46,11 +45,7 @@ pub fn listen_global_input() {
 			}
 			if app.stopkey.is_some() && !app.edit {
 				if app.stopkey.as_ref().unwrap().iter().all(|key| { key.is_pressed() }) {
-					let playing = app.playing.as_mut().unwrap();
-					for (_, id) in playing.values() {
-						signal::kill(Pid::from_raw(*id as i32), Signal::SIGTERM).unwrap();
-					}
-					playing.clear();
+					stop_all();
 				}
 			}
 		}
@@ -61,9 +56,11 @@ fn on_resize(width: u16, height: u16) {
 	let app = state::get_mut_app();
 	if width < MIN_WIDTH || height < MIN_HEIGHT {
 		app.error = String::from(format!("Terminal size requires at least {MIN_WIDTH}x{MIN_HEIGHT}.\nCurrent size: {width}x{height}"));
+		app.error_important = true;
 	} else {
 		if !app.error.is_empty() {
 			app.error = String::new();
+			app.error_important = false;
 		}
 	}
 	notify_redraw();
@@ -71,8 +68,13 @@ fn on_resize(width: u16, height: u16) {
 
 fn on_key(event: KeyEvent) {
 	let app = state::get_mut_app();
-	let need_redraw: bool;
-	if app.popup.is_some() {
+	let mut need_redraw = false;
+	if !app.error.is_empty() {
+		if !app.error_important {
+			app.error = String::new();
+			need_redraw = true;
+		}
+	} else if app.popup.is_some() {
 		need_redraw = app.popup.as_mut().unwrap().handle_key(event);
 	} else {
 		need_redraw = match app.selection_layer {

@@ -31,14 +31,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .about("Command-Line Soundboard")
         .disable_help_flag(true)
         .disable_help_subcommand(true)
+        .args_conflicts_with_subcommands(true)
         .arg(Arg::new("help").short('h').long("help").help("print this help menu").action(ArgAction::SetTrue))
         .arg(Arg::new("edit").short('e').long("edit").help("run the soundboard in edit mode, meaning you can only modify config and not play anything").action(ArgAction::SetTrue))
         .arg(Arg::new("hidden").long("hidden").help("run the soundboard in the background, basically read-only").action(ArgAction::SetTrue))
         .subcommand(Command::new("exit").about("exit another instance"))
         .subcommand(Command::new("reload-config").about("reload config for another instance"))
-        .subcommand(Command::new("add-tab").about("add a directory tab").arg(Arg::new("dir")))
-        .subcommand(Command::new("delete-current-tab").about("delete the selected tab"))
-        .subcommand(Command::new("reload-current-tab").about("reload the selected tab"));
+        .subcommand(Command::new("add-tab").about("add a directory tab").arg(Arg::new("dir").required(true)))
+        .subcommand(Command::new("delete-tab").about("delete a tab, defaults to the selected one")
+            .args([
+                Arg::new("index").long("index").help("delete a specific index (starting at 0)"),
+                Arg::new("path").long("path").help("delete the tab with this path"),
+                Arg::new("name").long("name").help("delete the tab with this basename")
+            ]))
+        .subcommand(Command::new("reload-tab").about("reload a tab, defaults to the selected one").args([
+            Arg::new("index").long("index").help("reload a specific index (starting at 0)"),
+            Arg::new("path").long("path").help("reload the tab with this path"),
+            Arg::new("name").long("name").help("reload the tab with this basename")
+        ]))
+        .subcommand(Command::new("play").about("play a file").arg(Arg::new("path").required(true)))
+        .subcommand(Command::new("stop").about("stop all playing files"))
+        .subcommand(Command::new("set-volume").about("set volume of the sink or a file").args([
+            Arg::new("volume").help("new volume or volume increment (-200 - +200)"),
+            Arg::new("increment").long("increment").help("increment volume instead of setting it").action(ArgAction::SetTrue),
+            Arg::new("path").long("path").help("a file's volume to set")
+        ]));
 
     let matches = command.clone().get_matches();
     if matches.get_flag("help") {
@@ -129,6 +146,7 @@ fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
             let height = size.height;
             let app = state::get_mut_app();
             app.error = String::from(format!("Terminal size requires at least {MIN_WIDTH}x{MIN_HEIGHT}.\nCurrent size: {width}x{height}"));
+            app.error_important = true;
         }
 
         let app = state::get_app();

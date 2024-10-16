@@ -47,6 +47,7 @@ pub struct App {
 	// states
 	pub running: bool,
 	pub error: String,
+	pub error_important: bool,
 	pub pair: Option<CondvarPair>,
 	pub socket_holder: bool,
 	pub hidden: bool,
@@ -91,6 +92,7 @@ const fn create_app() -> App {
 		// states
 		running: false,
 		error: String::new(),
+		error_important: false,
 		pair: Option::None,
 		socket_holder: false,
 		hidden: false,

@@ -1,6 +1,7 @@
 use std::{process::{Command, Stdio}, thread, time::Duration};
 
 use libpulse_binding::volume::Volume;
+use nix::{sys::signal::{self, Signal}, unistd::Pid};
 use pulsectl::controllers::{DeviceControl, SinkController};
 use uuid::Uuid;
 
@@ -116,4 +117,12 @@ pub fn play_file(path: &str) {
 		app.playing.as_mut().unwrap().remove(&uuid);
 		notify_redraw();
 	});
+}
+
+pub fn stop_all() {
+	let playing = get_mut_app().playing.as_mut().unwrap();
+	for (_, id) in playing.values() {
+		signal::kill(Pid::from_raw(*id as i32), Signal::SIGTERM).unwrap();
+	}
+	playing.clear();
 }
