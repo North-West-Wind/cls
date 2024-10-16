@@ -40,8 +40,11 @@ pub fn listen_socket() -> std::io::Result<()> {
 }
 
 pub fn send_exit() -> std::io::Result<()> {
+	if !socket_path().exists() {
+		return Ok(());
+	}
 	let mut stream = UnixStream::connect(socket_path())?;
-	stream.write_all(b"exit")?;
+	stream.write(&[SocketCode::Exit.to_u8()])?;
 	Ok(())
 }
 
@@ -60,14 +63,15 @@ pub fn send_socket(subcommand: (&str, &ArgMatches)) -> std::io::Result<()> {
 
 fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 	use SocketCode::*;
-	let code = 0;
-	stream.read_exact(&mut [code])?;
-	let code = SocketCode::from_u8(code);
+	let mut code = [0];
+	stream.read_exact(&mut code)?;
+	let code = SocketCode::from_u8(code[0]);
 	if code.is_none() {
 		return Ok(false);
 	}
 	match code.unwrap() {
 		Exit => {
+			get_mut_app().running = false;
 			return Ok(true);
 		},
 		ReloadConfig => {
