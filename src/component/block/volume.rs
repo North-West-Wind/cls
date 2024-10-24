@@ -57,7 +57,7 @@ impl BlockRenderArea for VolumeBlock {
 }
 
 impl BlockHandleKey for VolumeBlock {
-	fn handle_key(&self, event: KeyEvent) -> bool {
+	fn handle_key(&mut self, event: KeyEvent) -> bool {
 		match event.code {
 			KeyCode::Right => change_volume(if event.modifiers.contains(KeyModifiers::CONTROL) { 5 } else { 1 }),
 			KeyCode::Left => change_volume(if event.modifiers.contains(KeyModifiers::CONTROL) { -5 } else { -1 }),

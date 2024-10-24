@@ -10,6 +10,8 @@ pub fn handle_key(event: KeyEvent) -> bool {
 	match event.code {
 		KeyCode::Up => key_navigate(0, -1),
 		KeyCode::Down => key_navigate(0, 1),
+		KeyCode::Left => key_navigate(-1, 0),
+		KeyCode::Right => key_navigate(1, 0),
 		KeyCode::Enter => navigate_layer(false),
 		KeyCode::Char('q')|KeyCode::Esc => navigate_layer(true),
 		KeyCode::Char('?') => {
@@ -52,9 +54,13 @@ fn navigate_block(dx: i16, dy: i16) -> bool {
 	if dy > 0 {
 		// moving down
 		new_block = min(2, old_block as i16 + dy);
-	} else {
+	} else if dy < 0 {
 		// moving up
-		new_block = max(0, old_block as i16 + dy);
+		new_block = max(0, old_block as i16 + dy * (if old_block == 3 { 2 } else { 1 }));
+	} else if dx > 0 && old_block == 2 || dx < 0 && old_block == 3 {
+		new_block = old_block as i16 + dx;
+	} else {
+		new_block = old_block as i16;
 	}
 
 	if new_block as u8 != old_block {

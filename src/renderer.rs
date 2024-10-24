@@ -22,10 +22,14 @@ pub fn ui(f: &mut Frame) {
 			].as_ref()
 		)
 		.split(f.area());
-	for ii in 0..4 {
+	for ii in 0..2 {
 		app.blocks[ii].render_area(f, chunks[ii]);
 	}
-	app.blocks[4].render(f); // playing block render
+	let mid_chunks = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Fill(1), Constraint::Length(20)].as_ref()).split(chunks[2]);
+	app.blocks[2].render_area(f, mid_chunks[0]);
+	app.blocks[3].render_area(f, mid_chunks[1]);
+	app.blocks[4].render_area(f, chunks[3]);
+	app.blocks[5].render(f); // playing block render
 	if app.popup.is_some() {
 		app.popup.as_ref().unwrap().render(f);
 	}

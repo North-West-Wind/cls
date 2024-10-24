@@ -79,7 +79,7 @@ fn on_key(event: KeyEvent) {
 	} else {
 		need_redraw = match app.selection_layer {
 			SelectionLayer::Block => layer::handle_key(event),
-			SelectionLayer::Content => (&app.blocks[app.block_selected as usize]).handle_key(event)
+			SelectionLayer::Content => app.blocks[app.block_selected as usize].handle_key(event)
 		}
 	}
 	if need_redraw {

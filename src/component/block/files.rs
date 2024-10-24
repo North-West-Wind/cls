@@ -100,7 +100,7 @@ impl BlockRenderArea for FilesBlock {
 }
 
 impl BlockHandleKey for FilesBlock {
-	fn handle_key(&self, event: crossterm::event::KeyEvent) -> bool {
+	fn handle_key(&mut self, event: crossterm::event::KeyEvent) -> bool {
 		let app = get_app();
 		if app.scanning == Scanning::All || app.scanning == Scanning::One(app.tab_selected) {
 			return false;

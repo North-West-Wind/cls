@@ -3,6 +3,7 @@ use files::FilesBlock;
 use help::HelpBlock;
 use playing::PlayingBlock;
 use ratatui::{layout::Rect, style::{Color, Style}, widgets::BorderType, Frame};
+use settings::SettingsBlock;
 use tabs::TabsBlock;
 use volume::VolumeBlock;
 
@@ -13,6 +14,7 @@ use super::{layer, popup::{help::HelpPopup, set_popup, PopupComponent}};
 pub mod files;
 pub mod help;
 pub mod playing;
+pub mod settings;
 pub mod tabs;
 pub mod volume;
 
@@ -20,6 +22,7 @@ pub enum BlockComponent {
 	Volume(VolumeBlock),
 	Tabs(TabsBlock),
 	Files(FilesBlock),
+	Settings(SettingsBlock),
 	Help(HelpBlock),
 	Playing(PlayingBlock),
 }
@@ -33,7 +36,7 @@ pub trait BlockRenderArea {
 }
 
 pub trait BlockHandleKey {
-	fn handle_key(&self, event: KeyEvent) -> bool;
+	fn handle_key(&mut self, event: KeyEvent) -> bool;
 }
 
 impl BlockRender for BlockComponent {
@@ -51,6 +54,7 @@ impl BlockRenderArea for BlockComponent {
 			BlockComponent::Volume(block) => block.render_area(f, area),
 			BlockComponent::Tabs(block) => block.render_area(f, area),
 			BlockComponent::Files(block) => block.render_area(f, area),
+			BlockComponent::Settings(block) => block.render_area(f, area),
 			BlockComponent::Help(block) => block.render_area(f, area),
 			_ => (),
 		}
@@ -58,7 +62,7 @@ impl BlockRenderArea for BlockComponent {
 }
 
 impl BlockHandleKey for BlockComponent {
-	fn handle_key(&self, event: KeyEvent) -> bool {
+	fn handle_key(&mut self, event: KeyEvent) -> bool {
 		match event.code {
 			KeyCode::Char('q')|KeyCode::Esc => layer::navigate_layer(true),
 			KeyCode::Char('?') => {
@@ -69,6 +73,7 @@ impl BlockHandleKey for BlockComponent {
 				BlockComponent::Volume(block) => block.handle_key(event),
 				BlockComponent::Tabs(block) => block.handle_key(event),
 				BlockComponent::Files(block) => block.handle_key(event),
+				BlockComponent::Settings(block) => block.handle_key(event),
 				_ => false,
 			}
 		}

@@ -106,7 +106,7 @@ impl BlockRenderArea for TabsBlock {
 }
 
 impl BlockHandleKey for TabsBlock {
-	fn handle_key(&self, event: KeyEvent) -> bool {
+	fn handle_key(&mut self, event: KeyEvent) -> bool {
 		match event.code {
 			KeyCode::Char('a') => handle_add(),
 			KeyCode::Char('d') => handle_remove(),

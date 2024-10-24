@@ -1,5 +1,5 @@
 use std::{collections::HashMap, io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}, time::Duration};
-use component::block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, tabs::TabsBlock, volume::VolumeBlock, BlockComponent};
+use component::block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, volume::VolumeBlock, BlockComponent};
 use constant::{MIN_HEIGHT, MIN_WIDTH};
 use signal_hook::iterator::Signals;
 use socket::{ensure_socket, listen_socket, send_exit, send_socket};
@@ -84,6 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		BlockComponent::Volume(VolumeBlock::default()),
 		BlockComponent::Tabs(TabsBlock::default()),
 		BlockComponent::Files(FilesBlock::default()),
+        BlockComponent::Settings(SettingsBlock::default()),
 		BlockComponent::Help(HelpBlock::default()),
         BlockComponent::Playing(PlayingBlock::default()),
     ];
