@@ -1,8 +1,8 @@
-use std::{cmp::{max, min}, path::Path};
+use std::path::Path;
 
 use crate::{component::popup::{delete_tab::DeleteTabPopup, input::{AwaitInput, InputPopup}, set_popup, PopupComponent}, state::get_mut_app};
 
-use super::{border_style, border_type, BlockHandleKey, BlockRenderArea};
+use super::{border_style, border_type, loop_index, BlockHandleKey, BlockRenderArea};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
@@ -131,11 +131,10 @@ impl TabsBlock {
 	fn handle_move(&mut self, right: bool, modify: bool) -> bool {
 		let delta = if right { 1 } else { -1 };
 		let app = get_mut_app();
-		let selected = self.selected as i32;
-		let new_selected = min(app.config.tabs.len() as i32 - 1, max(0, selected + delta));
-		if selected != new_selected {
+		let new_selected = loop_index(self.selected, delta, app.config.tabs.len());
+		if self.selected != new_selected {
 			if modify {
-				app.config.tabs.swap(selected as usize, new_selected as usize);
+				app.config.tabs.swap(self.selected, new_selected as usize);
 			}
 			self.selected = new_selected as usize;
 			app.set_file_selected(0);

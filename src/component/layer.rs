@@ -54,7 +54,12 @@ fn navigate_block(dx: i16, dy: i16) -> bool {
 	let new_block: i16;
 	if dy > 0 {
 		// moving down
-		new_block = min(2, old_block as i16 + dy);
+		if old_block == 3 {
+			// don't move for settings
+			new_block = old_block as i16;
+		} else {
+			new_block = min(2, old_block as i16 + dy);
+		}
 	} else if dy < 0 {
 		// moving up
 		new_block = max(0, old_block as i16 + dy * (if old_block == 3 { 2 } else { 1 }));

@@ -2,7 +2,7 @@ use std::{cmp::{max, min}, collections::HashSet, i32, path::Path};
 
 use crate::{component::popup::{key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, state::{get_app, get_mut_app, Scanning}, util::{self, selected_file_path, threads::spawn_scan_thread}};
 
-use super::{border_style, border_type, BlockHandleKey, BlockRenderArea};
+use super::{border_style, border_type, loop_index, BlockHandleKey, BlockRenderArea};
 
 use crossterm::event::KeyCode;
 use rand::Rng;
@@ -157,7 +157,13 @@ impl FilesBlock {
 		if files.is_none() {
 			return false;
 		}
-		let new_selected = min(files.unwrap().len() as i32 - 1, max(0, self.selected as i32 + dy)) as usize;
+		let files = files.unwrap().len();
+		let new_selected;
+		if dy.abs() > 1 {
+			new_selected = min(files as i32 - 1, max(0, self.selected as i32 + dy)) as usize;
+		} else {
+			new_selected = loop_index(self.selected, dy, files);
+		}
 		if new_selected != self.selected {
 			self.selected = new_selected;
 			return true;

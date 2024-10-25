@@ -5,12 +5,13 @@ use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span, 
 
 use crate::{util::pulseaudio::set_volume_percentage, state::{get_app, get_mut_app}, util::selected_file_path};
 
-use super::{border_style, border_type, BlockHandleKey, BlockRenderArea};
+use super::{border_style, border_type, loop_index, BlockHandleKey, BlockRenderArea};
 
 pub struct VolumeBlock {
 	title: String,
 	id: u8,
 	pub(super) selected: usize,
+	options: u8,
 }
 
 impl Default for VolumeBlock {
@@ -19,6 +20,7 @@ impl Default for VolumeBlock {
 			title: "Volume".to_string(),
 			id: 0,
 			selected: 0,
+			options: 2,
 		}
 	}
 }
@@ -63,23 +65,24 @@ impl BlockHandleKey for VolumeBlock {
 		match event.code {
 			KeyCode::Right => self.change_volume(if event.modifiers.contains(KeyModifiers::CONTROL) { 5 } else { 1 }),
 			KeyCode::Left => self.change_volume(if event.modifiers.contains(KeyModifiers::CONTROL) { -5 } else { -1 }),
-			KeyCode::Up => self.select_volume(0),
-			KeyCode::Down => self.select_volume(1),
+			KeyCode::Up => self.navigate_volume(-1),
+			KeyCode::Down => self.navigate_volume(1),
 			_ => false
 		}
 	}
 }
 
 impl VolumeBlock {
-	fn select_volume(&mut self, selection: usize) -> bool {
-		if self.selected != selection {
-			if selection == 1 {
+	fn navigate_volume(&mut self, dy: i32) -> bool {
+		let new_selected = loop_index(self.selected, dy, self.options as usize);
+		if new_selected != self.selected {
+			if new_selected == 1 {
 				let selected_file = selected_file_path();
 				if selected_file.is_empty() {
 					return false;
 				}
 			}
-			self.selected = selection;
+			self.selected = new_selected;
 			return true;
 		}
 		false

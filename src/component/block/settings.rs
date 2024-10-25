@@ -1,15 +1,16 @@
-use std::{cmp::{max, min}, collections::HashSet};
+use std::{cmp::max, collections::HashSet};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Padding, Paragraph}, Frame};
 use substring::Substring;
 
 use crate::{component::popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, config, state::{get_app, get_mut_app}};
 
-use super::{border_style, border_type, BlockHandleKey, BlockRenderArea};
+use super::{border_style, border_type, loop_index, BlockHandleKey, BlockRenderArea};
 
 pub struct SettingsBlock {
 	id: u8,
 	selected: u8,
+	options: u8,
 }
 
 impl Default for SettingsBlock {
@@ -17,6 +18,7 @@ impl Default for SettingsBlock {
 		Self {
 			id: 3,
 			selected: 0,
+			options: 4,
 		}
 	}
 }
@@ -88,7 +90,8 @@ impl SettingsBlock {
 	}
 
 	fn navigate_settings(&mut self, dy: i16) -> bool {
-		let new_selected = min(3, max(0, self.selected as i16 + dy)) as u8;
+		let new_selected = loop_index(self.selected as usize, dy as i32, self.options as usize) as usize;
+		let new_selected = new_selected as u8;
 		if new_selected != self.selected {
 			self.selected = new_selected;
 			return true;

@@ -136,3 +136,13 @@ impl BlockComponent {
 		}
 	}
 }
+
+pub(self) fn loop_index(index: usize, delta: i32, max: usize) -> usize {
+	let mut new_index = index as i32 + delta;
+	if new_index < 0 {
+		let factor = new_index / max as i32;
+		new_index += max as i32 * (factor + 1);
+	}
+	new_index %= max as i32;
+	new_index as usize
+}
