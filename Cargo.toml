@@ -23,3 +23,4 @@ file-format = "0.25.0"
 event-listener = "5.3.1"
 splitty = "1.0.2"
 clap = { version = "4.5.20", features = ["cargo"] }
+rand = "0.8.5"

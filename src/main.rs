@@ -106,13 +106,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     app.sink_controller = Option::Some(load_sink_controller()?);
     if !app.edit {
         app.module_nums.push(load_null_sink()?);
-        println!("Loaded null sink");
         if !app.config.loopback_1.is_empty() {
-            println!("Loading loopback 1");
             app.module_nums.push(loopback(app.config.loopback_1.clone())?);
         }
         if !app.config.loopback_2.is_empty() {
-            println!("Loading loopback 2");
             app.module_nums.push(loopback(app.config.loopback_2.clone())?);
         }
     }

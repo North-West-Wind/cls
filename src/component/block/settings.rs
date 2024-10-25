@@ -99,6 +99,7 @@ impl SettingsBlock {
 		match self.selected {
 			0 => {
 				set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::Stop)));
+				set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::Stop, HashSet::new())));
 				return true;
 			},
 			1|2 => {

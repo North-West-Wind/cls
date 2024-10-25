@@ -1,10 +1,11 @@
-use std::{cmp::{max, min}, i32, path::Path};
+use std::{cmp::{max, min}, collections::HashSet, i32, path::Path};
 
 use crate::{component::popup::{key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, state::{get_app, get_mut_app, Scanning}, util::{self, selected_file_path, threads::spawn_scan_thread}};
 
 use super::{border_style, border_type, BlockHandleKey, BlockRenderArea};
 
 use crossterm::event::KeyCode;
+use rand::Rng;
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 use substring::Substring;
 
@@ -112,7 +113,8 @@ impl BlockHandleKey for FilesBlock {
 			KeyCode::Char('r') => self.reload_tab(),
 			KeyCode::Up => self.navigate_file(-1),
 			KeyCode::Down => self.navigate_file(1),
-			KeyCode::Enter => self.play_file(),
+			KeyCode::Enter => self.play_file(false),
+			KeyCode::Char('/') => self.play_file(true),
 			KeyCode::Char('x') => set_global_key_bind(),
 			KeyCode::Char('z') => unset_global_key_bind(),
 			KeyCode::PageUp => self.navigate_file(-(self.range.1 - self.range.0 + 1)),
@@ -125,7 +127,7 @@ impl BlockHandleKey for FilesBlock {
 }
 
 impl FilesBlock {
-	fn play_file(&self) -> bool {
+	fn play_file(&self, random: bool) -> bool {
 		let app = get_app();
 		if app.files.is_none() {
 			return false;
@@ -140,10 +142,16 @@ impl FilesBlock {
 			return false;
 		}
 		let unwrapped = files.unwrap();
-		if self.selected >= unwrapped.len() {
-			return false;
+		let index;
+		if random {
+			index = rand::thread_rng().gen_range(0..unwrapped.len());
+		} else {
+			if self.selected >= unwrapped.len() {
+				return false;
+			}
+			index = self.selected;
 		}
-		util::pulseaudio::play_file(&Path::new(&tab).join(&unwrapped[self.selected].0).into_os_string().into_string().unwrap());
+		util::pulseaudio::play_file(&Path::new(&tab).join(&unwrapped[index].0).into_os_string().into_string().unwrap());
 		return true;
 	}
 
@@ -172,7 +180,20 @@ impl FilesBlock {
 }
 
 fn set_global_key_bind() -> bool {
-	set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::File)));
+	let path = selected_file_path();
+	if path.is_empty() {
+		return false;
+	}
+	let app = get_mut_app();
+	if app.config.file_key.is_none() {
+		return false;
+	}
+	let hotkey = app.hotkey.as_mut().unwrap().get(&path);
+	let recorded = match hotkey {
+		Option::Some(vec) => HashSet::from_iter(vec.iter().map(|key| { *key })),
+		Option::None => HashSet::new(),
+	};
+	set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::File, recorded)));
 	return true;
 }
 

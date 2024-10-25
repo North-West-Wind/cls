@@ -52,6 +52,7 @@ impl PopupRender for HelpPopup {
 			Line::from("Files Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
 			Line::from("r - Refresh"),
 			Line::from("enter - Play file"),
+			Line::from("w - Play random file"),
 			Line::from("x - Set global hotkey"),
 			Line::from("z - Remove global hotkey"),
 	

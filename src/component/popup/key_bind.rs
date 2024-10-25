@@ -20,11 +20,11 @@ pub struct KeyBindPopup {
 }
 
 impl KeyBindPopup {
-	pub fn new(this_is_a: KeyBindFor) -> Self {
+	pub fn new(this_is_a: KeyBindFor, recorded: HashSet<Keyboard>) -> Self {
 		Self {
 			this_is_a,
 			recording: false,
-			recorded: HashSet::new(),
+			recorded: recorded,
 		}
 	}
 }
