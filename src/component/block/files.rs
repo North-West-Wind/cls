@@ -6,7 +6,7 @@ use super::{border_style, border_type, BlockHandleKey, BlockRenderArea};
 
 use crossterm::event::KeyCode;
 use rand::Rng;
-use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
+use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph, Wrap}, Frame};
 use substring::Substring;
 
 pub struct FilesBlock {
@@ -42,18 +42,18 @@ impl BlockRenderArea for FilesBlock {
 		}
 		let paragraph: Paragraph;
 		if app.scanning == Scanning::All {
-			paragraph = Paragraph::new("Performing initial scan...");
+			paragraph = Paragraph::new("Performing initial scan...").wrap(Wrap { trim: false });
 		} else if app.config.tabs.len() == 0 {
-			paragraph = Paragraph::new("Add a tab to get started :>");
+			paragraph = Paragraph::new("Add a tab to get started :>").wrap(Wrap { trim: false });
 		} else if app.scanning == Scanning::One(app.tab_selected()) {
-			paragraph = Paragraph::new("Scanning this directory...\nComeback later :>");
+			paragraph = Paragraph::new("Scanning this directory...\nComeback later :>").wrap(Wrap { trim: false });
 		} else {
 			let tab = app.config.tabs[app.tab_selected()].clone();
 			let files = app.files.as_ref().unwrap().get(&tab);
 			if files.is_none() {
-				paragraph = Paragraph::new("Failed to read this directory :<\nDoes it exist? Is it readable?");
+				paragraph = Paragraph::new("Failed to read this directory :<\nDoes it exist? Is it readable?").wrap(Wrap { trim: false });
 			} else if files.unwrap().len() == 0 {
-				paragraph = Paragraph::new("There are no playable files in this directory :<");
+				paragraph = Paragraph::new("There are no playable files in this directory :<").wrap(Wrap { trim: false });
 			} else {
 				let mut lines = vec![];
 				for (ii, (file, duration)) in files.unwrap().iter().enumerate() {
@@ -73,18 +73,14 @@ impl BlockRenderArea for FilesBlock {
 					} else {
 						Style::default().fg(Color::Cyan)
 					};
-					if file.len() + duration.len() > area.width as usize - 6 {
-						let mut extra: i32 = 0;
-						if spans.len() > 0 {
-							extra += spans[0].width() as i32;
-						}
+					let mut extra: i32 = 0;
+					if spans.len() > 0 {
+						extra += spans[0].width() as i32 + 1;
+					}
+					if file.len() + duration.len() + extra as usize > area.width as usize - 6 {
 						spans.push(Span::from(file.substring(0, max(0, area.width as i32 - 10 - extra - duration.len() as i32) as usize)).style(style));
 						spans.push(Span::from("... ".to_owned() + duration).style(style));
 					} else {
-						let mut extra = 0;
-						if spans.len() > 0 {
-							extra += spans[0].width() as i32;
-						}
 						spans.push(Span::from(file.clone()).style(style));
 						spans.push(Span::from(vec![" "; max(0, area.width as i32 - 6 - extra - file.len() as i32 - duration.len() as i32) as usize].join("")).style(style));
 						spans.push(Span::from(duration.clone()).style(style));
