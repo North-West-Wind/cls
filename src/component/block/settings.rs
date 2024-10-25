@@ -68,7 +68,7 @@ impl SettingsBlock {
 			mid_span = Span::from("");
 			right = right.substring(0, right.len() - 3).to_string() + "...";
 		} else {
-			mid_span = Span::from(vec![" "; width - left.len() - right.len() - 2].join(""));
+			mid_span = Span::from(vec![" "; max(0, width as i32 - left.len() as i32 - right.len() as i32 - 2) as usize].join(""));
 		}
 		let left_style;
 		if lines.len() == self.selected as usize {

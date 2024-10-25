@@ -73,11 +73,11 @@ impl BlockRenderArea for FilesBlock {
 						Style::default().fg(Color::Cyan)
 					};
 					if file.len() + duration.len() > area.width as usize - 6 {
-						let mut extra = 0;
+						let mut extra: i32 = 0;
 						if spans.len() > 0 {
-							extra += spans[0].width();
+							extra += spans[0].width() as i32;
 						}
-						spans.push(Span::from(file.substring(0, area.width as usize - 10 - extra - duration.len())).style(style));
+						spans.push(Span::from(file.substring(0, max(0, area.width as i32 - 10 - extra - duration.len() as i32) as usize)).style(style));
 						spans.push(Span::from("... ".to_owned() + duration).style(style));
 					} else {
 						let mut extra = 0;
