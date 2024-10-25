@@ -4,6 +4,7 @@ use serde::{Serialize, Deserialize};
 use crate::{constant::APP_NAME, util::global_input::string_to_keyboard, state::{get_app, get_mut_app}};
 
 #[derive(Serialize, Deserialize, Clone)]
+#[serde(default)]
 pub struct SoundboardConfig {
 	pub tabs: Vec<String>,
 	pub volume: u32,
