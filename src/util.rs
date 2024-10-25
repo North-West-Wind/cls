@@ -37,9 +37,35 @@ fn add_duration(tab: String) {
 			let info = ffprobe_info(filepath.as_str());
 			if info.is_some() {
 				let duration = info.unwrap().format.get_duration();
-				let duration_str: String;
+				let mut duration_str: String;
 				if duration.is_some() {
-					duration_str = humantime::format_duration(duration.unwrap()).to_string();
+					let duration = duration.unwrap();
+					let millis = duration.as_millis();
+					let hours = millis / (1000 * 60 * 60);
+					let minutes = millis / (1000 * 60) - hours * 60;
+					let seconds = millis / 1000 - hours * 60 * 60 - minutes * 60;
+					let millis = millis - ((hours * 60 + minutes) * 60 + seconds) * 1000;
+					let mut unit = "";
+					duration_str = String::new();
+					if hours > 0 {
+						duration_str += &format!("{:0>2}:", hours.to_string());
+					}
+					if minutes > 0 || !duration_str.is_empty() {
+						duration_str += &format!("{:0>2}:", minutes.to_string());
+					}
+					if duration_str.is_empty() && seconds > 0 {
+						duration_str += &format!("{}.", seconds.to_string());
+						unit = " s";
+					} else if !duration_str.is_empty() {
+						duration_str += &format!("{:0>2}.", seconds.to_string());
+					}
+					if duration_str.is_empty() {
+						duration_str += &format!("{}", millis.to_string());
+						unit = " ms";
+					} else {
+						duration_str += &format!("{:0>3}", millis.to_string());
+					}
+					duration_str += unit;
 				} else {
 					duration_str = String::new();
 				}
