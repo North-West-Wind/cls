@@ -11,6 +11,8 @@ pub struct SoundboardConfig {
 	pub file_volume: Option<HashMap<String, usize>>,
 	pub file_key: Option<HashMap<String, Vec<String>>>,
 	pub stop_key: Option<Vec<String>>,
+	pub loopback_1: String,
+	pub loopback_2: String,
 }
 
 impl Default for SoundboardConfig {
@@ -25,7 +27,9 @@ pub const fn create_config() -> SoundboardConfig {
 		volume: 100,
 		file_volume: Option::None,
 		file_key: Option::None,
-		stop_key: Option::None
+		stop_key: Option::None,
+		loopback_1: String::new(),
+		loopback_2: String::new(),
 	}
 }
 

@@ -1,6 +1,6 @@
 use std::{cmp::{max, min}, path::Path};
 
-use crate::{component::popup::{delete_tab::DeleteTabPopup, input::InputPopup, set_popup, PopupComponent}, state::{get_mut_app, AwaitInput}};
+use crate::{component::popup::{delete_tab::DeleteTabPopup, input::{AwaitInput, InputPopup}, set_popup, PopupComponent}, state::get_mut_app};
 
 use super::{border_style, border_type, BlockHandleKey, BlockRenderArea};
 
@@ -146,8 +146,6 @@ impl TabsBlock {
 }
 
 fn handle_add() -> bool {
-	let app = get_mut_app();
-	app.await_input = AwaitInput::AddTab;
-	set_popup(PopupComponent::Input(InputPopup::new(std::env::current_dir().unwrap().to_str().unwrap().to_string())));
+	set_popup(PopupComponent::Input(InputPopup::new(std::env::current_dir().unwrap().to_str().unwrap().to_string(), AwaitInput::AddTab)));
 	true
 }

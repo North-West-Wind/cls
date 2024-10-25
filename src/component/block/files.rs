@@ -130,7 +130,7 @@ impl FilesBlock {
 		if app.files.is_none() {
 			return false;
 		}
-		let selected = self.selected;
+		let selected = app.tab_selected();
 		if selected >= app.config.tabs.len() {
 			return false;
 		}
@@ -149,8 +149,7 @@ impl FilesBlock {
 
 	fn navigate_file(&mut self, dy: i32) -> bool {
 		let app = get_mut_app();
-		let tab_selected = app.tab_selected();
-		let files = app.files.as_ref().unwrap().get(&app.config.tabs[tab_selected]);
+		let files = app.files.as_ref().unwrap().get(&app.config.tabs[app.tab_selected()]);
 		if files.is_none() {
 			return false;
 		}

@@ -25,6 +25,9 @@ pub fn handle_key(event: KeyEvent) -> bool {
 		KeyCode::Char('c') => {
 			let app = get_mut_app();
 			app.settings_opened = !app.settings_opened;
+			if !app.settings_opened && app.block_selected == 3 {
+				app.block_selected = 2;
+			}
 			return true;
 		},
 		_ => false
@@ -52,7 +55,7 @@ fn navigate_block(dx: i16, dy: i16) -> bool {
 	} else if dy < 0 {
 		// moving up
 		new_block = max(0, old_block as i16 + dy * (if old_block == 3 { 2 } else { 1 }));
-	} else if dx > 0 && old_block == 2 || dx < 0 && old_block == 3 {
+	} else if dx > 0 && old_block == 2 && app.settings_opened || dx < 0 && old_block == 3 {
 		new_block = old_block as i16 + dx;
 	} else {
 		new_block = old_block as i16;

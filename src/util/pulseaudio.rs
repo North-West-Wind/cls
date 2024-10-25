@@ -31,16 +31,19 @@ pub fn load_null_sink() -> Result<String, Box<dyn std::error::Error>> {
 	Ok(index)
 }
 
-pub fn unload_null_sink() -> Result<(), Box<dyn std::error::Error>> {
+pub fn unload_modules() -> Result<(), Box<dyn std::error::Error>> {
 	let app = get_app();
-	if !app.module_num.is_empty() {
+	for module_num in &app.module_nums {
+		if module_num.is_empty() {
+			continue;
+		}
 		let output = Command::new("pactl").args([
 			"unload-module",
-			app.module_num.trim()
+			module_num.trim()
 		]).output()?;
 		
 		if !output.status.success() {
-			println!("Failed to unload module");
+			println!("Failed to unload module {}", module_num);
 		}
 	}
 
@@ -125,4 +128,20 @@ pub fn stop_all() {
 		signal::kill(Pid::from_raw(*id as i32), Signal::SIGTERM).unwrap();
 	}
 	playing.clear();
+}
+
+pub fn loopback(sink: String) -> Result<String, Box<dyn std::error::Error>> {
+	let output = Command::new("pactl").args([
+		"load-module",
+		"module-loopback",
+		"source=cls.monitor",
+		format!("sink={sink}").as_str(),
+	]).output()?;
+
+	if !output.status.success() {
+		return Ok(String::new());
+	}
+
+	let index = String::from_utf8(output.stdout)?;
+	Ok(index)
 }

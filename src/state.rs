@@ -27,12 +27,6 @@ pub enum SelectionLayer {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
-pub enum AwaitInput {
-	None,
-	AddTab,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Scanning {
 	None,
 	All,
@@ -59,10 +53,8 @@ pub struct App {
 	pub popup: Option<PopupComponent>,
 	pub settings_opened: bool,
 	// pulseaudio
-	pub module_num: String,
+	pub module_nums: Vec<String>,
 	pub sink_controller: Option<SinkController>,
-	// input
-	pub await_input: AwaitInput,
 	// render states: files
 	pub files: Option<HashMap<String, Vec<(String, String)>>>,
 	pub scanning: Scanning,
@@ -119,9 +111,7 @@ const fn create_app() -> App {
 		settings_opened: false,
 		// pulseaudio
 		sink_controller: Option::None,
-		module_num: String::new(),
-		// input
-		await_input: AwaitInput::None,
+		module_nums: vec![],
 		// render states: files
 		files: Option::None,
 		scanning: Scanning::None,

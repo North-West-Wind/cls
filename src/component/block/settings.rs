@@ -3,7 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Padding, Paragraph}, Frame};
 use substring::Substring;
 
-use crate::{component::popup::{key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, state::{get_app, get_mut_app}};
+use crate::{component::popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, state::{get_app, get_mut_app}};
 
 use super::{border_style, border_type, BlockHandleKey, BlockRenderArea};
 
@@ -37,13 +37,17 @@ impl BlockRenderArea for SettingsBlock {
 		}
 
 		let mut lines = vec![];
+		let stop_key;
 		if app.config.stop_key.is_none() {
-			self.left_right_line("Stop Key".to_string(), "".to_string(), width as usize, &mut lines);
+			stop_key = "".to_string();
 		} else {
 			let mut keys = app.config.stop_key.as_ref().unwrap().clone();
 			keys.sort();
-			self.left_right_line("Stop Key".to_string(), format!("{}", keys.join(" + ")), width as usize, &mut lines);
+			stop_key = format!("{}", keys.join(" + "));
 		}
+		self.left_right_line("Stop Key".to_string(), stop_key, width as usize, &mut lines);
+		self.left_right_line("Loopback 1".to_string(), app.config.loopback_1.clone(), width as usize, &mut lines);
+		self.left_right_line("Loopback 2".to_string(), app.config.loopback_2.clone(), width as usize, &mut lines);
 		f.render_widget(Paragraph::new(lines).block(block), area);
 	}
 }
@@ -83,7 +87,7 @@ impl SettingsBlock {
 	}
 
 	fn navigate_settings(&mut self, dy: i16) -> bool {
-		let new_selected = min(1, max(0, self.selected as i16 + dy)) as u8;
+		let new_selected = min(2, max(0, self.selected as i16 + dy)) as u8;
 		if new_selected != self.selected {
 			self.selected = new_selected;
 			return true;
@@ -97,16 +101,34 @@ impl SettingsBlock {
 				set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::Stop)));
 				return true;
 			},
+			1|2 => {
+				let await_input;
+				if self.selected == 1 {
+					await_input = AwaitInput::Loopback1;
+				} else {
+					await_input = AwaitInput::Loopback2;
+				}
+				set_popup(PopupComponent::Input(InputPopup::new(String::new(), await_input)));
+				return true;
+			},
 			_ => false
 		}
 	}
 
 	fn handle_delete(&mut self) -> bool {
+		let app = get_mut_app();
 		match self.selected {
 			0 => {
-				let app = get_mut_app();
 				app.config.stop_key = Option::None;
 				app.stopkey = Option::None;
+				return true;
+			},
+			1 => {
+				app.config.loopback_1 = String::new();
+				return true;
+			},
+			2 => {
+				app.config.loopback_2 = String::new();
 				return true;
 			},
 			_ => false

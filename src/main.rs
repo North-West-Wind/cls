@@ -3,7 +3,7 @@ use component::block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock
 use constant::{MIN_HEIGHT, MIN_WIDTH};
 use signal_hook::iterator::Signals;
 use socket::{ensure_socket, listen_socket, send_exit, send_socket};
-use util::pulseaudio::{load_null_sink, load_sink_controller, set_volume_percentage, unload_null_sink};
+use util::pulseaudio::{load_null_sink, load_sink_controller, loopback, set_volume_percentage, unload_modules};
 use listener::{listen_events, listen_global_input};
 use ratatui::{
     backend::CrosstermBackend,
@@ -99,10 +99,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // pulseaudio setup
-    let _ = config::load();
+    let result = config::load();
+    if result.is_err() {
+        panic!("{:?}", result.err());
+    }
     app.sink_controller = Option::Some(load_sink_controller()?);
     if !app.edit {
-        app.module_num = load_null_sink()?;
+        app.module_nums.push(load_null_sink()?);
+        println!("Loaded null sink");
+        if !app.config.loopback_1.is_empty() {
+            println!("Loading loopback 1");
+            app.module_nums.push(loopback(app.config.loopback_1.clone())?);
+        }
+        if !app.config.loopback_2.is_empty() {
+            println!("Loading loopback 2");
+            app.module_nums.push(loopback(app.config.loopback_2.clone())?);
+        }
     }
     set_volume_percentage(app.config.volume);
 
@@ -125,7 +137,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         socket_thread.unwrap().join().unwrap()?;
     }
 
-    unload_null_sink()?;
+    unload_modules()?;
     if !app.hidden {
         config::save()?;
     }

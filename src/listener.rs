@@ -37,7 +37,7 @@ pub fn listen_global_input() {
 		if app.popup.as_ref().is_some_and(|popup| { popup.has_global_key_handler() }) {
 			app.popup.as_mut().unwrap().handle_global_key(key);
 			notify_redraw();
-		} else {
+		} else if app.hotkey.is_some() {
 			for (path, keys) in app.hotkey.as_ref().unwrap() {
 				if keys.iter().all(|key| { key.is_pressed() }) {
 					play_file(path);
