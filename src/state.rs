@@ -57,18 +57,14 @@ pub struct App {
 	pub block_selected: u8,
 	pub selection_layer: SelectionLayer,
 	pub popup: Option<PopupComponent>,
+	pub settings_opened: bool,
 	// pulseaudio
 	pub module_num: String,
 	pub sink_controller: Option<SinkController>,
 	// input
 	pub await_input: AwaitInput,
-	// render states: volume
-	pub volume_selected: usize,
-	// render states: tab
-	pub tab_selected: usize,
 	// render states: files
 	pub files: Option<HashMap<String, Vec<(String, String)>>>,
-	pub file_selected: usize,
 	pub scanning: Scanning,
 	// render states: playing
 	pub playing: Option<HashMap<Uuid, (String, u32)>>,
@@ -77,6 +73,24 @@ pub struct App {
 impl Default for App {
 	fn default() -> Self {
 		create_app()
+	}
+}
+
+impl App {
+	pub fn file_selected(&self) -> usize {
+		self.blocks[2].file_selected().unwrap()
+	}
+
+	pub fn set_file_selected(&mut self, selected: usize) {
+		self.blocks[2].set_file_selected(selected);
+	}
+
+	pub fn tab_selected(&self) -> usize {
+		self.blocks[1].tab_selected().unwrap()
+	}
+
+	pub fn set_tab_selected(&mut self, selected: usize) {
+		self.blocks[1].set_tab_selected(selected);
 	}
 }
 
@@ -102,18 +116,14 @@ const fn create_app() -> App {
 		block_selected: 0,
 		selection_layer: SelectionLayer::Block,
 		popup: Option::None,
+		settings_opened: false,
 		// pulseaudio
 		sink_controller: Option::None,
 		module_num: String::new(),
 		// input
 		await_input: AwaitInput::None,
-		// render states: volume
-		volume_selected: 0,
-		// render states: tab
-		tab_selected: 0,
 		// render states: files
 		files: Option::None,
-		file_selected: 0,
 		scanning: Scanning::None,
 		// render states: playing
 		playing: Option::None,

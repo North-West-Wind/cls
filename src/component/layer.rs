@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{state::{get_app, get_mut_app, SelectionLayer}, util::threads::spawn_save_thread};
 
-use super::popup::{help::HelpPopup, key_bind::{KeyBindFor, KeyBindPopup}, quit::QuitPopup, set_popup, PopupComponent};
+use super::popup::{help::HelpPopup, quit::QuitPopup, set_popup, PopupComponent};
 
 pub fn handle_key(event: KeyEvent) -> bool {
 	match event.code {
@@ -23,13 +23,8 @@ pub fn handle_key(event: KeyEvent) -> bool {
 			return true;
 		},
 		KeyCode::Char('c') => {
-			set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::Stop)));
-			return true;
-		},
-		KeyCode::Char('v') => {
 			let app = get_mut_app();
-			app.config.stop_key = Option::None;
-			app.stopkey = Option::None;
+			app.settings_opened = !app.settings_opened;
 			return true;
 		},
 		_ => false

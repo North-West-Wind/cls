@@ -10,13 +10,15 @@ use super::{border_style, border_type, BlockHandleKey, BlockRenderArea};
 pub struct VolumeBlock {
 	title: String,
 	id: u8,
+	pub(super) selected: usize,
 }
 
 impl Default for VolumeBlock {
 	fn default() -> Self {
 		Self {
 			title: "Volume".to_string(),
-			id: 0
+			id: 0,
+			selected: 0,
 		}
 	}
 }
@@ -31,7 +33,7 @@ impl BlockRenderArea for VolumeBlock {
 			.border_style(border_style(self.id))
 			.padding(Padding::horizontal(1));
 		let mut lines = vec![
-			volume_line("Sink Volume".to_string(), app.config.volume as usize, area.width, app.volume_selected == 0)
+			volume_line("Sink Volume".to_string(), app.config.volume as usize, area.width, self.selected == 0)
 		];
 		let path = selected_file_path();
 		if !path.is_empty() {
@@ -48,7 +50,7 @@ impl BlockRenderArea for VolumeBlock {
 					volume = *val.unwrap();
 				}
 			}
-			lines.push(volume_line("File Volume".to_string(), volume, area.width, app.volume_selected == 1));
+			lines.push(volume_line("File Volume".to_string(), volume, area.width, self.selected == 1));
 		}
 		let paragraph = Paragraph::new(Text::from(lines))
 			.block(block);
@@ -59,12 +61,43 @@ impl BlockRenderArea for VolumeBlock {
 impl BlockHandleKey for VolumeBlock {
 	fn handle_key(&mut self, event: KeyEvent) -> bool {
 		match event.code {
-			KeyCode::Right => change_volume(if event.modifiers.contains(KeyModifiers::CONTROL) { 5 } else { 1 }),
-			KeyCode::Left => change_volume(if event.modifiers.contains(KeyModifiers::CONTROL) { -5 } else { -1 }),
-			KeyCode::Up => select_volume(0),
-			KeyCode::Down => select_volume(1),
+			KeyCode::Right => self.change_volume(if event.modifiers.contains(KeyModifiers::CONTROL) { 5 } else { 1 }),
+			KeyCode::Left => self.change_volume(if event.modifiers.contains(KeyModifiers::CONTROL) { -5 } else { -1 }),
+			KeyCode::Up => self.select_volume(0),
+			KeyCode::Down => self.select_volume(1),
 			_ => false
 		}
+	}
+}
+
+impl VolumeBlock {
+	fn select_volume(&mut self, selection: usize) -> bool {
+		if self.selected != selection {
+			if selection == 1 {
+				let selected_file = selected_file_path();
+				if selected_file.is_empty() {
+					return false;
+				}
+			}
+			self.selected = selection;
+			return true;
+		}
+		false
+	}
+
+	fn change_volume(&self, delta: i16) -> bool {
+		let app = get_mut_app();
+		if self.selected == 1 {
+			return change_file_volume(delta);
+		}
+		let old_volume = app.config.volume as i16;
+		let new_volume = min(200, max(0, old_volume + delta));
+		if new_volume != old_volume {
+			set_volume_percentage(new_volume as u32);
+			app.config.volume = new_volume as u32;
+			return true
+		}
+		false
 	}
 }
 
@@ -95,36 +128,6 @@ fn volume_line(title: String, volume: usize, width: u16, highlight: bool) -> Lin
 		Color::Green
 	})));
 	Line::from(spans)
-}
-
-fn select_volume(selection: usize) -> bool {
-	let app = get_mut_app();
-	if app.volume_selected != selection {
-		if selection == 1 {
-			let selected_file = selected_file_path();
-			if selected_file.is_empty() {
-				return false;
-			}
-		}
-		app.volume_selected = selection;
-		return true;
-	}
-	false
-}
-
-fn change_volume(delta: i16) -> bool {
-	let app = get_mut_app();
-	if app.volume_selected == 1 {
-		return change_file_volume(delta);
-	}
-	let old_volume = app.config.volume as i16;
-	let new_volume = min(200, max(0, old_volume + delta));
-	if new_volume != old_volume {
-		set_volume_percentage(new_volume as u32);
-		app.config.volume = new_volume as u32;
-		return true
-	}
-	false
 }
 
 fn change_file_volume(delta: i16) -> bool {

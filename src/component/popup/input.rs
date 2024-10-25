@@ -93,6 +93,6 @@ fn send_add_tab(str: String) {
 		return;
 	}
 	app.config.tabs.push(norm.unwrap().into_os_string().into_string().unwrap());
-	app.tab_selected = app.config.tabs.len() - 1;
-	spawn_scan_thread(Scanning::One(app.tab_selected));
+	app.set_tab_selected(app.config.tabs.len() - 1);
+	spawn_scan_thread(Scanning::One(app.tab_selected()));
 }

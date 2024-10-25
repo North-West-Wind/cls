@@ -32,8 +32,7 @@ impl PopupRender for HelpPopup {
 			Line::from("q / esc - Escape / Quit"),
 			Line::from("arrow keys - Navigate"),
 			Line::from("enter - Select block"),
-			Line::from("c - Set global stop hotkey"),
-			Line::from("v - Remove global stop hotkey"),
+			Line::from("c - Toggle settings menu"),
 			Line::from("s - Save configuration"),
 	
 			Line::from(""),
@@ -55,6 +54,11 @@ impl PopupRender for HelpPopup {
 			Line::from("enter - Play file"),
 			Line::from("x - Set global hotkey"),
 			Line::from("z - Remove global hotkey"),
+	
+			Line::from(""),
+			Line::from("Settings Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
+			Line::from("enter - Edit an option"),
+			Line::from("delete - Reset an option"),
 		]);
 		let area = f.area();
 		let width = (text.width() as u16) + 4;

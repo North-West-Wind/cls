@@ -11,7 +11,8 @@ use substring::Substring;
 pub struct FilesBlock {
 	title: String,
 	id: u8,
-	range: (i32, i32)
+	range: (i32, i32),
+	pub(super) selected: usize,
 }
 
 impl Default for FilesBlock {
@@ -19,7 +20,8 @@ impl Default for FilesBlock {
 		Self {
 			title: "Files".to_string(),
 			id: 2,
-			range: (-1, -1)
+			range: (-1, -1),
+			selected: 0,
 		}
 	}
 }
@@ -42,10 +44,10 @@ impl BlockRenderArea for FilesBlock {
 			paragraph = Paragraph::new("Performing initial scan...");
 		} else if app.config.tabs.len() == 0 {
 			paragraph = Paragraph::new("Add a tab to get started :>");
-		} else if app.scanning == Scanning::One(app.tab_selected) {
+		} else if app.scanning == Scanning::One(app.tab_selected()) {
 			paragraph = Paragraph::new("Scanning this directory...\nComeback later :>");
 		} else {
-			let tab = app.config.tabs[app.tab_selected].clone();
+			let tab = app.config.tabs[app.tab_selected()].clone();
 			let files = app.files.as_ref().unwrap().get(&tab);
 			if files.is_none() {
 				paragraph = Paragraph::new("Failed to read this directory :<\nDoes it exist? Is it readable?");
@@ -56,7 +58,8 @@ impl BlockRenderArea for FilesBlock {
 				for (ii, (file, duration)) in files.unwrap().iter().enumerate() {
 					let mut spans = vec![];
 					if app.config.file_key.is_some() {
-						let keys = app.config.file_key.as_mut().unwrap().get(&Path::new(&app.config.tabs[app.tab_selected]).join(file).into_os_string().into_string().unwrap());
+						let tab_selected = app.tab_selected();
+						let keys = app.config.file_key.as_mut().unwrap().get(&Path::new(&app.config.tabs[tab_selected]).join(file).into_os_string().into_string().unwrap());
 						if keys.is_some() {
 							let mut keys = keys.unwrap().clone();
 							keys.sort();
@@ -64,7 +67,7 @@ impl BlockRenderArea for FilesBlock {
 							spans.push(Span::from(" "));
 						}
 					}
-					let style = if app.file_selected == ii {
+					let style = if self.selected == ii {
 						Style::default().fg(Color::LightBlue).add_modifier(Modifier::REVERSED)
 					} else {
 						Style::default().fg(Color::Cyan)
@@ -87,10 +90,10 @@ impl BlockRenderArea for FilesBlock {
 					}
 					lines.push(Line::from(spans));
 				}
-				if app.file_selected < self.range.0 as usize {
-					self.range = (app.file_selected as i32, app.file_selected as i32 + area.height as i32 - 5);
-				} else if app.file_selected > self.range.1 as usize {
-					self.range = (app.file_selected as i32 - area.height as i32 + 5, app.file_selected as i32);
+				if self.selected < self.range.0 as usize {
+					self.range = (self.selected as i32, self.selected as i32 + area.height as i32 - 5);
+				} else if self.selected > self.range.1 as usize {
+					self.range = (self.selected as i32 - area.height as i32 + 5, self.selected as i32);
 				}
 				paragraph = Paragraph::new(lines).scroll((self.range.0 as u16, 0));
 			}
@@ -102,67 +105,71 @@ impl BlockRenderArea for FilesBlock {
 impl BlockHandleKey for FilesBlock {
 	fn handle_key(&mut self, event: crossterm::event::KeyEvent) -> bool {
 		let app = get_app();
-		if app.scanning == Scanning::All || app.scanning == Scanning::One(app.tab_selected) {
+		if app.scanning == Scanning::All || app.scanning == Scanning::One(self.selected) {
 			return false;
 		}
 		match event.code {
-			KeyCode::Char('r') => reload_tab(),
-			KeyCode::Up => navigate_file(-1),
-			KeyCode::Down => navigate_file(1),
-			KeyCode::Enter => play_file(),
+			KeyCode::Char('r') => self.reload_tab(),
+			KeyCode::Up => self.navigate_file(-1),
+			KeyCode::Down => self.navigate_file(1),
+			KeyCode::Enter => self.play_file(),
 			KeyCode::Char('x') => set_global_key_bind(),
 			KeyCode::Char('z') => unset_global_key_bind(),
-			KeyCode::PageUp => navigate_file(-(self.range.1 - self.range.0 + 1)),
-			KeyCode::PageDown => navigate_file(self.range.1 - self.range.0 + 1),
-			KeyCode::Home => navigate_file(-i32::MAX),
-			KeyCode::End => navigate_file(i32::MAX),
+			KeyCode::PageUp => self.navigate_file(-(self.range.1 - self.range.0 + 1)),
+			KeyCode::PageDown => self.navigate_file(self.range.1 - self.range.0 + 1),
+			KeyCode::Home => self.navigate_file(-i32::MAX),
+			KeyCode::End => self.navigate_file(i32::MAX),
 			_ => false,
 		}
 	}
 }
 
-fn reload_tab() -> bool {
-	let app = get_app();
-	if app.tab_selected < app.config.tabs.len() {
-		spawn_scan_thread(Scanning::One(app.tab_selected));
+impl FilesBlock {
+	fn play_file(&self) -> bool {
+		let app = get_app();
+		if app.files.is_none() {
+			return false;
+		}
+		let selected = self.selected;
+		if selected >= app.config.tabs.len() {
+			return false;
+		}
+		let tab = app.config.tabs[selected].clone();
+		let files = app.files.as_ref().unwrap().get(&tab);
+		if files.is_none() {
+			return false;
+		}
+		let unwrapped = files.unwrap();
+		if self.selected >= unwrapped.len() {
+			return false;
+		}
+		util::pulseaudio::play_file(&Path::new(&tab).join(&unwrapped[self.selected].0).into_os_string().into_string().unwrap());
 		return true;
 	}
-	false
-}
 
-fn navigate_file(dy: i32) -> bool {
-	let app = get_mut_app();
-	let files = app.files.as_ref().unwrap().get(&app.config.tabs[app.tab_selected]);
-	if files.is_none() {
-		return false;
+	fn navigate_file(&mut self, dy: i32) -> bool {
+		let app = get_mut_app();
+		let tab_selected = app.tab_selected();
+		let files = app.files.as_ref().unwrap().get(&app.config.tabs[tab_selected]);
+		if files.is_none() {
+			return false;
+		}
+		let new_selected = min(files.unwrap().len() as i32 - 1, max(0, self.selected as i32 + dy)) as usize;
+		if new_selected != self.selected {
+			self.selected = new_selected;
+			return true;
+		}
+		false
 	}
-	let new_selected = min(files.unwrap().len() as i32 - 1, max(0, app.file_selected as i32 + dy)) as usize;
-	if new_selected != app.file_selected {
-		app.file_selected = new_selected;
-		return true;
-	}
-	false
-}
 
-fn play_file() -> bool {
-	let app = get_app();
-	if app.files.is_none() {
-		return false;
+	fn reload_tab(&self) -> bool {
+		let app = get_app();
+		if self.selected < app.config.tabs.len() {
+			spawn_scan_thread(Scanning::One(self.selected));
+			return true;
+		}
+		false
 	}
-	if app.tab_selected >= app.config.tabs.len() {
-		return false;
-	}
-	let tab = app.config.tabs[app.tab_selected].clone();
-	let files = app.files.as_ref().unwrap().get(&tab);
-	if files.is_none() {
-		return false;
-	}
-	let unwrapped = files.unwrap();
-	if app.file_selected >= unwrapped.len() {
-		return false;
-	}
-	util::pulseaudio::play_file(&Path::new(&tab).join(&unwrapped[app.file_selected].0).into_os_string().into_string().unwrap());
-	return true;
 }
 
 fn set_global_key_bind() -> bool {

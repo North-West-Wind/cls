@@ -95,19 +95,19 @@ pub fn selected_file_path() -> String {
 	if app.files.is_none() {
 		return String::new();
 	}
-	if app.tab_selected >= app.config.tabs.len() {
+	if app.tab_selected() >= app.config.tabs.len() {
 		return String::new();
 	}
-	let tab = app.config.tabs[app.tab_selected].clone();
+	let tab = app.config.tabs[app.tab_selected()].clone();
 	let files = app.files.as_ref().unwrap().get(&tab);
 	if files.is_none() {
 		return String::new();
 	}
 	let unwrapped = files.unwrap();
-	if app.file_selected >= unwrapped.len() {
+	if app.file_selected() >= unwrapped.len() {
 		return String::new();
 	}
-	return Path::new(&tab).join(&unwrapped[app.file_selected].0).into_os_string().into_string().unwrap();
+	return Path::new(&tab).join(&unwrapped[app.file_selected()].0).into_os_string().into_string().unwrap();
 }
 
 pub fn notify_redraw() {

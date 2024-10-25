@@ -96,8 +96,8 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 				let norm = Path::new(&path).normalize();
 				if norm.is_ok() {
 					app.config.tabs.push(norm.unwrap().into_os_string().into_string().unwrap());
-					app.tab_selected = app.config.tabs.len() - 1;
-					spawn_scan_thread(Scanning::One(app.tab_selected));
+					app.set_tab_selected(app.config.tabs.len() - 1);
+					spawn_scan_thread(Scanning::One(app.tab_selected()));
 				}
 			}
 		},
@@ -136,15 +136,15 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 					}
 					chosen_index = index.unwrap();
 				},
-				_ => chosen_index = app.tab_selected
+				_ => chosen_index = app.tab_selected()
 			}
 			if code == DeleteTab {
 				let files = app.files.as_mut();
 				if files.is_some() {
 					files.unwrap().remove(&app.config.tabs[chosen_index]);
 					app.config.tabs.remove(chosen_index);
-					if app.tab_selected >= app.config.tabs.len() && app.config.tabs.len() != 0 {
-						app.tab_selected = app.config.tabs.len() - 1;
+					if app.tab_selected() >= app.config.tabs.len() && app.config.tabs.len() != 0 {
+						app.set_tab_selected(app.config.tabs.len() - 1);
 					}
 					notify_redraw();
 				}

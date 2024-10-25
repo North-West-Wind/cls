@@ -99,3 +99,40 @@ pub(self) fn border_type(id: u8) -> BorderType {
 		BorderType::Rounded
 	}
 }
+
+impl BlockComponent {
+	pub fn _volume_selected(&self) -> Option<usize> {
+		match self {
+			BlockComponent::Volume(block) => Option::Some(block.selected),
+			_ => Option::None
+		}
+	}
+
+	pub fn file_selected(&self) -> Option<usize> {
+		match self {
+			BlockComponent::Files(block) => Option::Some(block.selected),
+			_ => Option::None
+		}
+	}
+
+	pub fn set_file_selected(&mut self, selected: usize) {
+		match self {
+			BlockComponent::Files(block) => block.selected = selected,
+			_ => ()
+		}
+	}
+
+	pub fn tab_selected(&self) -> Option<usize> {
+		match self {
+			BlockComponent::Tabs(block) => Option::Some(block.selected),
+			_ => Option::None
+		}
+	}
+
+	pub fn set_tab_selected(&mut self, selected: usize) {
+		match self {
+			BlockComponent::Tabs(block) => block.selected = selected,
+			_ => ()
+		}
+	}
+}

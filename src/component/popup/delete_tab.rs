@@ -51,10 +51,10 @@ impl PopupHandleKey for DeleteTabPopup {
 
 fn delete_tab() {
 	let app = get_mut_app();
-	let tab_selected = app.tab_selected;
-	app.files.as_mut().unwrap().remove(&app.config.tabs[tab_selected]);
-	app.config.tabs.remove(tab_selected);
-	if app.tab_selected >= app.config.tabs.len() && app.config.tabs.len() != 0 {
-		app.tab_selected = app.config.tabs.len() - 1;
+	let selected = app.tab_selected();
+	app.files.as_mut().unwrap().remove(&app.config.tabs[selected]);
+	app.config.tabs.remove(selected);
+	if selected >= app.config.tabs.len() && app.config.tabs.len() != 0 {
+		app.set_tab_selected(app.config.tabs.len() - 1);
 	}
 }

@@ -25,9 +25,20 @@ pub fn ui(f: &mut Frame) {
 	for ii in 0..2 {
 		app.blocks[ii].render_area(f, chunks[ii]);
 	}
-	let mid_chunks = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Fill(1), Constraint::Length(20)].as_ref()).split(chunks[2]);
-	app.blocks[2].render_area(f, mid_chunks[0]);
-	app.blocks[3].render_area(f, mid_chunks[1]);
+	if app.settings_opened {
+		let mid_chunks1 = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Fill(1), Constraint::Length(20)].as_ref()).split(chunks[2]);
+		let mid_chunks2 = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Fill(1), Constraint::Percentage(30)].as_ref()).split(chunks[2]);
+		let mid_chunks;
+		if mid_chunks1[1].width > mid_chunks2[1].width {
+			mid_chunks = mid_chunks1;
+		} else {
+			mid_chunks = mid_chunks2;
+		}
+		app.blocks[2].render_area(f, mid_chunks[0]);
+		app.blocks[3].render_area(f, mid_chunks[1]);
+	} else {
+		app.blocks[2].render_area(f, chunks[2]);
+	}
 	app.blocks[4].render_area(f, chunks[3]);
 	app.blocks[5].render(f); // playing block render
 	if app.popup.is_some() {

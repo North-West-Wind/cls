@@ -1,6 +1,6 @@
 use std::cmp::{max, min};
 use crossterm::event::{KeyCode, KeyEvent};
-use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Paragraph}, Frame};
+use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Padding, Paragraph}, Frame};
 use substring::Substring;
 
 use crate::{component::popup::{key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, state::{get_app, get_mut_app}};
@@ -9,14 +9,14 @@ use super::{border_style, border_type, BlockHandleKey, BlockRenderArea};
 
 pub struct SettingsBlock {
 	id: u8,
-	line_selected: u8,
+	selected: u8,
 }
 
 impl Default for SettingsBlock {
 	fn default() -> Self {
 		Self {
 			id: 3,
-			line_selected: 0,
+			selected: 0,
 		}
 	}
 }
@@ -25,18 +25,24 @@ impl BlockRenderArea for SettingsBlock {
 	fn render_area(&mut self, f: &mut Frame, area: Rect) {
 		let app = get_app();
 
-		let block = Block::bordered()
+		let mut block = Block::bordered()
 			.border_style(border_style(self.id))
 			.border_type(border_type(self.id))
 			.title("Settings");
+		let mut width = area.width;
+
+		if area.width > 25 {
+			block = block.padding(Padding::horizontal(1));
+			width -= 2;
+		}
 
 		let mut lines = vec![];
 		if app.config.stop_key.is_none() {
-			self.left_right_line("Stop Key".to_string(), "".to_string(), area.width as usize, &mut lines);
+			self.left_right_line("Stop Key".to_string(), "".to_string(), width as usize, &mut lines);
 		} else {
 			let mut keys = app.config.stop_key.as_ref().unwrap().clone();
 			keys.sort();
-			self.left_right_line("Stop Key".to_string(), format!("{}", keys.join(" + ")), area.width as usize, &mut lines);
+			self.left_right_line("Stop Key".to_string(), format!("{}", keys.join(" + ")), width as usize, &mut lines);
 		}
 		f.render_widget(Paragraph::new(lines).block(block), area);
 	}
@@ -62,10 +68,10 @@ impl SettingsBlock {
 			mid_span = Span::from("");
 			right = right.substring(0, right.len() - 3).to_string() + "...";
 		} else {
-			mid_span = Span::from(vec![" "; width - left.len() - right.len()].join(""));
+			mid_span = Span::from(vec![" "; width - left.len() - right.len() - 2].join(""));
 		}
 		let left_style;
-		if lines.len() == self.line_selected as usize {
+		if lines.len() == self.selected as usize {
 			left_style = Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED);
 		} else {
 			left_style = Style::default().fg(Color::LightYellow);
@@ -77,16 +83,16 @@ impl SettingsBlock {
 	}
 
 	fn navigate_settings(&mut self, dy: i16) -> bool {
-		let new_selected = min(1, max(0, self.line_selected as i16 + dy)) as u8;
-		if new_selected != self.line_selected {
-			self.line_selected = new_selected;
+		let new_selected = min(1, max(0, self.selected as i16 + dy)) as u8;
+		if new_selected != self.selected {
+			self.selected = new_selected;
 			return true;
 		}
 		false
 	}
 
 	fn handle_enter(&mut self) -> bool {
-		match self.line_selected {
+		match self.selected {
 			0 => {
 				set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::Stop)));
 				return true;
@@ -96,7 +102,7 @@ impl SettingsBlock {
 	}
 
 	fn handle_delete(&mut self) -> bool {
-		match self.line_selected {
+		match self.selected {
 			0 => {
 				let app = get_mut_app();
 				app.config.stop_key = Option::None;

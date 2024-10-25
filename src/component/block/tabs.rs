@@ -11,6 +11,7 @@ pub struct TabsBlock {
 	title: String,
 	id: u8,
 	range: (i32, i32),
+	pub(super) selected: usize,
 }
 
 impl Default for TabsBlock {
@@ -19,6 +20,7 @@ impl Default for TabsBlock {
 			title: "Tabs".to_string(),
 			id: 1,
 			range: (-1, -1),
+			selected: 0,
 		}
 	}
 }
@@ -27,14 +29,13 @@ impl BlockRenderArea for TabsBlock {
 	fn render_area(&mut self, f: &mut Frame, area: Rect) {
 		let app = get_mut_app();
 		let tabs = app.config.tabs.clone();
-		let tab_selected = app.tab_selected as usize;
 	
 		let mut spans: Vec<Span> = vec![];
 		for (ii, tab) in tabs.iter().enumerate() {
 			let path = Path::new(tab.as_str());
 			let basename = path.file_name();
 			spans.push(Span::from(basename.unwrap().to_str().unwrap().to_string())
-				.style(if ii == tab_selected {
+				.style(if ii == self.selected {
 					Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)
 				} else {
 					Style::default().fg(Color::Green)
@@ -60,9 +61,9 @@ impl BlockRenderArea for TabsBlock {
 				}
 			}
 			self.range = (0, count - 1);
-		} else if app.tab_selected < self.range.0 as usize {
+		} else if self.selected < self.range.0 as usize {
 			for (ii, span) in spans.iter().enumerate() {
-				if ii % 2 == 1 || ii < app.tab_selected * 2 {
+				if ii % 2 == 1 || ii < self.selected * 2 {
 					// skip separator
 					continue;
 				}
@@ -72,10 +73,10 @@ impl BlockRenderArea for TabsBlock {
 					break;
 				}
 			}
-			self.range = (app.tab_selected as i32, app.tab_selected as i32 + count - 1);
-		} else if app.tab_selected >= self.range.1 as usize {
+			self.range = (self.selected as i32, self.selected as i32 + count - 1);
+		} else if self.selected >= self.range.1 as usize {
 			for (ii, span) in spans.iter().rev().enumerate() {
-				if ii % 2 == 1 || ii < spans.len() - app.tab_selected * 2 - 1 {
+				if ii % 2 == 1 || ii < spans.len() - self.selected * 2 - 1 {
 					// skip separator
 					continue;
 				}
@@ -85,7 +86,7 @@ impl BlockRenderArea for TabsBlock {
 					break;
 				}
 			}
-			self.range = (app.tab_selected as i32 - count + 1, app.tab_selected as i32);
+			self.range = (self.selected as i32 - count + 1, self.selected as i32);
 		}
 		
 		let block = Block::default()
@@ -109,11 +110,38 @@ impl BlockHandleKey for TabsBlock {
 	fn handle_key(&mut self, event: KeyEvent) -> bool {
 		match event.code {
 			KeyCode::Char('a') => handle_add(),
-			KeyCode::Char('d') => handle_remove(),
-			KeyCode::Right => handle_move(true, event.modifiers.contains(KeyModifiers::CONTROL)),
-			KeyCode::Left => handle_move(false, event.modifiers.contains(KeyModifiers::CONTROL)),
+			KeyCode::Char('d') => self.handle_remove(),
+			KeyCode::Right => self.handle_move(true, event.modifiers.contains(KeyModifiers::CONTROL)),
+			KeyCode::Left => self.handle_move(false, event.modifiers.contains(KeyModifiers::CONTROL)),
 			_ => false
 		}
+	}
+}
+
+impl TabsBlock {
+	fn handle_remove(&self) -> bool {
+		let app = get_mut_app();
+		if self.selected < app.config.tabs.len() {
+			set_popup(PopupComponent::DeleteTab(DeleteTabPopup::default()));
+			return true;
+		}
+		false
+	}
+
+	fn handle_move(&mut self, right: bool, modify: bool) -> bool {
+		let delta = if right { 1 } else { -1 };
+		let app = get_mut_app();
+		let selected = self.selected as i32;
+		let new_selected = min(app.config.tabs.len() as i32 - 1, max(0, selected + delta));
+		if selected != new_selected {
+			if modify {
+				app.config.tabs.swap(selected as usize, new_selected as usize);
+			}
+			self.selected = new_selected as usize;
+			app.set_file_selected(0);
+			return true;
+		}
+		false
 	}
 }
 
@@ -122,30 +150,4 @@ fn handle_add() -> bool {
 	app.await_input = AwaitInput::AddTab;
 	set_popup(PopupComponent::Input(InputPopup::new(std::env::current_dir().unwrap().to_str().unwrap().to_string())));
 	true
-}
-
-fn handle_remove() -> bool {
-	let app = get_mut_app();
-	let tab_selected = app.tab_selected;
-	if tab_selected < app.config.tabs.len() {
-		set_popup(PopupComponent::DeleteTab(DeleteTabPopup::default()));
-		return true;
-	}
-	false
-}
-
-fn handle_move(right: bool, modify: bool) -> bool {
-	let delta = if right { 1 } else { -1 };
-	let app = get_mut_app();
-	let tab_selected = app.tab_selected as i32;
-	let new_selected = min(app.config.tabs.len() as i32 - 1, max(0, tab_selected + delta));
-	if tab_selected != new_selected {
-		if modify {
-			app.config.tabs.swap(tab_selected as usize, new_selected as usize);
-		}
-		app.tab_selected = new_selected as usize;
-		app.file_selected = 0;
-		return true;
-	}
-	false
 }
