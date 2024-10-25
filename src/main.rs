@@ -3,6 +3,7 @@ use component::block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock
 use constant::{MIN_HEIGHT, MIN_WIDTH};
 use signal_hook::iterator::Signals;
 use socket::{ensure_socket, listen_socket, send_exit, send_socket};
+use std_semaphore::Semaphore;
 use util::pulseaudio::{load_null_sink, load_sink_controller, loopback, set_volume_percentage, unload_modules};
 use listener::{listen_events, listen_global_input};
 use ratatui::{
@@ -88,7 +89,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		BlockComponent::Help(HelpBlock::default()),
         BlockComponent::Playing(PlayingBlock::default()),
     ];
-    app.playing = Option::Some(HashMap::new());
+    app.playing_file = Option::Some(HashMap::new());
+    app.playing_process = Option::Some(HashMap::new());
+    app.playing_semaphore = Option::Some(Semaphore::new(1));
     if !app.edit {
         ensure_socket();
         if !app.socket_holder {

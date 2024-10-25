@@ -2,6 +2,7 @@ use std::{collections::HashMap, ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar
 
 use mki::Keyboard;
 use pulsectl::controllers::SinkController;
+use std_semaphore::Semaphore;
 use uuid::Uuid;
 
 use crate::{component::{block::BlockComponent, popup::PopupComponent}, config::{create_config, SoundboardConfig}};
@@ -59,7 +60,9 @@ pub struct App {
 	pub files: Option<HashMap<String, Vec<(String, String)>>>,
 	pub scanning: Scanning,
 	// render states: playing
-	pub playing: Option<HashMap<Uuid, (String, u32)>>,
+	pub playing_file: Option<HashMap<Uuid, String>>,
+	pub playing_process: Option<HashMap<Uuid, u32>>,
+	pub playing_semaphore: Option<Semaphore>,
 }
 
 impl Default for App {
@@ -116,7 +119,9 @@ const fn create_app() -> App {
 		files: Option::None,
 		scanning: Scanning::None,
 		// render states: playing
-		playing: Option::None,
+		playing_file: Option::None,
+		playing_process: Option::None,
+		playing_semaphore: Option::None,
 	}
 }
 

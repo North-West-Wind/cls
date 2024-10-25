@@ -13,6 +13,7 @@ pub struct SoundboardConfig {
 	pub stop_key: Option<Vec<String>>,
 	pub loopback_1: String,
 	pub loopback_2: String,
+	pub playlist_mode: bool,
 }
 
 impl Default for SoundboardConfig {
@@ -30,6 +31,7 @@ pub const fn create_config() -> SoundboardConfig {
 		stop_key: Option::None,
 		loopback_1: String::new(),
 		loopback_2: String::new(),
+		playlist_mode: false,
 	}
 }
 

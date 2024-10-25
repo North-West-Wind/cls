@@ -1,9 +1,9 @@
-use std::cmp::{max, min};
+use std::{cmp::{max, min}, collections::HashSet};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Padding, Paragraph}, Frame};
 use substring::Substring;
 
-use crate::{component::popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, state::{get_app, get_mut_app}};
+use crate::{component::popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, config, state::{get_app, get_mut_app}};
 
 use super::{border_style, border_type, BlockHandleKey, BlockRenderArea};
 
@@ -48,6 +48,7 @@ impl BlockRenderArea for SettingsBlock {
 		self.left_right_line("Stop Key".to_string(), stop_key, width as usize, &mut lines);
 		self.left_right_line("Loopback 1".to_string(), app.config.loopback_1.clone(), width as usize, &mut lines);
 		self.left_right_line("Loopback 2".to_string(), app.config.loopback_2.clone(), width as usize, &mut lines);
+		self.left_right_line("Playlist Mode".to_string(), app.config.playlist_mode.to_string(), width as usize, &mut lines);
 		f.render_widget(Paragraph::new(lines).block(block), area);
 	}
 }
@@ -87,7 +88,7 @@ impl SettingsBlock {
 	}
 
 	fn navigate_settings(&mut self, dy: i16) -> bool {
-		let new_selected = min(2, max(0, self.selected as i16 + dy)) as u8;
+		let new_selected = min(3, max(0, self.selected as i16 + dy)) as u8;
 		if new_selected != self.selected {
 			self.selected = new_selected;
 			return true;
@@ -98,7 +99,6 @@ impl SettingsBlock {
 	fn handle_enter(&mut self) -> bool {
 		match self.selected {
 			0 => {
-				set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::Stop)));
 				set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::Stop, HashSet::new())));
 				return true;
 			},
@@ -110,6 +110,11 @@ impl SettingsBlock {
 					await_input = AwaitInput::Loopback2;
 				}
 				set_popup(PopupComponent::Input(InputPopup::new(String::new(), await_input)));
+				return true;
+			},
+			3 => {
+				let app = get_mut_app();
+				app.config.playlist_mode = !app.config.playlist_mode;
 				return true;
 			},
 			_ => false
@@ -130,6 +135,10 @@ impl SettingsBlock {
 			},
 			2 => {
 				app.config.loopback_2 = String::new();
+				return true;
+			},
+			3 => {
+				app.config.playlist_mode = config::create_config().playlist_mode;
 				return true;
 			},
 			_ => false

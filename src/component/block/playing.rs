@@ -21,7 +21,7 @@ impl Default for PlayingBlock {
 impl BlockRender for PlayingBlock {
 	fn render(&self, f: &mut Frame) {
 		let app = get_app();
-		let playing = app.playing.as_ref().unwrap();
+		let playing = app.playing_file.as_ref().unwrap();
 		if playing.len() == 0 {
 			return;
 		}
@@ -36,7 +36,7 @@ impl BlockRender for PlayingBlock {
 		};
 		Clear.render(block_area, f.buffer_mut());
 		let mut lines = vec![];
-		let playing_list = playing.values().map(|(path, _)| { path }).collect::<Vec<&String>>();
+		let playing_list = playing.values().collect::<Vec<&String>>();
 		for ii in 0..inner_height {
 			lines.push(Line::from(playing_list.get(ii as usize).unwrap().as_str()).style(Style::default().fg(Color::LightGreen)));
 		}
