@@ -52,13 +52,13 @@ impl PopupRender for HelpPopup {
 			Line::from("Files Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
 			Line::from("r - Refresh"),
 			Line::from("enter - Play file"),
-			Line::from("w - Play random file"),
+			Line::from("/ - Play random file"),
 			Line::from("x - Set global hotkey"),
 			Line::from("z - Remove global hotkey"),
 	
 			Line::from(""),
 			Line::from("Settings Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
-			Line::from("enter - Edit an option"),
+			Line::from("enter - Set an option"),
 			Line::from("delete - Reset an option"),
 		]);
 		let area = f.area();
