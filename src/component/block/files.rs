@@ -61,10 +61,11 @@ impl BlockRenderArea for FilesBlock {
 					let tab_selected = app.tab_selected();
 					let full_path = &Path::new(&app.config.tabs[tab_selected]).join(file).into_os_string().into_string().unwrap();
 					if app.rev_file_id.is_some() {
-						let id = app.rev_file_id.as_ref().unwrap().get(full_path);
+						let id = app.config.file_id.as_ref().unwrap().get(full_path);
 						if id.is_some() {
 							let id = id.unwrap();
-							spans.push(Span::from(id.to_string()).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)));
+							spans.push(Span::from(format!("({})", id)).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)));
+							spans.push(Span::from(" "));
 						}
 					}
 					if app.config.file_key.is_some() {
@@ -72,11 +73,9 @@ impl BlockRenderArea for FilesBlock {
 						if keys.is_some() {
 							let mut keys = keys.unwrap().clone();
 							keys.sort();
-							spans.push(Span::from(format!("({})", keys.join("+"))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
+							spans.push(Span::from(format!("{{{}}}", keys.join("+"))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
+							spans.push(Span::from(" "));
 						}
-					}
-					if spans.len() > 0 {
-						spans.push(Span::from(" "));
 					}
 					let style = if self.selected == ii {
 						Style::default().fg(Color::LightBlue).add_modifier(Modifier::REVERSED)
@@ -234,7 +233,7 @@ fn set_file_id() -> bool {
 	if app.config.file_id.is_none() {
 		app.config.file_id = Option::Some(HashMap::new());
 	}
-	let id = app.rev_file_id.as_ref().unwrap().get(&path);
+	let id = app.config.file_id.as_ref().unwrap().get(&path);
 	let init = match id {
 		Option::Some(num) => num.to_string(),
 		Option::None => String::new(),
@@ -252,11 +251,12 @@ fn unset_file_id() -> bool {
 	if app.rev_file_id.is_none() {
 		return false;
 	}
-	let binding = app.rev_file_id.clone().unwrap();
- 	let id = binding.get(&path);
+ 	let id = app.config.file_id.as_ref().unwrap().get(&path);
 	if id.is_none() {
 		return false;
 	}
-	app.config.file_id.as_mut().unwrap().remove(id.unwrap());
+	let id = id.unwrap();
+	app.rev_file_id.as_mut().unwrap().remove(id);
+	app.config.file_id.as_mut().unwrap().remove(&path);
 	return true;
 }

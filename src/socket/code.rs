@@ -117,10 +117,14 @@ impl SocketCode {
 				}
 			},
 			PlayId => {
-				let id = matches.get_one::<u32>("id");
+				let id = matches.get_one::<String>("id");
 				if id.is_none() {
 					panic!("Missing `id` argument");
 				} else {
+					let id = id.unwrap().parse::<u32>();
+					if id.is_err() {
+						panic!("{:?}", id.err().unwrap());
+					}
 					buf.extend(id.unwrap().to_le_bytes());
 				}
 			},

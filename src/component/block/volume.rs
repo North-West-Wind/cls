@@ -146,7 +146,11 @@ fn change_file_volume(delta: i16) -> bool {
 	let old_volume = map.get(&selected_file).unwrap_or(&100);
 	let new_volume = min(100, max(0, (*old_volume) as i16 + delta)) as usize;
 	if new_volume != *old_volume {
-		map.insert(selected_file, new_volume);
+		if new_volume == 100 {
+			map.remove(&selected_file);
+		} else {
+			map.insert(selected_file, new_volume);
+		}
 		return true
 	}
 	false

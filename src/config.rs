@@ -10,7 +10,7 @@ pub struct SoundboardConfig {
 	pub volume: u32,
 	pub file_volume: Option<HashMap<String, usize>>,
 	pub file_key: Option<HashMap<String, Vec<String>>>,
-	pub file_id: Option<HashMap<u32, String>>,
+	pub file_id: Option<HashMap<String, u32>>,
 	pub stop_key: Option<Vec<String>>,
 	pub loopback_1: String,
 	pub loopback_2: String,

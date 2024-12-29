@@ -142,7 +142,6 @@ fn send_file_id(str: String) {
 	}
 	let id = id.unwrap();
 	let app = get_mut_app();
-	let map = app.config.file_id.as_mut().unwrap();
-	map.insert(id, path.clone());
-	app.rev_file_id.as_mut().unwrap().insert(path, id);
+	app.rev_file_id.as_mut().unwrap().insert(id, path.clone());
+	app.config.file_id.as_mut().unwrap().insert(path, id);
 }

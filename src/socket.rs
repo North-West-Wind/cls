@@ -168,7 +168,7 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 			let id = u32::from_le_bytes(bytes);
 			let app = get_app();
 			if app.config.file_id.is_some() {
-				let path = app.config.file_id.as_ref().unwrap().get(&id);
+				let path = app.rev_file_id.as_ref().unwrap().get(&id);
 				if path.is_some() {
 					let path = path.unwrap();
 					if !path.is_empty() {
