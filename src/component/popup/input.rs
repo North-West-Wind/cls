@@ -142,6 +142,13 @@ fn send_file_id(str: String) {
 	}
 	let id = id.unwrap();
 	let app = get_mut_app();
-	app.rev_file_id.as_mut().unwrap().insert(id, path.clone());
+	let rev_map = app.rev_file_id.as_mut().unwrap();
+	if rev_map.contains_key(&id) {
+		if rev_map.get(&id).unwrap() != &path {
+			app.error = "File ID must be unique".to_string();
+		}
+		return;
+	}
+	rev_map.insert(id, path.clone());
 	app.config.file_id.as_mut().unwrap().insert(path, id);
 }
