@@ -51,6 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Arg::new("name").long("name").help("reload the tab with this basename")
         ]))
         .subcommand(Command::new("play").about("play a file").arg(Arg::new("path").required(true)))
+        .subcommand(Command::new("play-id").about("play a file by user-defined ID").arg(Arg::new("id").required(true)))
         .subcommand(Command::new("stop").about("stop all playing files"))
         .subcommand(Command::new("set-volume").about("set volume of the sink or a file").args([
             Arg::new("volume").help("new volume or volume increment (-200 - +200)"),

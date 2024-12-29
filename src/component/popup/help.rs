@@ -55,6 +55,8 @@ impl PopupRender for HelpPopup {
 			Line::from("/ - Play random file"),
 			Line::from("x - Set global hotkey"),
 			Line::from("z - Remove global hotkey"),
+			Line::from("v - Set file ID"),
+			Line::from("b - Remove file ID"),
 	
 			Line::from(""),
 			Line::from("Settings Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),

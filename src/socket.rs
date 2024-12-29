@@ -162,6 +162,21 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 				play_file(&path);
 			}
 		},
+		PlayId => {
+			let mut bytes = [0; 4];
+			stream.read_exact(&mut bytes)?;
+			let id = u32::from_le_bytes(bytes);
+			let app = get_app();
+			if app.config.file_id.is_some() {
+				let path = app.config.file_id.as_ref().unwrap().get(&id);
+				if path.is_some() {
+					let path = path.unwrap();
+					if !path.is_empty() {
+						play_file(&path);
+					}
+				}
+			}
+		},
 		Stop => {
 			stop_all();
 		},

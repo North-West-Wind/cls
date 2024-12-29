@@ -11,6 +11,7 @@ pub enum SocketCode {
 	ReloadTab,
 
 	Play,
+	PlayId,
 	Stop,
 
 	SetVolume,
@@ -27,6 +28,7 @@ impl SocketCode {
 			"delete-tab" => Some(DeleteTab),
 			"reload-tab" => Some(ReloadTab),
 			"play" => Some(Play),
+			"play-id" => Some(PlayId),
 			"stop" => Some(Stop),
 			"set-volume" => Some(SetVolume),
 			_ => None,
@@ -43,6 +45,7 @@ impl SocketCode {
 			4 => Some(DeleteTab),
 			5 => Some(ReloadTab),
 			6 => Some(Play),
+			9 => Some(PlayId),
 			7 => Some(Stop),
 			8 => Some(SetVolume),
 			_ => None,
@@ -58,6 +61,7 @@ impl SocketCode {
 			DeleteTab => 4,
 			ReloadTab => 5,
 			Play => 6,
+			PlayId => 9,
 			Stop => 7,
 			SetVolume => 8,
 		}
@@ -110,6 +114,14 @@ impl SocketCode {
 					panic!("Missing `path` argument");
 				} else {
 					buf.extend(path.unwrap().as_bytes());
+				}
+			},
+			PlayId => {
+				let id = matches.get_one::<u32>("id");
+				if id.is_none() {
+					panic!("Missing `id` argument");
+				} else {
+					buf.extend(id.unwrap().to_le_bytes());
 				}
 			},
 			SetVolume => {

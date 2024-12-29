@@ -10,6 +10,7 @@ pub struct SoundboardConfig {
 	pub volume: u32,
 	pub file_volume: Option<HashMap<String, usize>>,
 	pub file_key: Option<HashMap<String, Vec<String>>>,
+	pub file_id: Option<HashMap<u32, String>>,
 	pub stop_key: Option<Vec<String>>,
 	pub loopback_1: String,
 	pub loopback_2: String,
@@ -28,6 +29,7 @@ pub const fn create_config() -> SoundboardConfig {
 		volume: 100,
 		file_volume: Option::None,
 		file_key: Option::None,
+		file_id: Option::None,
 		stop_key: Option::None,
 		loopback_1: String::new(),
 		loopback_2: String::new(),
@@ -72,6 +74,13 @@ pub fn load() -> Result<(), Box<dyn std::error::Error>> {
 		}
 		if keyboard.len() == cfg.stop_key.unwrap().len() {
 			app.stopkey = Option::Some(keyboard);
+		}
+	}
+
+	app.rev_file_id = Option::Some(HashMap::new());
+	if cfg.file_id.is_some() {
+		for (id, path) in cfg.file_id.unwrap() {
+			app.rev_file_id.as_mut().unwrap().insert(path, id);
 		}
 	}
 

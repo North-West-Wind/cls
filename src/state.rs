@@ -59,6 +59,7 @@ pub struct App {
 	// render states: files
 	pub files: Option<HashMap<String, Vec<(String, String)>>>,
 	pub scanning: Scanning,
+	pub rev_file_id: Option<HashMap<String, u32>>,
 	// render states: playing
 	pub playing_file: Option<HashMap<Uuid, String>>,
 	pub playing_process: Option<HashMap<Uuid, u32>>,
@@ -118,6 +119,7 @@ const fn create_app() -> App {
 		// render states: files
 		files: Option::None,
 		scanning: Scanning::None,
+		rev_file_id: Option::None,
 		// render states: playing
 		playing_file: Option::None,
 		playing_process: Option::None,

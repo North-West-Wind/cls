@@ -5,7 +5,7 @@ use normpath::PathExt;
 use ratatui::{style::{Color, Style}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 use tui_input::{backend::crossterm::EventHandler, Input};
 
-use crate::{state::{get_mut_app, Scanning}, util::threads::spawn_scan_thread};
+use crate::{state::{get_mut_app, Scanning}, util::{selected_file_path, threads::spawn_scan_thread}};
 
 use super::{exit_popup, safe_centered_rect, PopupHandleKey, PopupHandlePaste, PopupRender};
 
@@ -15,6 +15,7 @@ pub enum AwaitInput {
 	AddTab,
 	Loopback1,
 	Loopback2,
+	SetFileId
 }
 
 pub struct InputPopup {
@@ -35,7 +36,7 @@ impl InputPopup {
 	pub fn new(value: String, await_input: AwaitInput) -> Self {
 		Self {
 			input: Input::new(value),
-			await_input: await_input,
+			await_input,
 		}
 	}
 }
@@ -53,6 +54,7 @@ impl PopupRender for InputPopup {
 				AwaitInput::AddTab => "Add directory as tab",
 				AwaitInput::Loopback1 => "Loopback 1 (Restart)",
 				AwaitInput::Loopback2 => "Loopback 2 (Restart)",
+				AwaitInput::SetFileId => "File ID",
 				_ => "Input"
 			}).padding(Padding::horizontal(1)).style(Style::default().fg(Color::Green)));
 		let input_area = safe_centered_rect(width, height, area);
@@ -71,6 +73,13 @@ impl PopupHandleKey for InputPopup {
 			KeyCode::Enter => self.complete(&self.input, true),
 			KeyCode::Esc => self.complete(&self.input, false),
 			_ => {
+				if self.await_input == AwaitInput::SetFileId && match event.code {
+					KeyCode::Char(c) => !c.is_digit(10),
+					_ => false
+				} {
+					return false;
+				}
+				
 				self.input.handle_event(&Event::Key(event));
 				return true;
 			}
@@ -93,6 +102,7 @@ impl InputPopup {
 				AwaitInput::AddTab => send_add_tab(input.value().to_string()),
 				AwaitInput::Loopback1 => send_loopback_1(input.value().to_string()),
 				AwaitInput::Loopback2 => send_loopback_2(input.value().to_string()),
+				AwaitInput::SetFileId => send_file_id(input.value().to_string()),
 				_ => (),
 			}
 		}
@@ -119,4 +129,20 @@ fn send_loopback_1(str: String) {
 fn send_loopback_2(str: String) {
 	let app = get_mut_app();
 	app.config.loopback_2 = str;
+}
+
+fn send_file_id(str: String) {
+	let path = selected_file_path();
+	if path.is_empty() {
+		return;
+	}
+	let id = u32::from_str_radix(&str, 10);
+	if id.is_err() {
+		return;
+	}
+	let id = id.unwrap();
+	let app = get_mut_app();
+	let map = app.config.file_id.as_mut().unwrap();
+	map.insert(id, path.clone());
+	app.rev_file_id.as_mut().unwrap().insert(path, id);
 }
