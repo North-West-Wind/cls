@@ -30,10 +30,9 @@ pub fn load() -> Result<(), Box<dyn std::error::Error>> {
 					break;
 				}
 			}
-			if keyboard.len() != key_len {
-				continue;
+			if keyboard.len() > 0 && keyboard.len() == key_len {
+				app.hotkey.as_mut().unwrap().insert(path.clone(), keyboard);
 			}
-			app.hotkey.as_mut().unwrap().insert(path.clone(), keyboard);
 
 			if entry.id.is_some() {
 				app.rev_file_id.as_mut().unwrap().insert(entry.id.unwrap(), path);
