@@ -1,6 +1,6 @@
-use std::{cmp::{max, min}, collections::{HashMap, HashSet}, i32, path::Path};
+use std::{cmp::{max, min}, collections::HashSet, i32, path::Path};
 
-use crate::{component::popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, state::{get_app, get_mut_app, Scanning}, util::{self, selected_file_path, threads::spawn_scan_thread}};
+use crate::{component::popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, state::{config, config_mut, get_app, get_mut_app, Scanning}, util::{self, selected_file_path, threads::spawn_scan_thread}};
 
 use super::{border_style, border_type, loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -40,15 +40,16 @@ impl BlockRenderArea for FilesBlock {
 		if self.range.0 == -1 {
 			self.range = (0, area.height as i32 - 5);
 		}
+		let config = config();
 		let paragraph: Paragraph;
 		if app.scanning == Scanning::All {
 			paragraph = Paragraph::new("Performing initial scan...").wrap(Wrap { trim: false });
-		} else if app.config.tabs.len() == 0 {
+		} else if config.tabs.len() == 0 {
 			paragraph = Paragraph::new("Add a tab to get started :>").wrap(Wrap { trim: false });
 		} else if app.scanning == Scanning::One(app.tab_selected()) {
 			paragraph = Paragraph::new("Scanning this directory...\nComeback later :>").wrap(Wrap { trim: false });
 		} else {
-			let tab = app.config.tabs[app.tab_selected()].clone();
+			let tab = config.tabs[app.tab_selected()].clone();
 			let files = app.files.as_ref().unwrap().get(&tab);
 			if files.is_none() {
 				paragraph = Paragraph::new("Failed to read this directory :<\nDoes it exist? Is it readable?").wrap(Wrap { trim: false });
@@ -59,19 +60,17 @@ impl BlockRenderArea for FilesBlock {
 				for (ii, (file, duration)) in files.unwrap().iter().enumerate() {
 					let mut spans = vec![];
 					let tab_selected = app.tab_selected();
-					let full_path = &Path::new(&app.config.tabs[tab_selected]).join(file).into_os_string().into_string().unwrap();
-					if app.rev_file_id.is_some() {
-						let id = app.config.file_id.as_ref().unwrap().get(full_path);
-						if id.is_some() {
-							let id = id.unwrap();
+					let full_path = &Path::new(&config.tabs[tab_selected]).join(file).into_os_string().into_string().unwrap();
+					let entry = config.get_file_entry(full_path.clone());
+					if entry.is_some() {
+						let entry = entry.unwrap();
+						if entry.id.is_some() {
+							let id = entry.id.unwrap();
 							spans.push(Span::from(format!("({})", id)).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)));
 							spans.push(Span::from(" "));
 						}
-					}
-					if app.config.file_key.is_some() {
-						let keys = app.config.file_key.as_ref().unwrap().get(full_path);
-						if keys.is_some() {
-							let mut keys = keys.unwrap().clone();
+						if entry.keys.len() > 0 {
+							let mut keys = Vec::from_iter(entry.keys.clone().into_iter());
 							keys.sort();
 							spans.push(Span::from(format!("{{{}}}", keys.join("+"))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
 							spans.push(Span::from(" "));
@@ -140,10 +139,11 @@ impl FilesBlock {
 			return false;
 		}
 		let selected = app.tab_selected();
-		if selected >= app.config.tabs.len() {
+		let config = config();
+		if selected >= config.tabs.len() {
 			return false;
 		}
-		let tab = app.config.tabs[selected].clone();
+		let tab = config.tabs[selected].clone();
 		let files = app.files.as_ref().unwrap().get(&tab);
 		if files.is_none() {
 			return false;
@@ -164,7 +164,7 @@ impl FilesBlock {
 
 	fn navigate_file(&mut self, dy: i32) -> bool {
 		let app = get_mut_app();
-		let files = app.files.as_ref().unwrap().get(&app.config.tabs[app.tab_selected()]);
+		let files = app.files.as_ref().unwrap().get(&config().tabs[app.tab_selected()]);
 		if files.is_none() {
 			return false;
 		}
@@ -183,8 +183,7 @@ impl FilesBlock {
 	}
 
 	fn reload_tab(&self) -> bool {
-		let app = get_app();
-		if self.selected < app.config.tabs.len() {
+		if self.selected < config().tabs.len() {
 			spawn_scan_thread(Scanning::One(self.selected));
 			return true;
 		}
@@ -197,11 +196,8 @@ fn set_global_key_bind() -> bool {
 	if path.is_empty() {
 		return false;
 	}
-	let app = get_mut_app();
-	if app.config.file_key.is_none() {
-		app.config.file_key = Option::Some(HashMap::new());
-	}
-	let hotkey = app.hotkey.as_mut().unwrap().get(&path);
+	let app = get_app();
+	let hotkey = app.hotkey.as_ref().unwrap().get(&path);
 	let recorded = match hotkey {
 		Option::Some(vec) => HashSet::from_iter(vec.iter().map(|key| { *key })),
 		Option::None => HashSet::new(),
@@ -215,12 +211,17 @@ fn unset_global_key_bind() -> bool {
 	if path.is_empty() {
 		return false;
 	}
-	let app = get_mut_app();
-	if app.config.file_key.is_none() {
+	let config = config_mut();
+	let entry = config.get_file_entry_mut(path.clone());
+	if entry.is_none() {
 		return false;
 	}
-	app.config.file_key.as_mut().unwrap().remove(&path);
-	app.hotkey.as_mut().unwrap().remove(&path);
+	let entry = entry.unwrap();
+	if entry.keys.is_empty() {
+		return false;
+	}
+	entry.keys.clear();
+	get_mut_app().hotkey.as_mut().unwrap().remove(&path);
 	return true;
 }
 
@@ -229,14 +230,12 @@ fn set_file_id() -> bool {
 	if path.is_empty() {
 		return false;
 	}
-	let app = get_mut_app();
-	if app.config.file_id.is_none() {
-		app.config.file_id = Option::Some(HashMap::new());
-	}
-	let id = app.config.file_id.as_ref().unwrap().get(&path);
-	let init = match id {
-		Option::Some(num) => num.to_string(),
-		Option::None => String::new(),
+	let init = match config().get_file_entry(path) {
+		Some(entry) => match entry.id {
+			Some(id) => id.to_string(),
+			None => String::new(),
+		},
+		None => String::new(),
 	};
 	set_popup(PopupComponent::Input(InputPopup::new(init, AwaitInput::SetFileId)));
 	return true;
@@ -251,12 +250,17 @@ fn unset_file_id() -> bool {
 	if app.rev_file_id.is_none() {
 		return false;
 	}
- 	let id = app.config.file_id.as_ref().unwrap().get(&path);
+	let entry = config_mut().get_file_entry_mut(path);
+	if entry.is_none() {
+		return false;
+	}
+	let entry = entry.unwrap();
+	let id = entry.id;
 	if id.is_none() {
 		return false;
 	}
 	let id = id.unwrap();
-	app.rev_file_id.as_mut().unwrap().remove(id);
-	app.config.file_id.as_mut().unwrap().remove(&path);
+	app.rev_file_id.as_mut().unwrap().remove(&id);
+	entry.id = Option::None;
 	return true;
 }

@@ -5,7 +5,7 @@ use pulsectl::controllers::SinkController;
 use std_semaphore::Semaphore;
 use uuid::Uuid;
 
-use crate::{component::{block::BlockComponent, popup::PopupComponent}, config::{create_config, SoundboardConfig}};
+use crate::{component::{block::BlockComponent, popup::PopupComponent}, config::SoundboardConfig};
 
 pub type CondvarPair = Arc<(Mutex<SharedCondvar>, Condvar)>;
 
@@ -36,7 +36,7 @@ pub enum Scanning {
 
 pub struct App {
 	// config
-	pub config: SoundboardConfig,
+	pub config: Option<SoundboardConfig>,
 	pub hotkey: Option<HashMap<String, Vec<Keyboard>>>,
 	pub stopkey: Option<Vec<Keyboard>>,
 	// states
@@ -96,7 +96,7 @@ static mut APP: App = create_app();
 const fn create_app() -> App {
 	App {
 		// config
-		config: create_config(),
+		config: Option::None,
 		hotkey: Option::None,
 		stopkey: Option::None,
 		// states
@@ -133,4 +133,12 @@ pub fn get_mut_app() -> &'static mut App {
 
 pub fn get_app() -> &'static App {
 	unsafe { &*(addr_of!(APP)) }
+}
+
+pub fn config() -> &'static SoundboardConfig {
+	get_app().config.as_ref().unwrap()
+}
+
+pub fn config_mut() -> &'static mut SoundboardConfig {
+	get_mut_app().config.as_mut().unwrap()
 }

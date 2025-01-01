@@ -1,6 +1,6 @@
 use ratatui::{layout::Rect, style::{Color, Style}, widgets::Paragraph, Frame};
 
-use crate::state::get_mut_app;
+use crate::state::config;
 
 use super::BlockRenderArea;
 
@@ -14,10 +14,10 @@ impl Default for HelpBlock {
 
 impl BlockRenderArea for HelpBlock {
 	fn render_area(&mut self, f: &mut Frame, area: Rect) {
-		let app = get_mut_app();
+		let config = config();
 		let mut text = "? for help, q to quit".to_owned();
-		if app.config.stop_key.is_some() {
-			let mut keys = app.config.stop_key.as_mut().unwrap().clone();
+		if !config.stop_key.is_empty() {
+			let mut keys = Vec::from_iter(config.stop_key.clone().into_iter());
 			keys.sort();
 			text += &format!(", {} to stop", keys.join(" + "));
 		}

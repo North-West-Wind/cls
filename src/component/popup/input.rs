@@ -5,7 +5,7 @@ use normpath::PathExt;
 use ratatui::{style::{Color, Style}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 use tui_input::{backend::crossterm::EventHandler, Input};
 
-use crate::{state::{get_mut_app, Scanning}, util::{selected_file_path, threads::spawn_scan_thread}};
+use crate::{config::FileEntry, state::{config_mut, get_mut_app, Scanning}, util::{selected_file_path, threads::spawn_scan_thread}};
 
 use super::{exit_popup, safe_centered_rect, PopupHandleKey, PopupHandlePaste, PopupRender};
 
@@ -116,19 +116,18 @@ fn send_add_tab(str: String) {
 	if norm.is_err() {
 		return;
 	}
-	app.config.tabs.push(norm.unwrap().into_os_string().into_string().unwrap());
-	app.set_tab_selected(app.config.tabs.len() - 1);
+	let config = config_mut();
+	config.tabs.push(norm.unwrap().into_os_string().into_string().unwrap());
+	app.set_tab_selected(config.tabs.len() - 1);
 	spawn_scan_thread(Scanning::One(app.tab_selected()));
 }
 
 fn send_loopback_1(str: String) {
-	let app = get_mut_app();
-	app.config.loopback_1 = str;
+	config_mut().loopback_1 = str;
 }
 
 fn send_loopback_2(str: String) {
-	let app = get_mut_app();
-	app.config.loopback_2 = str;
+	config_mut().loopback_2 = str;
 }
 
 fn send_file_id(str: String) {
@@ -150,5 +149,15 @@ fn send_file_id(str: String) {
 		return;
 	}
 	rev_map.insert(id, path.clone());
-	app.config.file_id.as_mut().unwrap().insert(path, id);
+	let config = config_mut();
+	match config.get_file_entry_mut(path.clone()) {
+		Some(entry) => {
+			entry.id = Some(id);
+		},
+		None => {
+			let mut entry = FileEntry::default();
+			entry.id = Some(id);
+			config.insert_file_entry(path, entry);
+		}
+	}
 }

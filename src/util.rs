@@ -1,10 +1,11 @@
-use std::{collections::HashMap, fs, path::Path, thread};
+use std::{collections::HashMap, path::Path, thread};
 
 use ffprobe::FfProbe;
 use file_format::{FileFormat, Kind};
 
-use crate::state::{get_app, get_mut_app};
+use crate::state::{config, get_app, get_mut_app};
 
+pub mod fs;
 pub mod global_input;
 pub mod pulseaudio;
 pub mod threads;
@@ -79,14 +80,15 @@ fn add_duration(tab: String) {
 
 pub fn scan_tab(index: usize) -> Result<(), std::io::Error> {
 	let app = get_mut_app();
-	if index >= app.config.tabs.len() {
+	let config = config();
+	if index >= config.tabs.len() {
 		return Ok(());
 	}
-	let tab = app.config.tabs[index].clone();
+	let tab = config.tabs[index].clone();
 	let mut files = vec![];
 	let path = Path::new(tab.as_str());
 	if path.is_dir() {
-		for entry in fs::read_dir(path)? {
+		for entry in std::fs::read_dir(path)? {
 			let file = entry?;
 			let longpath = file.path();
 			let fmt = FileFormat::from_file(longpath.clone());
@@ -110,7 +112,7 @@ pub fn scan_tab(index: usize) -> Result<(), std::io::Error> {
 pub fn scan_tabs() -> Result<(), std::io::Error> {
 	let app = get_mut_app();
 	app.files = Option::Some(HashMap::default());
-	for ii in 0..app.config.tabs.len() {
+	for ii in 0..app.config.as_ref().unwrap().tabs.len() {
 		scan_tab(ii)?;
 	}
 	Ok(())
@@ -121,10 +123,11 @@ pub fn selected_file_path() -> String {
 	if app.files.is_none() {
 		return String::new();
 	}
-	if app.tab_selected() >= app.config.tabs.len() {
+	let config = config();
+	if app.tab_selected() >= config.tabs.len() {
 		return String::new();
 	}
-	let tab = app.config.tabs[app.tab_selected()].clone();
+	let tab = config.tabs[app.tab_selected()].clone();
 	let files = app.files.as_ref().unwrap().get(&tab);
 	if files.is_none() {
 		return String::new();

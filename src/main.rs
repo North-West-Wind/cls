@@ -15,7 +15,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use state::{get_mut_app, Scanning, SharedCondvar};
+use state::{config, get_mut_app, Scanning, SharedCondvar};
 use util::threads::spawn_scan_thread;
 use clap::{command, Arg, ArgAction, Command};
 mod component;
@@ -107,17 +107,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if result.is_err() {
         panic!("{:?}", result.err());
     }
+    let config = config();
     app.sink_controller = Option::Some(load_sink_controller()?);
     if !app.edit {
         app.module_nums.push(load_null_sink()?);
-        if !app.config.loopback_1.is_empty() {
-            app.module_nums.push(loopback(app.config.loopback_1.clone())?);
+        if !config.loopback_1.is_empty() {
+            app.module_nums.push(loopback(config.loopback_1.clone())?);
         }
-        if !app.config.loopback_2.is_empty() {
-            app.module_nums.push(loopback(app.config.loopback_2.clone())?);
+        if !config.loopback_2.is_empty() {
+            app.module_nums.push(loopback(config.loopback_2.clone())?);
         }
     }
-    set_volume_percentage(app.config.volume);
+    set_volume_percentage(config.volume);
 
     app.running = true;
 

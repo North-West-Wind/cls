@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::{component::popup::{delete_tab::DeleteTabPopup, input::{AwaitInput, InputPopup}, set_popup, PopupComponent}, state::get_mut_app};
+use crate::{component::popup::{delete_tab::DeleteTabPopup, input::{AwaitInput, InputPopup}, set_popup, PopupComponent}, state::{config, config_mut, get_mut_app}};
 
 use super::{border_style, border_type, loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -27,8 +27,7 @@ impl Default for TabsBlock {
 
 impl BlockRenderArea for TabsBlock {
 	fn render_area(&mut self, f: &mut Frame, area: Rect) {
-		let app = get_mut_app();
-		let tabs = app.config.tabs.clone();
+		let tabs = config().tabs.clone();
 	
 		let mut spans: Vec<Span> = vec![];
 		for (ii, tab) in tabs.iter().enumerate() {
@@ -120,8 +119,7 @@ impl BlockHandleKey for TabsBlock {
 
 impl TabsBlock {
 	fn handle_remove(&self) -> bool {
-		let app = get_mut_app();
-		if self.selected < app.config.tabs.len() {
+		if self.selected < config().tabs.len() {
 			set_popup(PopupComponent::DeleteTab(DeleteTabPopup::default()));
 			return true;
 		}
@@ -131,10 +129,11 @@ impl TabsBlock {
 	fn handle_move(&mut self, right: bool, modify: bool) -> bool {
 		let delta = if right { 1 } else { -1 };
 		let app = get_mut_app();
-		let new_selected = loop_index(self.selected, delta, app.config.tabs.len());
+		let config = config_mut();
+		let new_selected = loop_index(self.selected, delta, config.tabs.len());
 		if self.selected != new_selected {
 			if modify {
-				app.config.tabs.swap(self.selected, new_selected as usize);
+				config.tabs.swap(self.selected, new_selected as usize);
 			}
 			self.selected = new_selected as usize;
 			app.set_file_selected(0);

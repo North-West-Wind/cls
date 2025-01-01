@@ -1,10 +1,10 @@
-use std::{cmp::max, collections::{HashMap, HashSet}};
+use std::{cmp::max, collections::HashSet};
 
 use crossterm::event::{KeyCode, KeyEvent};
 use mki::Keyboard;
 use ratatui::{style::{Color, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 
-use crate::{state::get_mut_app, util::{global_input::keyboard_to_string, notify_redraw, selected_file_path}};
+use crate::{config::FileEntry, state::{config_mut, get_mut_app}, util::{global_input::keyboard_to_string, notify_redraw, selected_file_path}};
 
 use super::{exit_popup, safe_centered_rect, PopupHandleGlobalKey, PopupHandleKey, PopupRender};
 
@@ -102,11 +102,17 @@ fn set_file_key_bind(recorded: &HashSet<Keyboard>) {
 		return;
 	}
 	let app = get_mut_app();
-	if app.config.file_key.is_none() {
-		app.config.file_key = Option::Some(HashMap::new());
+	let config = config_mut();
+	match config.get_file_entry_mut(path.clone()) {
+		Some(entry) => {
+			entry.keys = HashSet::from_iter(recorded.into_iter().map(|key| { keyboard_to_string(*key) }).collect::<Vec<String>>());
+		},
+		None => {
+			let mut entry = FileEntry::default();
+			entry.keys = HashSet::from_iter(recorded.into_iter().map(|key| { keyboard_to_string(*key) }).collect::<Vec<String>>());
+			config.insert_file_entry(path.clone(), entry);
+		}
 	}
-	let map = app.config.file_key.as_mut().unwrap();
-	map.insert(path.clone(), recorded.into_iter().map(|key| { keyboard_to_string(*key) }).collect::<Vec<String>>());
 	let mut keyboard = vec![];
 	for key in recorded {
 		keyboard.push(*key);
@@ -116,7 +122,7 @@ fn set_file_key_bind(recorded: &HashSet<Keyboard>) {
 
 fn set_stop_key_bind(recorded: &HashSet<Keyboard>) {
 	let app = get_mut_app();
-	app.config.stop_key = Option::Some(recorded.into_iter().map(|key| { keyboard_to_string(*key) }).collect::<Vec<String>>());
+	config_mut().stop_key = HashSet::from_iter(recorded.into_iter().map(|key| { keyboard_to_string(*key) }).collect::<Vec<String>>());
 	let mut keyboard = vec![];
 	for key in recorded {
 		keyboard.push(*key);

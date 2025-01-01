@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Style}, text::{Line, Text}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 
-use crate::state::get_mut_app;
+use crate::state::{config_mut, get_mut_app};
 
 use super::{exit_popup, PopupHandleKey, PopupRender};
 
@@ -51,10 +51,11 @@ impl PopupHandleKey for DeleteTabPopup {
 
 fn delete_tab() {
 	let app = get_mut_app();
+	let config = config_mut();
 	let selected = app.tab_selected();
-	app.files.as_mut().unwrap().remove(&app.config.tabs[selected]);
-	app.config.tabs.remove(selected);
-	if selected >= app.config.tabs.len() && app.config.tabs.len() != 0 {
-		app.set_tab_selected(app.config.tabs.len() - 1);
+	app.files.as_mut().unwrap().remove(&config.tabs[selected]);
+	config.tabs.remove(selected);
+	if selected >= config.tabs.len() && config.tabs.len() != 0 {
+		app.set_tab_selected(config.tabs.len() - 1);
 	}
 }

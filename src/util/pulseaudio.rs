@@ -1,11 +1,11 @@
-use std::{process::{Command, Stdio}, thread, time::Duration};
+use std::{path::Path, process::{Command, Stdio}, thread, time::Duration};
 
 use libpulse_binding::volume::Volume;
 use nix::{sys::signal::{self, Signal}, unistd::Pid};
 use pulsectl::controllers::{DeviceControl, SinkController};
 use uuid::Uuid;
 
-use crate::{constant::APP_NAME, state::{get_app, get_mut_app}, util::ffprobe_info};
+use crate::{constant::APP_NAME, state::{config, get_app, get_mut_app}, util::ffprobe_info};
 
 use super::notify_redraw;
 
@@ -69,6 +69,7 @@ pub fn play_file(path: &str) {
 	thread::spawn(move || {
 		let uuid = Uuid::new_v4();
 		let app = get_mut_app();
+		let config = config();
 
 		if app.edit {
 			app.playing_file.as_mut().unwrap().insert(uuid, "Edit-only mode!".to_string());
@@ -84,7 +85,7 @@ pub fn play_file(path: &str) {
 			let info = info.unwrap();
 			let stream = info.streams.iter().find(|stream| stream.codec_type == Option::Some("audio".to_string()));
 			if stream.is_some() {
-				let using_semaphore = app.config.playlist_mode;
+				let using_semaphore = config.playlist_mode;
 				app.playing_file.as_mut().unwrap().insert(uuid, string.clone());
 				notify_redraw();
 				if using_semaphore {
@@ -102,12 +103,18 @@ pub fn play_file(path: &str) {
 					"-"
 				]).stdout(Stdio::piped()).spawn().unwrap();
 
-				let volume: u16;
-				if app.config.file_volume.is_some() {
-					volume = (app.config.file_volume.as_ref().unwrap().get(&string).unwrap_or(&100) * 65535 / 100) as u16;
-				} else {
-					volume = 65535;
-				}
+				let path = Path::new(&string);
+				let parent = path.parent().unwrap().to_str().unwrap().to_string();
+				let name = path.file_name().unwrap().to_os_string().into_string().unwrap();
+				let volume: u16 = match config.files.get(&parent) {
+					Some(map) => {
+						match map.get(&name) {
+							Some(entry) => (entry.volume * 65535 / 100) as u16,
+							None => 65535,
+						}
+					},
+					None => 65535
+				};
 		
 				let mut pacat_child = Command::new("pacat").args([
 					"-d",

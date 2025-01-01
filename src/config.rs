@@ -1,53 +1,28 @@
-use std::{collections::HashMap, default::Default, vec::Vec};
-use serde::{Serialize, Deserialize};
+use std::{collections::HashMap, io::Write, path::{Path, PathBuf}};
+use migrate::migrate_config;
+pub use migrate::SoundboardConfig;
+pub use migrate::FileEntry;
 
 use crate::{constant::APP_NAME, util::global_input::string_to_keyboard, state::{get_app, get_mut_app}};
 
-#[derive(Serialize, Deserialize, Clone)]
-#[serde(default)]
-pub struct SoundboardConfig {
-	pub tabs: Vec<String>,
-	pub volume: u32,
-	pub file_volume: Option<HashMap<String, usize>>,
-	pub file_key: Option<HashMap<String, Vec<String>>>,
-	pub file_id: Option<HashMap<String, u32>>,
-	pub stop_key: Option<Vec<String>>,
-	pub loopback_1: String,
-	pub loopback_2: String,
-	pub playlist_mode: bool,
-}
+mod migrate;
 
-impl Default for SoundboardConfig {
-	fn default() -> Self {
-		create_config()
-	}
-}
-
-pub const fn create_config() -> SoundboardConfig {
-	SoundboardConfig {
-		tabs: vec![],
-		volume: 100,
-		file_volume: Option::None,
-		file_key: Option::None,
-		file_id: Option::None,
-		stop_key: Option::None,
-		loopback_1: String::new(),
-		loopback_2: String::new(),
-		playlist_mode: false,
-	}
+pub(self) fn get_config_path(toml: bool) -> PathBuf {
+	dirs::config_dir().unwrap().join(APP_NAME).join(if toml { "config.toml" } else { "config.json" })
 }
 
 pub fn load() -> Result<(), Box<dyn std::error::Error>> {
 	let app = get_mut_app();
-	let cfg: SoundboardConfig = confy::load(APP_NAME, "config")?;
-	(*app).config = cfg.clone();
+	let cfg: SoundboardConfig = migrate_config();
 	app.hotkey = Option::Some(HashMap::new());
+	app.rev_file_id = Option::Some(HashMap::new());
 
-	if cfg.file_key.is_some() {
-		for (path, keys) in cfg.file_key.unwrap() {
+	for (parent, map) in cfg.files.iter() {
+		for (name, entry) in map {
+			let path = Path::new(parent).join(name).to_str().unwrap().to_string();
 			let mut keyboard = vec![];
-			let key_len = keys.len();
-			for key in keys {
+			let key_len = entry.keys.len();
+			for key in entry.keys.clone() {
 				let result = string_to_keyboard(key);
 				if result.is_some() {
 					keyboard.push(result.unwrap());
@@ -58,13 +33,17 @@ pub fn load() -> Result<(), Box<dyn std::error::Error>> {
 			if keyboard.len() != key_len {
 				continue;
 			}
-			app.hotkey.as_mut().unwrap().insert(path, keyboard);
+			app.hotkey.as_mut().unwrap().insert(path.clone(), keyboard);
+
+			if entry.id.is_some() {
+				app.rev_file_id.as_mut().unwrap().insert(entry.id.unwrap(), path);
+			}
 		}
 	}
 
-	if cfg.stop_key.is_some() {
+	if cfg.stop_key.len() > 0 {
 		let mut keyboard = vec![];
-		for key in cfg.stop_key.clone().unwrap() {
+		for key in cfg.stop_key.clone() {
 			let result = string_to_keyboard(key);
 			if result.is_some() {
 				keyboard.push(result.unwrap());
@@ -72,23 +51,22 @@ pub fn load() -> Result<(), Box<dyn std::error::Error>> {
 				break;
 			}
 		}
-		if keyboard.len() == cfg.stop_key.unwrap().len() {
+		if keyboard.len() == cfg.stop_key.len() {
 			app.stopkey = Option::Some(keyboard);
 		}
 	}
-
-	app.rev_file_id = Option::Some(HashMap::new());
-	if cfg.file_id.is_some() {
-		for (id, path) in cfg.file_id.unwrap() {
-			app.rev_file_id.as_mut().unwrap().insert(path, id);
-		}
-	}
+	(*app).config = Option::Some(cfg);
 
 	Ok(())
 }
 
 pub fn save() -> Result<(), Box<dyn std::error::Error>> {
-	let app = get_app();
-	confy::store(APP_NAME, "config", (*app).config.clone())?;
+	let serialized = serde_json::to_string(&get_app().config);
+	if serialized.is_ok() {
+		let output = std::fs::File::create(get_config_path(false).to_str().unwrap());
+		if output.is_ok() {
+			let _ = output.unwrap().write_all(serialized.unwrap().as_bytes());
+		}
+	}
 	Ok(())
 }

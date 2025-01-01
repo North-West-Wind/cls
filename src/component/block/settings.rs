@@ -3,7 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Padding, Paragraph}, Frame};
 use substring::Substring;
 
-use crate::{component::popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, config, state::{get_app, get_mut_app}};
+use crate::{component::popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, config, state::{config_mut, get_mut_app}};
 
 use super::{border_style, border_type, loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -25,7 +25,7 @@ impl Default for SettingsBlock {
 
 impl BlockRenderArea for SettingsBlock {
 	fn render_area(&mut self, f: &mut Frame, area: Rect) {
-		let app = get_app();
+		let config = config();
 
 		let mut block = Block::bordered()
 			.border_style(border_style(self.id))
@@ -40,17 +40,17 @@ impl BlockRenderArea for SettingsBlock {
 
 		let mut lines = vec![];
 		let stop_key;
-		if app.config.stop_key.is_none() {
+		if config.stop_key.is_empty() {
 			stop_key = "".to_string();
 		} else {
-			let mut keys = app.config.stop_key.as_ref().unwrap().clone();
+			let mut keys = Vec::from_iter(config.stop_key.clone().into_iter());
 			keys.sort();
 			stop_key = format!("{}", keys.join(" + "));
 		}
 		self.left_right_line("Stop Key".to_string(), stop_key, width as usize, &mut lines);
-		self.left_right_line("Loopback 1".to_string(), app.config.loopback_1.clone(), width as usize, &mut lines);
-		self.left_right_line("Loopback 2".to_string(), app.config.loopback_2.clone(), width as usize, &mut lines);
-		self.left_right_line("Playlist Mode".to_string(), app.config.playlist_mode.to_string(), width as usize, &mut lines);
+		self.left_right_line("Loopback 1".to_string(), config.loopback_1.clone(), width as usize, &mut lines);
+		self.left_right_line("Loopback 2".to_string(), config.loopback_2.clone(), width as usize, &mut lines);
+		self.left_right_line("Playlist Mode".to_string(), config.playlist_mode.to_string(), width as usize, &mut lines);
 		f.render_widget(Paragraph::new(lines).block(block), area);
 	}
 }
@@ -116,8 +116,8 @@ impl SettingsBlock {
 				return true;
 			},
 			3 => {
-				let app = get_mut_app();
-				app.config.playlist_mode = !app.config.playlist_mode;
+				let config = config_mut();
+				config.playlist_mode = !config.playlist_mode;
 				return true;
 			},
 			_ => false
@@ -126,22 +126,23 @@ impl SettingsBlock {
 
 	fn handle_delete(&mut self) -> bool {
 		let app = get_mut_app();
+		let config = config_mut();
 		match self.selected {
 			0 => {
-				app.config.stop_key = Option::None;
+				config.stop_key.clear();
 				app.stopkey = Option::None;
 				return true;
 			},
 			1 => {
-				app.config.loopback_1 = String::new();
+				config.loopback_1 = String::new();
 				return true;
 			},
 			2 => {
-				app.config.loopback_2 = String::new();
+				config.loopback_2 = String::new();
 				return true;
 			},
 			3 => {
-				app.config.playlist_mode = config::create_config().playlist_mode;
+				config.playlist_mode = false;
 				return true;
 			},
 			_ => false
