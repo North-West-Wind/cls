@@ -4,7 +4,7 @@ use constant::{MIN_HEIGHT, MIN_WIDTH};
 use signal_hook::iterator::Signals;
 use socket::{ensure_socket, listen_socket, send_exit, send_socket};
 use std_semaphore::Semaphore;
-use util::pulseaudio::{load_null_sink, load_sink_controller, loopback, set_volume_percentage, unload_modules};
+use util::pulseaudio::{load_null_sink, loopback, set_volume_percentage, unload_modules};
 use listener::{listen_events, listen_global_input};
 use ratatui::{
     backend::CrosstermBackend,
@@ -108,7 +108,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         panic!("{:?}", result.err());
     }
     let config = config();
-    app.sink_controller = Option::Some(load_sink_controller()?);
     if !app.edit {
         app.module_nums.push(load_null_sink()?);
         if !config.loopback_1.is_empty() {

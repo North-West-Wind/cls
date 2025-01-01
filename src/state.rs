@@ -1,7 +1,6 @@
 use std::{collections::HashMap, ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}};
 
 use mki::Keyboard;
-use pulsectl::controllers::SinkController;
 use std_semaphore::Semaphore;
 use uuid::Uuid;
 
@@ -55,7 +54,6 @@ pub struct App {
 	pub settings_opened: bool,
 	// pulseaudio
 	pub module_nums: Vec<String>,
-	pub sink_controller: Option<SinkController>,
 	// render states: files
 	pub files: Option<HashMap<String, Vec<(String, String)>>>,
 	pub scanning: Scanning,
@@ -114,7 +112,6 @@ const fn create_app() -> App {
 		popup: Option::None,
 		settings_opened: false,
 		// pulseaudio
-		sink_controller: Option::None,
 		module_nums: vec![],
 		// render states: files
 		files: Option::None,

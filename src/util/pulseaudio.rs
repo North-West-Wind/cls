@@ -1,18 +1,11 @@
 use std::{path::Path, process::{Command, Stdio}, thread, time::Duration};
 
-use libpulse_binding::volume::Volume;
 use nix::{sys::signal::{self, Signal}, unistd::Pid};
-use pulsectl::controllers::{DeviceControl, SinkController};
 use uuid::Uuid;
 
 use crate::{constant::APP_NAME, state::{config, get_app, get_mut_app}, util::ffprobe_info};
 
 use super::notify_redraw;
-
-
-pub fn load_sink_controller() -> Result<SinkController, Box<dyn std::error::Error>> {
-	Ok(SinkController::create()?)
-}
 
 pub fn load_null_sink() -> Result<String, Box<dyn std::error::Error>> {
 	let appname = APP_NAME;
@@ -51,17 +44,11 @@ pub fn unload_modules() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub fn set_volume_percentage(percentage: u32) {
-	let app = get_mut_app();
-	if app.sink_controller.is_none() {
-		return;
-	}
-	let controller = app.sink_controller.as_mut().unwrap();
-	let device = controller.get_device_by_name(APP_NAME);
-	if device.is_err() {
-		return;
-	}
-	let mut device = device.unwrap();
-	controller.set_device_volume_by_name(APP_NAME, device.volume.set(device.volume.len(), Volume(Volume::NORMAL.0 * percentage / 100)));
+	Command::new("pactl").args([
+		"set-sink-volume",
+		APP_NAME,
+		format!("{}%", percentage).as_str(),
+	]).spawn().unwrap();
 }
 
 pub fn play_file(path: &str) {
