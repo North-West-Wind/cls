@@ -1,9 +1,7 @@
-use std::{collections::HashMap, io, sync::{Arc, Condvar, Mutex}, thread::{self, JoinHandle}, time::Duration};
-use component::block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, volume::VolumeBlock, BlockComponent};
+use std::{io, thread::{self, JoinHandle}, time::Duration};
 use constant::{MIN_HEIGHT, MIN_WIDTH};
 use signal_hook::iterator::Signals;
 use socket::{ensure_socket, listen_socket, send_exit, send_socket};
-use std_semaphore::Semaphore;
 use util::pulseaudio::{load_null_sink, loopback, set_volume_percentage, unload_modules};
 use listener::{listen_events, listen_global_input};
 use ratatui::{
@@ -15,7 +13,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use state::{config, get_mut_app, Scanning, SharedCondvar};
+use state::{config, get_mut_app, Scanning};
 use util::threads::spawn_scan_thread;
 use clap::{command, Arg, ArgAction, Command};
 mod component;
@@ -69,30 +67,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         send_socket(subcommand.unwrap())?;
         return Ok(());
     }
-    let app = state::get_mut_app();
-    app.hidden = matches.get_flag("hidden");
-    app.edit = matches.get_flag("edit");
+    state::init_app(matches.get_flag("hidden"), matches.get_flag("edit"));
+    let app = get_mut_app();
 
     if app.hidden && app.edit {
         println!("`hidden` is read-only, but `edit` is write-only.");
         println!("You probably don't want this");
         return Ok(());
     }
-
-    app.pair = Option::Some(Arc::new((Mutex::new(SharedCondvar::default()), Condvar::new())));
-
-    // variables setup
-    app.blocks = vec![
-		BlockComponent::Volume(VolumeBlock::default()),
-		BlockComponent::Tabs(TabsBlock::default()),
-		BlockComponent::Files(FilesBlock::default()),
-        BlockComponent::Settings(SettingsBlock::default()),
-		BlockComponent::Help(HelpBlock::default()),
-        BlockComponent::Playing(PlayingBlock::default()),
-    ];
-    app.playing_file = Option::Some(HashMap::new());
-    app.playing_process = Option::Some(HashMap::new());
-    app.playing_semaphore = Option::Some(Semaphore::new(1));
     if !app.edit {
         ensure_socket();
         if !app.socket_holder {
@@ -103,10 +85,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // pulseaudio setup
-    let result = config::load();
-    if result.is_err() {
-        panic!("{:?}", result.err());
-    }
     let config = config();
     if !app.edit {
         app.module_nums.push(load_null_sink()?);
@@ -164,7 +142,7 @@ fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
         }
 
         let app = state::get_app();
-        let pair = app.pair.clone().unwrap();
+        let pair = app.pair.clone();
         while app.running {
             let (lock, cvar) = &*pair;
             let mut shared = lock.lock().unwrap();

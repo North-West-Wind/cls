@@ -50,7 +50,7 @@ impl BlockRenderArea for FilesBlock {
 			paragraph = Paragraph::new("Scanning this directory...\nComeback later :>").wrap(Wrap { trim: false });
 		} else {
 			let tab = config.tabs[app.tab_selected()].clone();
-			let files = app.files.as_ref().unwrap().get(&tab);
+			let files = app.files.get(&tab);
 			if files.is_none() {
 				paragraph = Paragraph::new("Failed to read this directory :<\nDoes it exist? Is it readable?").wrap(Wrap { trim: false });
 			} else if files.unwrap().len() == 0 {
@@ -135,16 +135,13 @@ impl BlockHandleKey for FilesBlock {
 impl FilesBlock {
 	fn play_file(&self, random: bool) -> bool {
 		let app = get_app();
-		if app.files.is_none() {
-			return false;
-		}
 		let selected = app.tab_selected();
 		let config = config();
 		if selected >= config.tabs.len() {
 			return false;
 		}
 		let tab = config.tabs[selected].clone();
-		let files = app.files.as_ref().unwrap().get(&tab);
+		let files = app.files.get(&tab);
 		if files.is_none() {
 			return false;
 		}
@@ -164,7 +161,7 @@ impl FilesBlock {
 
 	fn navigate_file(&mut self, dy: i32) -> bool {
 		let app = get_mut_app();
-		let files = app.files.as_ref().unwrap().get(&config().tabs[app.tab_selected()]);
+		let files = app.files.get(&config().tabs[app.tab_selected()]);
 		if files.is_none() {
 			return false;
 		}
@@ -197,7 +194,7 @@ fn set_global_key_bind() -> bool {
 		return false;
 	}
 	let app = get_app();
-	let hotkey = app.hotkey.as_ref().unwrap().get(&path);
+	let hotkey = app.hotkey.get(&path);
 	let recorded = match hotkey {
 		Option::Some(vec) => HashSet::from_iter(vec.iter().map(|key| { *key })),
 		Option::None => HashSet::new(),
@@ -221,7 +218,7 @@ fn unset_global_key_bind() -> bool {
 		return false;
 	}
 	entry.keys.clear();
-	get_mut_app().hotkey.as_mut().unwrap().remove(&path);
+	get_mut_app().hotkey.remove(&path);
 	return true;
 }
 
@@ -247,9 +244,6 @@ fn unset_file_id() -> bool {
 		return false;
 	}
 	let app = get_mut_app();
-	if app.rev_file_id.is_none() {
-		return false;
-	}
 	let entry = config_mut().get_file_entry_mut(path);
 	if entry.is_none() {
 		return false;
@@ -260,7 +254,7 @@ fn unset_file_id() -> bool {
 		return false;
 	}
 	let id = id.unwrap();
-	app.rev_file_id.as_mut().unwrap().remove(&id);
+	app.rev_file_id.remove(&id);
 	entry.id = Option::None;
 	return true;
 }

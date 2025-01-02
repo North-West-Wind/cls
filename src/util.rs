@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path, thread};
+use std::{path::Path, thread};
 
 use ffprobe::FfProbe;
 use file_format::{FileFormat, Kind};
@@ -30,7 +30,7 @@ pub fn ffprobe_info(path: &str) -> Option<FfProbe> {
 fn add_duration(tab: String) {
 	thread::spawn(move || {
 		let app = get_mut_app();
-		let files = app.files.as_ref().unwrap().get(&tab).unwrap();
+		let files = app.files.get(&tab).unwrap();
 		let mut new_files = vec![];
 		for (filename, _) in files {
 			let longpath = Path::new(&tab).join(filename);
@@ -73,7 +73,7 @@ fn add_duration(tab: String) {
 				new_files.push((filename.clone(), duration_str));
 			}
 		}
-		app.files.as_mut().unwrap().insert(tab, new_files);
+		app.files.insert(tab, new_files);
 		notify_redraw();
 	});
 }
@@ -103,7 +103,7 @@ pub fn scan_tab(index: usize) -> Result<(), std::io::Error> {
 			}
 		}
     files.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
-		app.files.as_mut().unwrap().insert(tab.clone(), files);
+		app.files.insert(tab.clone(), files);
 		add_duration(tab);
 	}
 	Ok(())
@@ -111,8 +111,7 @@ pub fn scan_tab(index: usize) -> Result<(), std::io::Error> {
 
 pub fn scan_tabs() -> Result<(), std::io::Error> {
 	let app = get_mut_app();
-	app.files = Option::Some(HashMap::default());
-	for ii in 0..app.config.as_ref().unwrap().tabs.len() {
+	for ii in 0..app.config.tabs.len() {
 		scan_tab(ii)?;
 	}
 	Ok(())
@@ -120,15 +119,12 @@ pub fn scan_tabs() -> Result<(), std::io::Error> {
 
 pub fn selected_file_path() -> String {
 	let app = get_app();
-	if app.files.is_none() {
-		return String::new();
-	}
 	let config = config();
 	if app.tab_selected() >= config.tabs.len() {
 		return String::new();
 	}
 	let tab = config.tabs[app.tab_selected()].clone();
-	let files = app.files.as_ref().unwrap().get(&tab);
+	let files = app.files.get(&tab);
 	if files.is_none() {
 		return String::new();
 	}
@@ -141,7 +137,7 @@ pub fn selected_file_path() -> String {
 
 pub fn notify_redraw() {
 	let app = get_app();
-	let pair = app.pair.clone().unwrap();
+	let pair = app.pair.clone();
 	let (lock, cvar) = &*pair;
 	let mut shared = lock.lock().unwrap();
 	shared.redraw = true;

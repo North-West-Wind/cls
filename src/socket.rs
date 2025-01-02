@@ -4,7 +4,7 @@ use clap::ArgMatches;
 use code::SocketCode;
 use normpath::PathExt;
 
-use crate::{config::{self, FileEntry}, constant::APP_NAME, state::{config_mut, get_app, get_mut_app, Scanning}, util::{fs::separate_parent_file, notify_redraw, pulseaudio::{play_file, set_volume_percentage, stop_all}, threads::spawn_scan_thread}};
+use crate::{config::FileEntry, constant::APP_NAME, state::{config_mut, get_app, get_mut_app, load_app_config, Scanning}, util::{fs::separate_parent_file, notify_redraw, pulseaudio::{play_file, set_volume_percentage, stop_all}, threads::spawn_scan_thread}};
 
 pub mod code;
 
@@ -83,10 +83,12 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 			return Ok(true);
 		},
 		ReloadConfig => {
-			let result = config::load();
-			if result.is_ok() {
-				notify_redraw();
-			}
+			let app = get_mut_app();
+			let (config, stopkey, hotkey, rev_file_id) = load_app_config();
+			app.config = config;
+			app.stopkey = stopkey;
+			app.hotkey = hotkey;
+			app.rev_file_id = rev_file_id;
 		},
 		AddTab => {
 			let mut path = String::new();
@@ -141,15 +143,13 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 				_ => chosen_index = app.tab_selected()
 			}
 			if code == DeleteTab {
-				let files = app.files.as_mut();
-				if files.is_some() {
-					files.unwrap().remove(&config.tabs[chosen_index]);
-					config.tabs.remove(chosen_index);
-					if app.tab_selected() >= config.tabs.len() && config.tabs.len() != 0 {
-						app.set_tab_selected(config.tabs.len() - 1);
-					}
-					notify_redraw();
+				let files = &mut app.files;
+				files.remove(&config.tabs[chosen_index]);
+				config.tabs.remove(chosen_index);
+				if app.tab_selected() >= config.tabs.len() && config.tabs.len() != 0 {
+					app.set_tab_selected(config.tabs.len() - 1);
 				}
+				notify_redraw();
 			} else {
 				if chosen_index < config.tabs.len() {
 					spawn_scan_thread(Scanning::One(chosen_index));
@@ -168,13 +168,11 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 			stream.read_exact(&mut bytes)?;
 			let id = u32::from_le_bytes(bytes);
 			let app = get_app();
-			if app.rev_file_id.is_some() {
-				let path = app.rev_file_id.as_ref().unwrap().get(&id);
-				if path.is_some() {
-					let path = path.unwrap();
-					if !path.is_empty() {
-						play_file(&path);
-					}
+			let path = app.rev_file_id.get(&id);
+			if path.is_some() {
+				let path = path.unwrap();
+				if !path.is_empty() {
+					play_file(&path);
 				}
 			}
 		},

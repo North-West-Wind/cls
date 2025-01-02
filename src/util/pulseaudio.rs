@@ -59,10 +59,10 @@ pub fn play_file(path: &str) {
 		let config = config();
 
 		if app.edit {
-			app.playing_file.as_mut().unwrap().insert(uuid, "Edit-only mode!".to_string());
+			app.playing_file.insert(uuid, "Edit-only mode!".to_string());
 			notify_redraw();
 			thread::sleep(Duration::from_secs(1));
-			app.playing_file.as_mut().unwrap().remove(&uuid);
+			app.playing_file.remove(&uuid);
 			notify_redraw();
 			return;
 		}
@@ -73,10 +73,10 @@ pub fn play_file(path: &str) {
 			let stream = info.streams.iter().find(|stream| stream.codec_type == Option::Some("audio".to_string()));
 			if stream.is_some() {
 				let using_semaphore = config.playlist_mode;
-				app.playing_file.as_mut().unwrap().insert(uuid, string.clone());
+				app.playing_file.insert(uuid, string.clone());
 				notify_redraw();
 				if using_semaphore {
-					app.playing_semaphore.as_ref().unwrap().acquire();
+					app.playing_semaphore.acquire();
 				}
 				let stream = stream.unwrap();
 
@@ -111,28 +111,27 @@ pub fn play_file(path: &str) {
 					format!("--volume={}", volume).as_str(),
 				]).stdin(Stdio::from(ffmpeg_child.stdout.unwrap())).stdout(Stdio::piped()).spawn().unwrap();
 
-				app.playing_process.as_mut().unwrap().insert(uuid, pacat_child.id());
+				app.playing_process.insert(uuid, pacat_child.id());
 
 				let _ = pacat_child.wait();
 				if using_semaphore {
-					app.playing_semaphore.as_ref().unwrap().release();
+					app.playing_semaphore.release();
 				}
 			}
 		}
-		app.playing_file.as_mut().unwrap().remove(&uuid);
-		app.playing_process.as_mut().unwrap().remove(&uuid);
+		app.playing_file.remove(&uuid);
+		app.playing_process.remove(&uuid);
 		notify_redraw();
 	});
 }
 
 pub fn stop_all() {
 	let app = get_mut_app();
-	let playing_process = app.playing_process.as_mut().unwrap();
-	for id in playing_process.values() {
+	for id in app.playing_process.values() {
 		signal::kill(Pid::from_raw(*id as i32), Signal::SIGTERM).unwrap();
 	}
-	playing_process.clear();
-	app.playing_file.as_mut().unwrap().clear();
+	app.playing_process.clear();
+	app.playing_file.clear();
 }
 
 pub fn loopback(sink: String) -> Result<String, Box<dyn std::error::Error>> {

@@ -21,7 +21,7 @@ impl Default for PlayingBlock {
 impl BlockRender for PlayingBlock {
 	fn render(&self, f: &mut Frame) {
 		let app = get_app();
-		let playing = app.playing_file.as_ref().unwrap();
+		let playing = &app.playing_file;
 		if playing.len() == 0 {
 			return;
 		}

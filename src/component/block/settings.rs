@@ -130,7 +130,7 @@ impl SettingsBlock {
 		match self.selected {
 			0 => {
 				config.stop_key.clear();
-				app.stopkey = Option::None;
+				app.stopkey.clear();
 				return true;
 			},
 			1 => {

@@ -37,14 +37,14 @@ pub fn listen_global_input() {
 		if app.popup.as_ref().is_some_and(|popup| { popup.has_global_key_handler() }) {
 			app.popup.as_mut().unwrap().handle_global_key(key);
 			notify_redraw();
-		} else if app.hotkey.is_some() {
-			for (path, keys) in app.hotkey.as_ref().unwrap() {
+		} else if !app.hotkey.is_empty() {
+			for (path, keys) in &app.hotkey {
 				if keys.iter().all(|key| { key.is_pressed() }) {
 					play_file(path);
 				}
 			}
-			if app.stopkey.is_some() && !app.edit {
-				if app.stopkey.as_ref().unwrap().iter().all(|key| { key.is_pressed() }) {
+			if !app.stopkey.is_empty() && !app.edit {
+				if app.stopkey.iter().all(|key| { key.is_pressed() }) {
 					stop_all();
 				}
 			}

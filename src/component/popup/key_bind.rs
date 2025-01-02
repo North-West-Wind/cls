@@ -117,7 +117,7 @@ fn set_file_key_bind(recorded: &HashSet<Keyboard>) {
 	for key in recorded {
 		keyboard.push(*key);
 	}
-	app.hotkey.as_mut().unwrap().insert(path, keyboard);
+	app.hotkey.insert(path, keyboard);
 }
 
 fn set_stop_key_bind(recorded: &HashSet<Keyboard>) {
@@ -127,6 +127,6 @@ fn set_stop_key_bind(recorded: &HashSet<Keyboard>) {
 	for key in recorded {
 		keyboard.push(*key);
 	}
-	app.stopkey = Option::Some(keyboard);
+	app.stopkey.clear();
 	notify_redraw();
 }

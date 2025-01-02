@@ -53,7 +53,7 @@ fn delete_tab() {
 	let app = get_mut_app();
 	let config = config_mut();
 	let selected = app.tab_selected();
-	app.files.as_mut().unwrap().remove(&config.tabs[selected]);
+	app.files.remove(&config.tabs[selected]);
 	config.tabs.remove(selected);
 	if selected >= config.tabs.len() && config.tabs.len() != 0 {
 		app.set_tab_selected(config.tabs.len() - 1);

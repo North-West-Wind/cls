@@ -1,10 +1,10 @@
-use std::{collections::HashMap, ptr::{addr_of, addr_of_mut}, sync::{Arc, Condvar, Mutex}};
+use std::{collections::HashMap, path::Path, sync::{Arc, Condvar, Mutex}};
 
 use mki::Keyboard;
 use std_semaphore::Semaphore;
 use uuid::Uuid;
 
-use crate::{component::{block::BlockComponent, popup::PopupComponent}, config::SoundboardConfig};
+use crate::{component::{block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, volume::VolumeBlock, BlockComponent}, popup::PopupComponent}, config::{load, SoundboardConfig}, util::global_input::string_to_keyboard};
 
 pub type CondvarPair = Arc<(Mutex<SharedCondvar>, Condvar)>;
 
@@ -35,14 +35,14 @@ pub enum Scanning {
 
 pub struct App {
 	// config
-	pub config: Option<SoundboardConfig>,
-	pub hotkey: Option<HashMap<String, Vec<Keyboard>>>,
-	pub stopkey: Option<Vec<Keyboard>>,
+	pub config: SoundboardConfig,
+	pub hotkey: HashMap<String, Vec<Keyboard>>,
+	pub stopkey: Vec<Keyboard>,
 	// states
 	pub running: bool,
 	pub error: String,
 	pub error_important: bool,
-	pub pair: Option<CondvarPair>,
+	pub pair: CondvarPair,
 	pub socket_holder: bool,
 	pub hidden: bool,
 	pub edit: bool,
@@ -55,19 +55,13 @@ pub struct App {
 	// pulseaudio
 	pub module_nums: Vec<String>,
 	// render states: files
-	pub files: Option<HashMap<String, Vec<(String, String)>>>,
+	pub files: HashMap<String, Vec<(String, String)>>,
 	pub scanning: Scanning,
-	pub rev_file_id: Option<HashMap<u32, String>>,
+	pub rev_file_id: HashMap<u32, String>,
 	// render states: playing
-	pub playing_file: Option<HashMap<Uuid, String>>,
-	pub playing_process: Option<HashMap<Uuid, u32>>,
-	pub playing_semaphore: Option<Semaphore>,
-}
-
-impl Default for App {
-	fn default() -> Self {
-		create_app()
-	}
+	pub playing_file: HashMap<Uuid, String>,
+	pub playing_process: HashMap<Uuid, u32>,
+	pub playing_semaphore: Semaphore,
 }
 
 impl App {
@@ -89,53 +83,108 @@ impl App {
 }
 
 // Global variables
-static mut APP: App = create_app();
+static mut APP: Option<App> = Option::None;
 
-const fn create_app() -> App {
-	App {
-		// config
-		config: Option::None,
-		hotkey: Option::None,
-		stopkey: Option::None,
-		// states
-		running: false,
-		error: String::new(),
-		error_important: false,
-		pair: Option::None,
-		socket_holder: false,
-		hidden: false,
-		edit: false,
-		// render states: root
-		blocks: vec![],
-		block_selected: 0,
-		selection_layer: SelectionLayer::Block,
-		popup: Option::None,
-		settings_opened: false,
-		// pulseaudio
-		module_nums: vec![],
-		// render states: files
-		files: Option::None,
-		scanning: Scanning::None,
-		rev_file_id: Option::None,
-		// render states: playing
-		playing_file: Option::None,
-		playing_process: Option::None,
-		playing_semaphore: Option::None,
+pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Vec<Keyboard>>, HashMap<u32, String>) {
+	let config = load();
+	let mut stopkey = vec![];
+	if config.stop_key.len() > 0 {
+		for key in config.stop_key.clone() {
+			let result = string_to_keyboard(key);
+			if result.is_some() {
+				stopkey.push(result.unwrap());
+			} else {
+				break;
+			}
+		}
+		if stopkey.len() != config.stop_key.len() {
+			stopkey.clear();
+		}
+	}
+	let mut hotkey = HashMap::new();
+	let mut rev_file_id = HashMap::new();
+	for (parent, map) in config.files.iter() {
+		for (name, entry) in map {
+			let path = Path::new(parent).join(name).to_str().unwrap().to_string();
+			let mut keyboard = vec![];
+			let key_len = entry.keys.len();
+			for key in entry.keys.clone() {
+				let result = string_to_keyboard(key);
+				if result.is_some() {
+					keyboard.push(result.unwrap());
+				} else {
+					break;
+				}
+			}
+			if keyboard.len() > 0 && keyboard.len() == key_len {
+				hotkey.insert(path.clone(), keyboard);
+			}
+
+			if entry.id.is_some() {
+				rev_file_id.insert(entry.id.unwrap(), path);
+			}
+		}
+	}
+	(config, stopkey, hotkey, rev_file_id)
+}
+
+pub fn init_app(hidden: bool, edit: bool) {
+	unsafe {
+		let (config, stopkey, hotkey, rev_file_id) = load_app_config();
+		let app = App {
+			// config
+			config,
+			hotkey,
+			stopkey,
+			// states
+			running: false,
+			error: String::new(),
+			error_important: false,
+			pair: Arc::new((Mutex::new(SharedCondvar::default()), Condvar::new())),
+			socket_holder: false,
+			hidden,
+			edit,
+			// render states: root
+			blocks: vec![
+				BlockComponent::Volume(VolumeBlock::default()),
+				BlockComponent::Tabs(TabsBlock::default()),
+				BlockComponent::Files(FilesBlock::default()),
+				BlockComponent::Settings(SettingsBlock::default()),
+				BlockComponent::Help(HelpBlock::default()),
+				BlockComponent::Playing(PlayingBlock::default()),
+			],
+			block_selected: 0,
+			selection_layer: SelectionLayer::Block,
+			popup: Option::None,
+			settings_opened: false,
+			// pulseaudio
+			module_nums: vec![],
+			// render states: files
+			files: HashMap::new(),
+			scanning: Scanning::None,
+			rev_file_id,
+			// render states: playing
+			playing_file: HashMap::new(),
+			playing_process: HashMap::new(),
+			playing_semaphore: Semaphore::new(1),
+		};
+	
+		APP = Option::Some(app);
 	}
 }
 
 pub fn get_mut_app() -> &'static mut App {
-	unsafe { &mut *(addr_of_mut!(APP)) }
+	unsafe { APP.as_mut().unwrap() }
 }
 
 pub fn get_app() -> &'static App {
-	unsafe { &*(addr_of!(APP)) }
+	unsafe { APP.as_ref().unwrap() }
 }
 
 pub fn config() -> &'static SoundboardConfig {
-	get_app().config.as_ref().unwrap()
+	&get_app().config
 }
 
 pub fn config_mut() -> &'static mut SoundboardConfig {
-	get_mut_app().config.as_mut().unwrap()
+	&mut get_mut_app().config
 }

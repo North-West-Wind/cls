@@ -141,7 +141,7 @@ fn send_file_id(str: String) {
 	}
 	let id = id.unwrap();
 	let app = get_mut_app();
-	let rev_map = app.rev_file_id.as_mut().unwrap();
+	let rev_map = &mut app.rev_file_id;
 	if rev_map.contains_key(&id) {
 		if rev_map.get(&id).unwrap() != &path {
 			app.error = "File ID must be unique".to_string();
