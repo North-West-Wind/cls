@@ -37,9 +37,9 @@ impl BlockRender for PlayingBlock {
 		Clear.render(block_area, f.buffer_mut());
 		let mut lines = vec![];
 		let playing_list = playing.values().collect::<Vec<&String>>();
-		for ii in 0..inner_height {
-			lines.push(Line::from(playing_list.get(ii as usize).unwrap().as_str()).style(Style::default().fg(Color::LightGreen)));
-		}
+		playing_list.iter().for_each(|playing_entry| {
+			lines.push(Line::from(playing_entry.as_str()).style(Style::default().fg(Color::LightGreen)));
+		});
 		let paragraph = Paragraph::new(Text::from(lines)).block(Block::bordered().border_type(BorderType::Rounded).title(format!("{} ({len})", self.title)).padding(Padding::horizontal(1)));
 		f.render_widget(paragraph, block_area);
 	}

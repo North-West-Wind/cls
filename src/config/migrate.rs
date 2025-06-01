@@ -43,11 +43,11 @@ pub(super) fn migrate_config() -> SoundboardConfig {
 fn read_version() -> u32 {
 	let settings = Config::builder()
 		.add_source(config::File::new(get_config_path(false).to_str().unwrap(), config::FileFormat::Json))
-		.set_default("version", 1).unwrap()
+		.set_default("version", 1).expect("Failed to set default version for config")
 		.build()
-		.unwrap();
+		.expect("Failed to build config");
 
-	settings.try_deserialize::<VersoinCheckConfig>().unwrap().version
+	settings.try_deserialize::<VersoinCheckConfig>().expect("Failed to parse config").version
 }
 
 fn migrate_v0() -> ConfigV1 {

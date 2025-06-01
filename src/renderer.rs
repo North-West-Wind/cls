@@ -41,9 +41,9 @@ pub fn ui(f: &mut Frame) {
 	}
 	app.blocks[4].render_area(f, chunks[3]);
 	app.blocks[5].render(f); // playing block render
-	if app.popup.is_some() {
-		app.popup.as_ref().unwrap().render(f);
-	}
+	app.popup.as_ref().inspect(|popup| {
+		popup.render(f);
+	});
 }
 
 fn draw_error(f: &mut Frame) {

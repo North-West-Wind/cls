@@ -30,24 +30,24 @@ pub fn ffprobe_info(path: &str) -> Option<FfProbe> {
 fn add_duration(tab: String) {
 	thread::spawn(move || {
 		let app = get_mut_app();
-		let files = app.files.get(&tab).unwrap();
+		let files = app.files.get(&tab);
+		if files.is_none() {
+			return;
+		}
 		let mut new_files = vec![];
-		for (filename, _) in files {
+		for (filename, _) in files.unwrap() {
 			let longpath = Path::new(&tab).join(filename);
 			let filepath = longpath.into_os_string().into_string().unwrap();
 			let info = ffprobe_info(filepath.as_str());
-			if info.is_some() {
-				let duration = info.unwrap().format.get_duration();
-				let mut duration_str: String;
-				if duration.is_some() {
-					let duration = duration.unwrap();
+			info.inspect(|info| {
+				let mut duration_str = String::new();
+				info.format.get_duration().inspect(|duration| {
 					let millis = duration.as_millis();
 					let hours = millis / (1000 * 60 * 60);
 					let minutes = millis / (1000 * 60) - hours * 60;
 					let seconds = millis / 1000 - hours * 60 * 60 - minutes * 60;
 					let millis = millis - ((hours * 60 + minutes) * 60 + seconds) * 1000;
 					let mut unit = "";
-					duration_str = String::new();
 					if hours > 0 {
 						duration_str += &format!("{:0>2}:", hours.to_string());
 					}
@@ -67,11 +67,9 @@ fn add_duration(tab: String) {
 						duration_str += &format!("{:0>3}", millis.to_string());
 					}
 					duration_str += unit;
-				} else {
-					duration_str = String::new();
-				}
+				});
 				new_files.push((filename.clone(), duration_str));
-			}
+			});
 		}
 		app.files.insert(tab, new_files);
 		notify_redraw();
@@ -92,15 +90,15 @@ pub fn scan_tab(index: usize) -> Result<(), std::io::Error> {
 			let file = entry?;
 			let longpath = file.path();
 			let fmt = FileFormat::from_file(longpath.clone());
-			if fmt.is_ok() {
-				match fmt.unwrap().kind() {
+			fmt.inspect(|fmt| {
+				match fmt.kind() {
 					Kind::Audio|Kind::Video => {
 						let filename = longpath.file_name().unwrap().to_os_string().into_string().unwrap();
 						files.push((filename, String::new()));
 					},
 					_ => (),
 				}
-			}
+			});
 		}
     files.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
 		app.files.insert(tab.clone(), files);
@@ -128,18 +126,18 @@ pub fn selected_file_path() -> String {
 	if files.is_none() {
 		return String::new();
 	}
-	let unwrapped = files.unwrap();
-	if app.file_selected() >= unwrapped.len() {
+	let files = files.unwrap();
+	if app.file_selected() >= files.len() {
 		return String::new();
 	}
-	return Path::new(&tab).join(&unwrapped[app.file_selected()].0).into_os_string().into_string().unwrap();
+	return Path::new(&tab).join(&files[app.file_selected()].0).into_os_string().into_string().unwrap();
 }
 
 pub fn notify_redraw() {
 	let app = get_app();
 	let pair = app.pair.clone();
 	let (lock, cvar) = &*pair;
-	let mut shared = lock.lock().unwrap();
+	let mut shared = lock.lock().expect("Failed to get shared mutex");
 	shared.redraw = true;
 	cvar.notify_all();
 	std::mem::drop(shared);

@@ -56,13 +56,9 @@ impl ConfigV1 {
 		let settings = Config::builder()
 			.add_source(config::File::new(get_config_path(false).to_str().unwrap(), config::FileFormat::Json))
 			.build()
-			.unwrap();
+			.expect("Failed to build config");
 	
-		let result = settings.try_deserialize::<ConfigV1>();
-		if result.is_err() {
-			panic!("{:?}", result.unwrap_err());
-		}
-		result.unwrap()
+		settings.try_deserialize::<ConfigV1>().expect("Failed to parse config")
 	}
 
 	pub(super) fn from_v0(config: ConfigV0) -> ConfigV1 {

@@ -39,12 +39,8 @@ impl ConfigV0 {
 		let settings = Config::builder()
 			.add_source(config::File::new(get_config_path(true).to_str().unwrap(), config::FileFormat::Toml))
 			.build()
-			.unwrap();
+			.expect("Failed to build config");
 	
-		let result = settings.try_deserialize::<ConfigV0>();
-		if result.is_err() {
-			panic!("{:?}", result.unwrap_err());
-		}
-		result.unwrap()
+		settings.try_deserialize::<ConfigV0>().expect("Failed to parse config")
 	}
 }

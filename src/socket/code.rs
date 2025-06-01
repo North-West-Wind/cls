@@ -73,11 +73,7 @@ impl SocketCode {
 		match self {
 			AddTab => {
 				let path = matches.get_one::<String>("dir");
-				if path.is_none() {
-					panic!("Missing `dir` argument");
-				} else {
-					buf.extend(path.unwrap().as_bytes());
-				}
+				buf.extend(path.expect("Missing `dir` argument").as_bytes());
 			},
 			DeleteTab|ReloadTab => {
 				let index = matches.get_one::<String>("index");
@@ -85,10 +81,7 @@ impl SocketCode {
 				let name = matches.get_one::<String>("name");
 				if index.is_some() {
 					let index = index.unwrap().parse::<u8>();
-					if index.is_err() {
-						panic!("{:?}", index.err().unwrap());
-					}
-					buf.extend([1, index.unwrap()]);
+					buf.extend([1, index.expect("Failed to parse index")]);
 				} else if path.is_some() {
 					let path = path.unwrap();
 					if path.is_empty() {
@@ -110,34 +103,16 @@ impl SocketCode {
 			},
 			Play => {
 				let path = matches.get_one::<String>("path");
-				if path.is_none() {
-					panic!("Missing `path` argument");
-				} else {
-					buf.extend(path.unwrap().as_bytes());
-				}
+				buf.extend(path.expect("Missing `path` argument").as_bytes());
 			},
 			PlayId => {
-				let id = matches.get_one::<String>("id");
-				if id.is_none() {
-					panic!("Missing `id` argument");
-				} else {
-					let id = id.unwrap().parse::<u32>();
-					if id.is_err() {
-						panic!("{:?}", id.err().unwrap());
-					}
-					buf.extend(id.unwrap().to_le_bytes());
-				}
+				let id = matches.get_one::<String>("id").expect("Missing `id` argument").parse::<u32>();
+				buf.extend(id.expect("Failed to parse ID").to_le_bytes());
 			},
 			SetVolume => {
-				let volume = matches.get_one::<String>("volume");
-				if volume.is_none() {
-					panic!("Missing `volume` argument");
-				}
-				let volume = volume.unwrap().parse::<i16>();
-				if volume.is_err() {
-					panic!("{:?}", volume.err().unwrap());
-				}
-				let volume = volume.unwrap();
+				let volume = matches.get_one::<String>("volume")
+					.expect("Missing `volume` argument").parse::<i16>()
+					.expect("Failed to parse volume");
 				let increment = matches.get_flag("increment");
 				if !increment && volume < 0 {
 					panic!("Volume is negative, but it's not in increment mode");

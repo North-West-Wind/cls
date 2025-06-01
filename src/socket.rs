@@ -8,13 +8,13 @@ use crate::{config::FileEntry, constant::APP_NAME, state::{config_mut, get_app, 
 
 pub mod code;
 
-fn socket_path() -> PathBuf {
+pub fn socket_path() -> PathBuf {
 	std::env::temp_dir().join(APP_NAME).join(format!("{APP_NAME}.sock"))
 }
 
 pub fn ensure_socket() {
 	if !socket_path().exists() {
-		let _ = std::fs::create_dir_all(socket_path().parent().unwrap());
+		let _ = std::fs::create_dir_all(socket_path().parent().expect("Failed to get socket path parent"));
 		get_mut_app().socket_holder = true;
 	}
 }
@@ -29,13 +29,14 @@ pub fn listen_socket() -> std::io::Result<()> {
 		match stream {
 			Ok(stream) => {
 				let result = handle_stream(stream);
-				if result.is_err() {
+				if !result.is_err_and(|err| {
 					if app.hidden {
-						println!("Socket error: {:?}", result.err().unwrap());
+						println!("Socket error: {:?}", err);
 					} else {
-						app.error = format!("Socket error: {:?}", result.err().unwrap());
+						app.error = format!("Socket error: {:?}", err);
 					}
-				} else if result.ok().unwrap() {
+					true
+				}) {
 					break;
 				}
 			}
@@ -96,12 +97,13 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 			if !path.is_empty() {
 				let app = get_mut_app();
 				let norm = Path::new(&path).normalize();
-				if norm.is_ok() {
+				norm.and_then(|norm| {
 					let config = config_mut();
-					config.tabs.push(norm.unwrap().into_os_string().into_string().unwrap());
+					config.tabs.push(norm.into_os_string().into_string().unwrap());
 					app.set_tab_selected(config.tabs.len() - 1);
 					spawn_scan_thread(Scanning::One(app.tab_selected()));
-				}
+					Ok(())
+				});
 			}
 		},
 		DeleteTab|ReloadTab => {
@@ -182,9 +184,9 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 		SetVolume => {
 			let mut args = [0; 4];
 			stream.read_exact(&mut args)?;
-			let first_two = args[0..2].try_into();
+			let first_two = args[0..2].try_into().expect("Failed to read volume bytes");
 			// this should never fail, right?
-			let volume = i16::from_le_bytes(first_two.unwrap());
+			let volume = i16::from_le_bytes(first_two);
 			let increment = args[2] == 1;
 			let has_file = args[3] == 1;
 

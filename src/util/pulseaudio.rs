@@ -48,7 +48,7 @@ pub fn set_volume_percentage(percentage: u32) {
 		"set-sink-volume",
 		APP_NAME,
 		format!("{}%", percentage).as_str(),
-	]).spawn().unwrap();
+	]).spawn();
 }
 
 pub fn play_file(path: &str) {
@@ -68,57 +68,58 @@ pub fn play_file(path: &str) {
 		}
 
 		let info = ffprobe_info(string.as_str());
-		if info.is_some() {
-			let info = info.unwrap();
-			let stream = info.streams.iter().find(|stream| stream.codec_type == Option::Some("audio".to_string()));
-			if stream.is_some() {
-				let using_semaphore = config.playlist_mode;
-				app.playing_file.insert(uuid, string.clone());
-				notify_redraw();
-				if using_semaphore {
-					app.playing_semaphore.acquire();
-				}
-				let stream = stream.unwrap();
+		info.inspect(|info| {
+			info.streams.iter()
+				.find(|stream| stream.codec_type == Option::Some("audio".to_string()))
+				.inspect(|stream| {
+					let using_semaphore = config.playlist_mode;
+					app.playing_file.insert(uuid, string.clone());
+					notify_redraw();
+					if using_semaphore {
+						app.playing_semaphore.acquire();
+					}
 
-				let ffmpeg_child = Command::new("ffmpeg").args([
-					"-loglevel",
-					"-8",
-					"-i",
-					string.as_str(),
-					"-f",
-					"s16le",
-					"-"
-				]).stdout(Stdio::piped()).spawn().unwrap();
+					let ffmpeg_child = Command::new("ffmpeg").args([
+						"-loglevel",
+						"-8",
+						"-i",
+						string.as_str(),
+						"-f",
+						"s16le",
+						"-"
+					]).stdout(Stdio::piped()).spawn().expect("Failed to spawn ffmpeg process");
 
-				let path = Path::new(&string);
-				let parent = path.parent().unwrap().to_str().unwrap().to_string();
-				let name = path.file_name().unwrap().to_os_string().into_string().unwrap();
-				let volume: u16 = match config.files.get(&parent) {
-					Some(map) => {
-						match map.get(&name) {
-							Some(entry) => (entry.volume * 65535 / 100) as u16,
-							None => 65535,
-						}
-					},
-					None => 65535
-				};
-		
-				let mut pacat_child = Command::new("pacat").args([
-					"-d",
-					APP_NAME,
-					format!("--channels={}", stream.channels.unwrap_or(2)).as_str(),
-					format!("--rate={}", stream.sample_rate.clone().unwrap()).as_str(),
-					format!("--volume={}", volume).as_str(),
-				]).stdin(Stdio::from(ffmpeg_child.stdout.unwrap())).stdout(Stdio::piped()).spawn().unwrap();
+					let path = Path::new(&string);
+					let parent = path.parent().unwrap().to_str().unwrap().to_string();
+					let name = path.file_name().unwrap().to_os_string().into_string().unwrap();
+					let volume: u16 = match config.files.get(&parent) {
+						Some(map) => {
+							match map.get(&name) {
+								Some(entry) => (entry.volume * 65535 / 100) as u16,
+								None => 65535,
+							}
+						},
+						None => 65535
+					};
+			
+					let mut pacat_child = Command::new("pacat").args([
+						"-d",
+						APP_NAME,
+						format!("--channels={}", stream.channels.unwrap_or(2)).as_str(),
+						format!("--rate={}", stream.sample_rate.clone().unwrap()).as_str(),
+						format!("--volume={}", volume).as_str(),
+					])
+						.stdin(Stdio::from(ffmpeg_child.stdout.expect("Failed to obtain ffmpeg stdout")))
+						.stdout(Stdio::piped()).spawn().expect("Failed to spawn pacat process");
 
-				app.playing_process.insert(uuid, pacat_child.id());
+					app.playing_process.insert(uuid, pacat_child.id());
 
-				let _ = pacat_child.wait();
-				if using_semaphore {
-					app.playing_semaphore.release();
-				}
-			}
-		}
+					let _ = pacat_child.wait();
+					if using_semaphore {
+						app.playing_semaphore.release();
+					}
+				});
+		});
 		app.playing_file.remove(&uuid);
 		app.playing_process.remove(&uuid);
 		notify_redraw();
@@ -128,7 +129,7 @@ pub fn play_file(path: &str) {
 pub fn stop_all() {
 	let app = get_mut_app();
 	for id in app.playing_process.values() {
-		signal::kill(Pid::from_raw(*id as i32), Signal::SIGTERM).unwrap();
+		signal::kill(Pid::from_raw(*id as i32), Signal::SIGTERM);
 	}
 	app.playing_process.clear();
 	app.playing_file.clear();

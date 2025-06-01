@@ -113,13 +113,12 @@ impl InputPopup {
 fn send_add_tab(str: String) {
 	let app = get_mut_app();
 	let norm = Path::new(&str).normalize();
-	if norm.is_err() {
-		return;
-	}
-	let config = config_mut();
-	config.tabs.push(norm.unwrap().into_os_string().into_string().unwrap());
-	app.set_tab_selected(config.tabs.len() - 1);
-	spawn_scan_thread(Scanning::One(app.tab_selected()));
+	norm.inspect(|norm| {
+		let config = config_mut();
+		config.tabs.push(norm.clone().into_os_string().into_string().unwrap());
+		app.set_tab_selected(config.tabs.len() - 1);
+		spawn_scan_thread(Scanning::One(app.tab_selected()));
+	});
 }
 
 fn send_loopback_1(str: String) {
@@ -136,28 +135,28 @@ fn send_file_id(str: String) {
 		return;
 	}
 	let id = u32::from_str_radix(&str, 10);
-	if id.is_err() {
-		return;
-	}
-	let id = id.unwrap();
-	let app = get_mut_app();
-	let rev_map = &mut app.rev_file_id;
-	if rev_map.contains_key(&id) {
-		if rev_map.get(&id).unwrap() != &path {
-			app.error = "File ID must be unique".to_string();
+	id.inspect(|id| {
+		let app = get_mut_app();
+		let rev_map = &mut app.rev_file_id;
+		if rev_map.get(id).is_some_and(|p| {
+			if p != &path {
+				app.error = "File ID must be unique".to_string();
+			}
+			true
+		}) {
+			return;
 		}
-		return;
-	}
-	rev_map.insert(id, path.clone());
-	let config = config_mut();
-	match config.get_file_entry_mut(path.clone()) {
-		Some(entry) => {
-			entry.id = Some(id);
-		},
-		None => {
-			let mut entry = FileEntry::default();
-			entry.id = Some(id);
-			config.insert_file_entry(path, entry);
+		rev_map.insert(*id, path.clone());
+		let config = config_mut();
+		match config.get_file_entry_mut(path.clone()) {
+			Some(entry) => {
+				entry.id = Some(*id);
+			},
+			None => {
+				let mut entry = FileEntry::default();
+				entry.id = Some(*id);
+				config.insert_file_entry(path, entry);
+			}
 		}
-	}
+	});
 }

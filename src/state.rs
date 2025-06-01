@@ -91,9 +91,10 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 	if config.stop_key.len() > 0 {
 		for key in config.stop_key.clone() {
 			let result = string_to_keyboard(key);
-			if result.is_some() {
-				stopkey.push(result.unwrap());
-			} else {
+			if !result.is_some_and(|result| {
+				stopkey.push(result);
+				true
+			}) {
 				break;
 			}
 		}
@@ -110,9 +111,10 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 			let key_len = entry.keys.len();
 			for key in entry.keys.clone() {
 				let result = string_to_keyboard(key);
-				if result.is_some() {
-					keyboard.push(result.unwrap());
-				} else {
+				if !result.is_some_and(|result| {
+					keyboard.push(result);
+					true
+				}) {
 					break;
 				}
 			}
@@ -120,9 +122,9 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 				hotkey.insert(path.clone(), keyboard);
 			}
 
-			if entry.id.is_some() {
-				rev_file_id.insert(entry.id.unwrap(), path);
-			}
+			entry.id.inspect(|id| {
+				rev_file_id.insert(*id, path);
+			});
 		}
 	}
 	(config, stopkey, hotkey, rev_file_id)

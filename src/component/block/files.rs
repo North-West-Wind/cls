@@ -51,31 +51,30 @@ impl BlockRenderArea for FilesBlock {
 		} else {
 			let tab = config.tabs[app.tab_selected()].clone();
 			let files = app.files.get(&tab);
-			if files.is_none() {
-				paragraph = Paragraph::new("Failed to read this directory :<\nDoes it exist? Is it readable?").wrap(Wrap { trim: false });
-			} else if files.unwrap().len() == 0 {
-				paragraph = Paragraph::new("There are no playable files in this directory :<").wrap(Wrap { trim: false });
-			} else {
+			paragraph = files.map_or_else(|| {
+				Paragraph::new("Failed to read this directory :<\nDoes it exist? Is it readable?").wrap(Wrap { trim: false })
+			}, |files| {
+				if files.len() == 0 {
+					return Paragraph::new("There are no playable files in this directory :<").wrap(Wrap { trim: false });
+				}
 				let mut lines = vec![];
-				for (ii, (file, duration)) in files.unwrap().iter().enumerate() {
+				for (ii, (file, duration)) in files.iter().enumerate() {
 					let mut spans = vec![];
 					let tab_selected = app.tab_selected();
 					let full_path = &Path::new(&config.tabs[tab_selected]).join(file).into_os_string().into_string().unwrap();
 					let entry = config.get_file_entry(full_path.clone());
-					if entry.is_some() {
-						let entry = entry.unwrap();
-						if entry.id.is_some() {
-							let id = entry.id.unwrap();
+					entry.inspect(|entry| {
+						entry.id.inspect(|id| {
 							spans.push(Span::from(format!("({})", id)).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)));
 							spans.push(Span::from(" "));
-						}
+						});
 						if entry.keys.len() > 0 {
 							let mut keys = Vec::from_iter(entry.keys.clone().into_iter());
 							keys.sort();
 							spans.push(Span::from(format!("{{{}}}", keys.join("+"))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
 							spans.push(Span::from(" "));
 						}
-					}
+					});
 					let style = if self.selected == ii {
 						Style::default().fg(Color::LightBlue).add_modifier(Modifier::REVERSED)
 					} else {
@@ -100,8 +99,8 @@ impl BlockRenderArea for FilesBlock {
 				} else if self.selected > self.range.1 as usize {
 					self.range = (self.selected as i32 - area.height as i32 + 5, self.selected as i32);
 				}
-				paragraph = Paragraph::new(lines).scroll((self.range.0 as u16, 0));
-			}
+				Paragraph::new(lines).scroll((self.range.0 as u16, 0))
+			});
 		}
 		f.render_widget(paragraph.block(block), area);
 	}
@@ -142,41 +141,38 @@ impl FilesBlock {
 		}
 		let tab = config.tabs[selected].clone();
 		let files = app.files.get(&tab);
-		if files.is_none() {
-			return false;
-		}
-		let unwrapped = files.unwrap();
-		let index;
-		if random {
-			index = rand::thread_rng().gen_range(0..unwrapped.len());
-		} else {
-			if self.selected >= unwrapped.len() {
-				return false;
+		return files.map_or_else(|| { false }, |files| {
+			let index;
+			if random {
+				index = rand::thread_rng().gen_range(0..files.len());
+			} else {
+				if self.selected >= files.len() {
+					return false;
+				}
+				index = self.selected;
 			}
-			index = self.selected;
-		}
-		util::pulseaudio::play_file(&Path::new(&tab).join(&unwrapped[index].0).into_os_string().into_string().unwrap());
-		return true;
+			util::pulseaudio::play_file(&Path::new(&tab).join(&files[index].0).into_os_string().into_string().unwrap());
+			true
+		});
 	}
 
 	fn navigate_file(&mut self, dy: i32) -> bool {
 		let app = get_mut_app();
 		let files = app.files.get(&config().tabs[app.tab_selected()]);
-		if files.is_none() {
-			return false;
-		}
-		let files = files.unwrap().len();
-		let new_selected;
-		if dy.abs() > 1 {
-			new_selected = min(files as i32 - 1, max(0, self.selected as i32 + dy)) as usize;
-		} else {
-			new_selected = loop_index(self.selected, dy, files);
-		}
-		if new_selected != self.selected {
-			self.selected = new_selected;
-			return true;
-		}
-		false
+		return files.map_or_else(|| { false }, |files| {
+			let files = files.len();
+			let new_selected;
+			if dy.abs() > 1 {
+				new_selected = min(files as i32 - 1, max(0, self.selected as i32 + dy)) as usize;
+			} else {
+				new_selected = loop_index(self.selected, dy, files);
+			}
+			if new_selected != self.selected {
+				self.selected = new_selected;
+				return true;
+			}
+			false
+		});
 	}
 
 	fn reload_tab(&self) -> bool {
@@ -210,16 +206,14 @@ fn unset_global_key_bind() -> bool {
 	}
 	let config = config_mut();
 	let entry = config.get_file_entry_mut(path.clone());
-	if entry.is_none() {
-		return false;
-	}
-	let entry = entry.unwrap();
-	if entry.keys.is_empty() {
-		return false;
-	}
-	entry.keys.clear();
-	get_mut_app().hotkey.remove(&path);
-	return true;
+	return entry.map_or_else(|| { false }, |entry| {
+		if entry.keys.is_empty() {
+			return false;
+		}
+		entry.keys.clear();
+		get_mut_app().hotkey.remove(&path);
+		true
+	});
 }
 
 fn set_file_id() -> bool {
@@ -245,16 +239,12 @@ fn unset_file_id() -> bool {
 	}
 	let app = get_mut_app();
 	let entry = config_mut().get_file_entry_mut(path);
-	if entry.is_none() {
-		return false;
-	}
-	let entry = entry.unwrap();
-	let id = entry.id;
-	if id.is_none() {
-		return false;
-	}
-	let id = id.unwrap();
-	app.rev_file_id.remove(&id);
-	entry.id = Option::None;
-	return true;
+	return entry.map_or_else(|| { false }, |entry| {
+		let id = entry.id;
+		return id.map_or_else(|| { false }, |id| {
+			app.rev_file_id.remove(&id);
+			entry.id = Option::None;
+			true
+		});
+	});
 }
