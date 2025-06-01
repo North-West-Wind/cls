@@ -25,11 +25,13 @@ impl Default for FileEntry {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(default)]
 pub struct ConfigV1 {
 	pub version: u32,
 	pub tabs: Vec<String>,
 	pub volume: u32,
 	pub stop_key: HashSet<String>,
+	pub loopback_default: bool,
 	pub loopback_1: String,
 	pub loopback_2: String,
 	pub playlist_mode: bool,
@@ -43,6 +45,7 @@ impl Default for ConfigV1 {
 			tabs: vec![],
 			volume: 100,
 			stop_key: HashSet::new(),
+			loopback_default: true,
 			loopback_1: String::new(),
 			loopback_2: String::new(),
 			playlist_mode: false,
@@ -66,6 +69,7 @@ impl ConfigV1 {
 		cfg.tabs = config.tabs;
 		cfg.volume = config.volume;
 		cfg.stop_key = HashSet::from_iter(config.stop_key.into_iter());
+		cfg.loopback_default = true;
 		cfg.loopback_1 = config.loopback_1;
 		cfg.loopback_2 = config.loopback_2;
 		cfg.playlist_mode = config.playlist_mode;

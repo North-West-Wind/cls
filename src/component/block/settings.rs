@@ -3,7 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Padding, Paragraph}, Frame};
 use substring::Substring;
 
-use crate::{component::popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, config, state::{config_mut, get_mut_app}};
+use crate::{component::popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, config, state::{config_mut, get_mut_app}, util::pulseaudio::{loopback, unload_module}};
 
 use super::{border_style, border_type, loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -48,6 +48,7 @@ impl BlockRenderArea for SettingsBlock {
 			stop_key = format!("{}", keys.join(" + "));
 		}
 		self.left_right_line("Stop Key".to_string(), stop_key, width as usize, &mut lines);
+		self.left_right_line("Loopback Default".to_string(), config.loopback_default.to_string(), width as usize, &mut lines);
 		self.left_right_line("Loopback 1".to_string(), config.loopback_1.clone(), width as usize, &mut lines);
 		self.left_right_line("Loopback 2".to_string(), config.loopback_2.clone(), width as usize, &mut lines);
 		self.left_right_line("Playlist Mode".to_string(), config.playlist_mode.to_string(), width as usize, &mut lines);
@@ -101,13 +102,29 @@ impl SettingsBlock {
 
 	fn handle_enter(&mut self) -> bool {
 		match self.selected {
+			// Stop key
 			0 => {
 				set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::Stop, HashSet::new())));
 				return true;
 			},
-			1|2 => {
+			// Loopback default toggle
+			1 => {
+				let config = config_mut();
+				config.loopback_default = !config.loopback_default;
+				let app = get_mut_app();
+				if config.loopback_default && app.module_loopback_default.is_empty() {
+					app.module_loopback_default = loopback("@DEFAULT_SINK@".to_string()).unwrap_or(String::new());
+				} else if !config.loopback_default && !app.module_loopback_default.is_empty() {
+					unload_module(&app.module_loopback_default).inspect(|_| {
+						app.module_loopback_default = String::new();
+					});
+				}
+				return true;
+			},
+			// Additional loopback
+			2|3 => {
 				let await_input;
-				if self.selected == 1 {
+				if self.selected == 2 {
 					await_input = AwaitInput::Loopback1;
 				} else {
 					await_input = AwaitInput::Loopback2;
@@ -115,7 +132,8 @@ impl SettingsBlock {
 				set_popup(PopupComponent::Input(InputPopup::new(String::new(), await_input)));
 				return true;
 			},
-			3 => {
+			// Playlist mode toggle
+			4 => {
 				let config = config_mut();
 				config.playlist_mode = !config.playlist_mode;
 				return true;
@@ -134,14 +152,31 @@ impl SettingsBlock {
 				return true;
 			},
 			1 => {
-				config.loopback_1 = String::new();
+				config.loopback_default = true;
+				if app.module_loopback_default.is_empty() {
+					app.module_loopback_default = loopback("@DEFAULT_SINK@".to_string()).unwrap_or(String::new());
+				}
 				return true;
 			},
 			2 => {
-				config.loopback_2 = String::new();
+				config.loopback_1 = String::new();
+				if !app.module_loopback_1.is_empty() {
+					unload_module(&app.module_loopback_1).inspect(|_| {
+						app.module_loopback_1 = String::new();
+					});
+				}
 				return true;
 			},
 			3 => {
+				config.loopback_2 = String::new();
+				if !app.module_loopback_2.is_empty() {
+					unload_module(&app.module_loopback_2).inspect(|_| {
+						app.module_loopback_2 = String::new();
+					});
+				}
+				return true;
+			},
+			4 => {
 				config.playlist_mode = false;
 				return true;
 			},

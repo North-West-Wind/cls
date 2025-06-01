@@ -4,7 +4,7 @@ use mki::Keyboard;
 use std_semaphore::Semaphore;
 use uuid::Uuid;
 
-use crate::{component::{block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, volume::VolumeBlock, BlockComponent}, popup::PopupComponent}, config::{load, SoundboardConfig}, util::global_input::string_to_keyboard};
+use crate::{component::{block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, volume::VolumeBlock, BlockComponent}, popup::PopupComponent}, config::{load, SoundboardConfig}, util::{global_input::string_to_keyboard, pulseaudio::unload_module}};
 
 pub type CondvarPair = Arc<(Mutex<SharedCondvar>, Condvar)>;
 
@@ -53,7 +53,10 @@ pub struct App {
 	pub popup: Option<PopupComponent>,
 	pub settings_opened: bool,
 	// pulseaudio
-	pub module_nums: Vec<String>,
+	pub module_null_sink: String,
+	pub module_loopback_default: String,
+	pub module_loopback_1: String,
+	pub module_loopback_2: String,
 	// render states: files
 	pub files: HashMap<String, Vec<(String, String)>>,
 	pub scanning: Scanning,
@@ -79,6 +82,13 @@ impl App {
 
 	pub fn set_tab_selected(&mut self, selected: usize) {
 		self.blocks[1].set_tab_selected(selected);
+	}
+
+	pub fn unload_modules(&self) {
+		unload_module(&self.module_loopback_default);
+		unload_module(&self.module_loopback_1);
+		unload_module(&self.module_loopback_2);
+		unload_module(&self.module_null_sink);
 	}
 }
 
@@ -160,7 +170,10 @@ pub fn init_app(hidden: bool, edit: bool) {
 			popup: Option::None,
 			settings_opened: false,
 			// pulseaudio
-			module_nums: vec![],
+			module_null_sink: String::new(),
+			module_loopback_default: String::new(),
+			module_loopback_1: String::new(),
+			module_loopback_2: String::new(),
 			// render states: files
 			files: HashMap::new(),
 			scanning: Scanning::None,

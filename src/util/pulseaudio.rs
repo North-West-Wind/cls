@@ -3,7 +3,7 @@ use std::{path::Path, process::{Command, Stdio}, thread, time::Duration};
 use nix::{sys::signal::{self, Signal}, unistd::Pid};
 use uuid::Uuid;
 
-use crate::{constant::APP_NAME, state::{config, get_app, get_mut_app}, util::ffprobe_info};
+use crate::{constant::APP_NAME, state::{config, get_mut_app}, util::ffprobe_info};
 
 use super::notify_redraw;
 
@@ -24,22 +24,18 @@ pub fn load_null_sink() -> Result<String, Box<dyn std::error::Error>> {
 	Ok(index)
 }
 
-pub fn unload_modules() -> Result<(), Box<dyn std::error::Error>> {
-	let app = get_app();
-	for module_num in &app.module_nums {
-		if module_num.is_empty() {
-			continue;
-		}
-		let output = Command::new("pactl").args([
-			"unload-module",
-			module_num.trim()
-		]).output()?;
-		
-		if !output.status.success() {
-			println!("Failed to unload module {}", module_num);
-		}
+pub fn unload_module(module: &str) -> Result<(), Box<dyn std::error::Error>> {
+	if module.trim().is_empty() {
+		return Ok(());
 	}
-
+	let output = Command::new("pactl").args([
+		"unload-module",
+		module.trim()
+	]).output()?;
+	
+	if !output.status.success() {
+		println!("Failed to unload module {}", module);
+	}
 	Ok(())
 }
 

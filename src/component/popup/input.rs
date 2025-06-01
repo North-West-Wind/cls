@@ -5,7 +5,7 @@ use normpath::PathExt;
 use ratatui::{style::{Color, Style}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 use tui_input::{backend::crossterm::EventHandler, Input};
 
-use crate::{config::FileEntry, state::{config_mut, get_mut_app, Scanning}, util::{selected_file_path, threads::spawn_scan_thread}};
+use crate::{config::FileEntry, state::{config_mut, get_mut_app, Scanning}, util::{pulseaudio::{loopback, unload_module}, selected_file_path, threads::spawn_scan_thread}};
 
 use super::{exit_popup, safe_centered_rect, PopupHandleKey, PopupHandlePaste, PopupRender};
 
@@ -52,8 +52,8 @@ impl PopupRender for InputPopup {
 			.scroll((0, scroll as u16))
 			.block(Block::bordered().border_type(BorderType::Rounded).title(match self.await_input {
 				AwaitInput::AddTab => "Add directory as tab",
-				AwaitInput::Loopback1 => "Loopback 1 (Restart)",
-				AwaitInput::Loopback2 => "Loopback 2 (Restart)",
+				AwaitInput::Loopback1 => "Loopback 1",
+				AwaitInput::Loopback2 => "Loopback 2",
 				AwaitInput::SetFileId => "File ID",
 				_ => "Input"
 			}).padding(Padding::horizontal(1)).style(Style::default().fg(Color::Green)));
@@ -122,11 +122,35 @@ fn send_add_tab(str: String) {
 }
 
 fn send_loopback_1(str: String) {
-	config_mut().loopback_1 = str;
+	let config = config_mut();
+	config.loopback_1 = str;
+	
+	let app = get_mut_app();
+	if !app.module_loopback_1.is_empty() {
+		unload_module(&app.module_loopback_1).inspect(|_| {
+			app.module_loopback_1 = String::new();
+		});
+
+		if !config.loopback_1.is_empty() {
+			app.module_loopback_1 = loopback(config.loopback_1.clone()).unwrap_or(String::new());
+		}
+	}
 }
 
 fn send_loopback_2(str: String) {
-	config_mut().loopback_2 = str;
+	let config = config_mut();
+	config.loopback_2 = str;
+	
+	let app = get_mut_app();
+	if !app.module_loopback_2.is_empty() {
+		unload_module(&app.module_loopback_2).inspect(|_| {
+			app.module_loopback_2 = String::new();
+		});
+
+		if !config.loopback_1.is_empty() {
+			app.module_loopback_2 = loopback(config.loopback_2.clone()).unwrap_or(String::new());
+		}
+	}
 }
 
 fn send_file_id(str: String) {

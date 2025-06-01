@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use super::get_config_path;
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(default)]
 pub struct ConfigV0 {
 	pub tabs: Vec<String>,
 	pub volume: u32,

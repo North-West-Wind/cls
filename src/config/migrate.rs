@@ -14,7 +14,8 @@ mod migrate1;
 
 pub type SoundboardConfig = migrate1::ConfigV1;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
+#[serde(default)]
 struct VersoinCheckConfig {
 	version: u32,
 }

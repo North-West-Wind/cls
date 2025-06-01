@@ -4,7 +4,7 @@ use std::{io, thread::{self, JoinHandle}, time::Duration};
 use constant::{MIN_HEIGHT, MIN_WIDTH};
 use signal_hook::iterator::Signals;
 use socket::{ensure_socket, listen_socket, send_exit, send_socket, socket_path};
-use util::pulseaudio::{load_null_sink, loopback, set_volume_percentage, unload_modules};
+use util::pulseaudio::{load_null_sink, loopback, set_volume_percentage};
 use listener::{listen_events, listen_global_input};
 use ratatui::{
 	backend::CrosstermBackend,
@@ -98,12 +98,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// PulseAudio setup
 	let config = config();
 	if !app.edit {
-		app.module_nums.push(load_null_sink()?);
+		app.module_null_sink = load_null_sink()?;
+		if config.loopback_default {
+			app.module_loopback_default = loopback("@DEFAULT_SINK@".to_string())?;
+		}
 		if !config.loopback_1.is_empty() {
-			app.module_nums.push(loopback(config.loopback_1.clone())?);
+			app.module_loopback_1 = loopback(config.loopback_1.clone())?;
 		}
 		if !config.loopback_2.is_empty() {
-			app.module_nums.push(loopback(config.loopback_2.clone())?);
+			app.module_loopback_2 = loopback(config.loopback_2.clone())?;
 		}
 	}
 	set_volume_percentage(config.volume);
@@ -131,7 +134,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	}
 
 	// Finish up PulseAudio
-	unload_modules()?;
+	app.unload_modules();
 	if !app.hidden {
 		// Save config if not hidden
 		config::save();
