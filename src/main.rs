@@ -1,5 +1,3 @@
-#![allow(unused_must_use)]
-
 use std::{io, thread::{self, JoinHandle}, time::Duration};
 use constant::{MIN_HEIGHT, MIN_WIDTH};
 use signal_hook::iterator::Signals;
@@ -124,13 +122,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	if !app.hidden {
 		// If not hidden, we need to render the UI
 		let draw_thread = spawn_drawing_thread();
-		draw_thread.join();
+		draw_thread.join().ok();
 	}
 	// Wait for all threads to end before closing
-	listen_thread.join();
+	listen_thread.join().ok();
 	if socket_thread.is_some() {
-		send_exit();
-		socket_thread.unwrap().join();
+		send_exit().ok();
+		socket_thread.unwrap().join().ok();
 	}
 
 	// Finish up PulseAudio
@@ -152,7 +150,7 @@ fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
 		let mut terminal = Terminal::new(backend)?;
 
 		// Check minimum terminal size
-		let size = terminal.size().expect("Failed to get terminal size");
+		let size = terminal.size()?;
 		if size.width < MIN_WIDTH || size.height < MIN_HEIGHT {
 			let width = size.width;
 			let height = size.height;
@@ -189,16 +187,15 @@ fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
 }
 
 // A thread for listening for inputs
-fn spawn_listening_thread() -> JoinHandle<Result<(), io::Error>> {
-	return thread::spawn(move || -> Result<(), io::Error> {
+fn spawn_listening_thread() -> JoinHandle<()> {
+	return thread::spawn(move || {
 		listen_global_input();
-		listen_events()?;
-		Ok(())
+		listen_events().ok();
 	});
 }
 
 // A thread for listening for signals
-fn spawn_signal_thread() -> Result<JoinHandle<()>, Box<dyn std::error::Error>> {
+fn spawn_signal_thread() -> Result<JoinHandle<()>, io::Error> {
 	use signal_hook::consts::*;
 	let mut signals = Signals::new([SIGINT, SIGTERM])?;
 	return Ok(thread::spawn(move || {
@@ -216,9 +213,8 @@ fn spawn_signal_thread() -> Result<JoinHandle<()>, Box<dyn std::error::Error>> {
 }
 
 // A thread for listening for socket (IPC)
-fn spawn_socket_thread() -> JoinHandle<Result<(), io::Error>> {
-	return thread::spawn(move || -> Result<(), io::Error> {
-		listen_socket()?;
-		Ok(())
+fn spawn_socket_thread() -> JoinHandle<()> {
+	return thread::spawn(move || {
+		listen_socket().ok();
 	});
 }

@@ -85,10 +85,10 @@ impl App {
 	}
 
 	pub fn unload_modules(&self) {
-		unload_module(&self.module_loopback_default);
-		unload_module(&self.module_loopback_1);
-		unload_module(&self.module_loopback_2);
-		unload_module(&self.module_null_sink);
+		unload_module(&self.module_loopback_default).ok();
+		unload_module(&self.module_loopback_1).ok();
+		unload_module(&self.module_loopback_2).ok();
+		unload_module(&self.module_null_sink).ok();
 	}
 }
 

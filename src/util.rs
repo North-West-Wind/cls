@@ -89,16 +89,14 @@ pub fn scan_tab(index: usize) -> Result<(), std::io::Error> {
 		for entry in std::fs::read_dir(path)? {
 			let file = entry?;
 			let longpath = file.path();
-			let fmt = FileFormat::from_file(longpath.clone());
-			fmt.inspect(|fmt| {
-				match fmt.kind() {
-					Kind::Audio|Kind::Video => {
-						let filename = longpath.file_name().unwrap().to_os_string().into_string().unwrap();
-						files.push((filename, String::new()));
-					},
-					_ => (),
-				}
-			});
+			let Ok(fmt) = FileFormat::from_file(longpath.clone()) else { continue; };
+			match fmt.kind() {
+				Kind::Audio|Kind::Video => {
+					let filename = longpath.file_name().unwrap().to_os_string().into_string().unwrap();
+					files.push((filename, String::new()));
+				},
+				_ => (),
+			}
 		}
     files.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
 		app.files.insert(tab.clone(), files);

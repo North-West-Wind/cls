@@ -26,21 +26,12 @@ pub fn listen_socket() -> std::io::Result<()> {
 		if !app.running {
 			break;
 		}
-		match stream {
-			Ok(stream) => {
-				let result = handle_stream(stream);
-				if !result.is_err_and(|err| {
-					if app.hidden {
-						println!("Socket error: {:?}", err);
-					} else {
-						app.error = format!("Socket error: {:?}", err);
-					}
-					true
-				}) {
-					break;
-				}
-			}
-			Err(_) => {}
+		let Ok(stream) = stream else { continue; };
+		let Err(err) = handle_stream(stream) else { continue; };
+		if app.hidden {
+			println!("Socket error: {:?}", err);
+		} else {
+			app.error = format!("Socket error: {:?}", err);
 		}
 	}
 	std::fs::remove_file(socket_path())?;
@@ -96,14 +87,11 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 			stream.read_to_string(&mut path)?;
 			if !path.is_empty() {
 				let app = get_mut_app();
-				let norm = Path::new(&path).normalize();
-				norm.and_then(|norm| {
-					let config = config_mut();
-					config.tabs.push(norm.into_os_string().into_string().unwrap());
-					app.set_tab_selected(config.tabs.len() - 1);
-					spawn_scan_thread(Scanning::One(app.tab_selected()));
-					Ok(())
-				});
+				let Ok(norm) = Path::new(&path).normalize() else { return Ok(false); };
+				let config = config_mut();
+				config.tabs.push(norm.into_os_string().into_string().unwrap());
+				app.set_tab_selected(config.tabs.len() - 1);
+				spawn_scan_thread(Scanning::One(app.tab_selected()));
 			}
 		},
 		DeleteTab|ReloadTab => {

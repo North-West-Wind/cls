@@ -44,7 +44,7 @@ pub fn set_volume_percentage(percentage: u32) {
 		"set-sink-volume",
 		APP_NAME,
 		format!("{}%", percentage).as_str(),
-	]).spawn();
+	]).spawn().ok();
 }
 
 pub fn play_file(path: &str) {
@@ -125,7 +125,7 @@ pub fn play_file(path: &str) {
 pub fn stop_all() {
 	let app = get_mut_app();
 	for id in app.playing_process.values() {
-		signal::kill(Pid::from_raw(*id as i32), Signal::SIGTERM);
+		signal::kill(Pid::from_raw(*id as i32), Signal::SIGTERM).ok();
 	}
 	app.playing_process.clear();
 	app.playing_file.clear();

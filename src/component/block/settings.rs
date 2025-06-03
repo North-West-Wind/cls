@@ -115,9 +115,8 @@ impl SettingsBlock {
 				if config.loopback_default && app.module_loopback_default.is_empty() {
 					app.module_loopback_default = loopback("@DEFAULT_SINK@".to_string()).unwrap_or(String::new());
 				} else if !config.loopback_default && !app.module_loopback_default.is_empty() {
-					unload_module(&app.module_loopback_default).inspect(|_| {
-						app.module_loopback_default = String::new();
-					});
+					app.module_loopback_default = unload_module(&app.module_loopback_default)
+						.map_or(app.module_loopback_default.clone(), |_| { String::new() });
 				}
 				return true;
 			},
@@ -161,18 +160,16 @@ impl SettingsBlock {
 			2 => {
 				config.loopback_1 = String::new();
 				if !app.module_loopback_1.is_empty() {
-					unload_module(&app.module_loopback_1).inspect(|_| {
-						app.module_loopback_1 = String::new();
-					});
+					app.module_loopback_1 = unload_module(&app.module_loopback_1)
+						.map_or(app.module_loopback_1.clone(), |_| { String::new() });
 				}
 				return true;
 			},
 			3 => {
 				config.loopback_2 = String::new();
 				if !app.module_loopback_2.is_empty() {
-					unload_module(&app.module_loopback_2).inspect(|_| {
-						app.module_loopback_2 = String::new();
-					});
+					app.module_loopback_2 = unload_module(&app.module_loopback_2)
+						.map_or(app.module_loopback_2.clone(), |_| { String::new() });
 				}
 				return true;
 			},

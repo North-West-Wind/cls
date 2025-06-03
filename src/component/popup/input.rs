@@ -112,13 +112,11 @@ impl InputPopup {
 
 fn send_add_tab(str: String) {
 	let app = get_mut_app();
-	let norm = Path::new(&str).normalize();
-	norm.inspect(|norm| {
-		let config = config_mut();
-		config.tabs.push(norm.clone().into_os_string().into_string().unwrap());
-		app.set_tab_selected(config.tabs.len() - 1);
-		spawn_scan_thread(Scanning::One(app.tab_selected()));
-	});
+	let Ok(norm) = Path::new(&str).normalize() else { return; };
+	let config = config_mut();
+	config.tabs.push(norm.clone().into_os_string().into_string().unwrap());
+	app.set_tab_selected(config.tabs.len() - 1);
+	spawn_scan_thread(Scanning::One(app.tab_selected()));
 }
 
 fn send_loopback_1(str: String) {
@@ -127,9 +125,8 @@ fn send_loopback_1(str: String) {
 	
 	let app = get_mut_app();
 	if !app.module_loopback_1.is_empty() {
-		unload_module(&app.module_loopback_1).inspect(|_| {
-			app.module_loopback_1 = String::new();
-		});
+		app.module_loopback_1 = unload_module(&app.module_loopback_1)
+			.map_or(app.module_loopback_1.clone(), |_| { String::new() });
 
 		if !config.loopback_1.is_empty() {
 			app.module_loopback_1 = loopback(config.loopback_1.clone()).unwrap_or(String::new());
@@ -143,9 +140,8 @@ fn send_loopback_2(str: String) {
 	
 	let app = get_mut_app();
 	if !app.module_loopback_2.is_empty() {
-		unload_module(&app.module_loopback_2).inspect(|_| {
-			app.module_loopback_2 = String::new();
-		});
+		app.module_loopback_2 = unload_module(&app.module_loopback_2)
+			.map_or(app.module_loopback_2.clone(), |_| { String::new() });
 
 		if !config.loopback_1.is_empty() {
 			app.module_loopback_2 = loopback(config.loopback_2.clone()).unwrap_or(String::new());
@@ -158,29 +154,27 @@ fn send_file_id(str: String) {
 	if path.is_empty() {
 		return;
 	}
-	let id = u32::from_str_radix(&str, 10);
-	id.inspect(|id| {
-		let app = get_mut_app();
-		let rev_map = &mut app.rev_file_id;
-		if rev_map.get(id).is_some_and(|p| {
-			if p != &path {
-				app.error = "File ID must be unique".to_string();
-			}
-			true
-		}) {
-			return;
+	let Ok(id) = u32::from_str_radix(&str, 10) else { return; };
+	let app = get_mut_app();
+	let rev_map = &mut app.rev_file_id;
+	if rev_map.get(&id).is_some_and(|p| {
+		if p != &path {
+			app.error = "File ID must be unique".to_string();
 		}
-		rev_map.insert(*id, path.clone());
-		let config = config_mut();
-		match config.get_file_entry_mut(path.clone()) {
-			Some(entry) => {
-				entry.id = Some(*id);
-			},
-			None => {
-				let mut entry = FileEntry::default();
-				entry.id = Some(*id);
-				config.insert_file_entry(path, entry);
-			}
+		true
+	}) {
+		return;
+	}
+	rev_map.insert(id, path.clone());
+	let config = config_mut();
+	match config.get_file_entry_mut(path.clone()) {
+		Some(entry) => {
+			entry.id = Some(id);
+		},
+		None => {
+			let mut entry = FileEntry::default();
+			entry.id = Some(id);
+			config.insert_file_entry(path, entry);
 		}
-	});
+	}
 }
