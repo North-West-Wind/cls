@@ -1,4 +1,4 @@
-use std::cmp::max;
+use std::cmp::{max, min};
 
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{style::{Modifier, Style}, text::{Line, Text}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
@@ -8,12 +8,16 @@ use crate::constant::{APP_NAME, APP_VERSION};
 use super::{exit_popup, safe_centered_rect, PopupHandleKey, PopupRender};
 
 pub struct HelpPopup {
+	page: u8,
+	max_page: u8,
 	scroll: (i32, i32)
 }
 
 impl Default for HelpPopup {
 	fn default() -> Self {
 		Self {
+			page: 1,
+			max_page: 3,
 			scroll: (0, 0)
 		}
 	}
@@ -22,47 +26,78 @@ impl Default for HelpPopup {
 impl PopupRender for HelpPopup {
 	fn render(&self, f: &mut Frame) {
 		let appname = APP_NAME;
-		let text = Text::from(vec![
+		let mut lines = vec![
 			Line::from(format!("{appname} - Command Line Soundboard")).style(Style::default().add_modifier(Modifier::BOLD)).centered(),
 			Line::from(APP_VERSION).style(Style::default().add_modifier(Modifier::BOLD)).centered(),
+			Line::from(format!("Page {} / {}", self.page, self.max_page)).centered(),
 			Line::from(""),
-	
-			Line::from("Root Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
-			Line::from("? - Help"),
-			Line::from("q / esc - Escape / Quit"),
-			Line::from("arrow keys - Navigate"),
-			Line::from("enter - Select block"),
-			Line::from("c - Toggle settings menu"),
-			Line::from("s - Save configuration"),
-	
-			Line::from(""),
-			Line::from("Volume Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
-			Line::from("left - Decrease volume by 1%"),
-			Line::from("right - Increase volume by 1%"),
-			Line::from("ctrl + left - Decrease volume by 5%"),
-			Line::from("ctrl + right - Increase volume by 5%"),
-	
-			Line::from(""),
-			Line::from("Tabs Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
-			Line::from("a - Add directory"),
-			Line::from("d - Remove directory"),
-			Line::from("ctrl + arrow keys - Move tab"),
-	
-			Line::from(""),
-			Line::from("Files Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
-			Line::from("r - Refresh"),
-			Line::from("enter - Play file"),
-			Line::from("/ - Play random file"),
-			Line::from("x - Set global hotkey"),
-			Line::from("z - Remove global hotkey"),
-			Line::from("v - Set file ID"),
-			Line::from("b - Remove file ID"),
-	
-			Line::from(""),
-			Line::from("Settings Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
-			Line::from("enter - Set an option"),
-			Line::from("delete - Reset an option"),
-		]);
+		];
+
+		match self.page {
+			1 => {
+				lines.extend(vec![
+					Line::from("Root Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
+					Line::from("? - Help"),
+					Line::from("q / esc - Escape / Quit"),
+					Line::from("arrow keys - Navigate"),
+					Line::from("enter - Select block"),
+					Line::from("c - Toggle settings menu"),
+					Line::from("w - Toggle wave menu"),
+					Line::from("s - Save configuration"),
+
+					Line::from(""),
+					Line::from("Help Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
+					Line::from("left / right - Change page"),
+				]);
+			}
+			2 => {
+				lines.extend(vec![
+					Line::from("Volume Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
+					Line::from("left - Decrease volume by 1%"),
+					Line::from("right - Increase volume by 1%"),
+					Line::from("ctrl + left - Decrease volume by 5%"),
+					Line::from("ctrl + right - Increase volume by 5%"),
+
+					Line::from(""),
+					Line::from("Tabs Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
+					Line::from("a - Add directory"),
+					Line::from("d - Remove directory"),
+					Line::from("ctrl + arrow keys - Move tab"),
+
+					Line::from(""),
+					Line::from("Files Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
+					Line::from("r - Refresh"),
+					Line::from("enter - Play file"),
+					Line::from("/ - Play random file"),
+					Line::from("x - Set global hotkey"),
+					Line::from("z - Remove global hotkey"),
+					Line::from("v - Set file ID"),
+					Line::from("b - Remove file ID"),
+			
+					Line::from(""),
+					Line::from("Settings Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
+					Line::from("enter - Set an option"),
+					Line::from("delete - Reset an option"),
+				]);
+			}
+			3 => {
+				lines.extend(vec![
+					Line::from("Waveforms Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
+					Line::from("a - Add waveform"),
+					Line::from("e - Edit waveform"),
+					Line::from("d - Delete waveform"),
+					Line::from("enter (hold) - Play waveform"),
+					Line::from("/ (hold) - Play random waveform"),
+					Line::from("x - Set global hotkey"),
+					Line::from("z - Remove global hotkey"),
+					Line::from("v - Set waveform ID"),
+					Line::from("b - Remove waveform ID"),
+				]);
+			}
+			_ => {}
+		}
+
+		let text = Text::from(lines);
 		let area = f.area();
 		let width = (text.width() as u16) + 4;
 		let height = (text.height() as u16) + 4;
@@ -79,17 +114,23 @@ impl PopupHandleKey for HelpPopup {
 				exit_popup();
 				return true
 			},
-			KeyCode::Up => scroll(self, 0, -1),
-			KeyCode::Down => scroll(self, 0, 1),
-			KeyCode::Left => scroll(self, -1, 0),
-			KeyCode::Right => scroll(self, 1, 0),
+			KeyCode::Left => self.prev_page(),
+			KeyCode::Right => self.next_page(),
 			_ => false
 		}
 	}
 }
 
-fn scroll(popup: &mut HelpPopup, dx: i32, dy: i32) -> bool {
-	popup.scroll.0 += dx;
-	popup.scroll.1 += dy;
-	true
+impl HelpPopup {
+	fn next_page(&mut self) -> bool {
+		let old = self.page;
+		self.page = min(self.page + 1 as u8, self.max_page);
+		old != self.page
+	}
+
+	fn prev_page(&mut self) -> bool {
+		let old = self.page;
+		self.page = max(self.page - 1 as u8, 1);
+		old != self.page
+	}
 }

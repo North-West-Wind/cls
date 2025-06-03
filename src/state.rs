@@ -4,7 +4,7 @@ use mki::Keyboard;
 use std_semaphore::Semaphore;
 use uuid::Uuid;
 
-use crate::{component::{block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, volume::VolumeBlock, BlockComponent}, popup::PopupComponent}, config::{load, SoundboardConfig}, util::{global_input::string_to_keyboard, pulseaudio::unload_module}};
+use crate::{component::{block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, volume::VolumeBlock, waves::WavesBlock, BlockComponent}, popup::PopupComponent}, config::{load, SoundboardConfig}, util::{global_input::string_to_keyboard, pulseaudio::unload_module}};
 
 pub type CondvarPair = Arc<(Mutex<SharedCondvar>, Condvar)>;
 
@@ -52,6 +52,7 @@ pub struct App {
 	pub selection_layer: SelectionLayer,
 	pub popup: Option<PopupComponent>,
 	pub settings_opened: bool,
+	pub waves_opened: bool,
 	// pulseaudio
 	pub module_null_sink: String,
 	pub module_loopback_default: String,
@@ -141,6 +142,7 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 }
 
 pub fn init_app(hidden: bool, edit: bool) {
+	use BlockComponent::*;
 	unsafe {
 		let (config, stopkey, hotkey, rev_file_id) = load_app_config();
 		let app = App {
@@ -158,17 +160,19 @@ pub fn init_app(hidden: bool, edit: bool) {
 			edit,
 			// render states: root
 			blocks: vec![
-				BlockComponent::Volume(VolumeBlock::default()),
-				BlockComponent::Tabs(TabsBlock::default()),
-				BlockComponent::Files(FilesBlock::default()),
-				BlockComponent::Settings(SettingsBlock::default()),
-				BlockComponent::Help(HelpBlock::default()),
-				BlockComponent::Playing(PlayingBlock::default()),
+				Volume(VolumeBlock::default()),
+				Tabs(TabsBlock::default()),
+				Files(FilesBlock::default()),
+				Settings(SettingsBlock::default()),
+				Help(HelpBlock::default()),
+				Playing(PlayingBlock::default()),
+				Waves(WavesBlock::default())
 			],
 			block_selected: 0,
 			selection_layer: SelectionLayer::Block,
 			popup: Option::None,
 			settings_opened: false,
+			waves_opened: false,
 			// pulseaudio
 			module_null_sink: String::new(),
 			module_loopback_default: String::new(),

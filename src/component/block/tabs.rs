@@ -1,15 +1,13 @@
 use std::path::Path;
 
-use crate::{component::popup::{delete_tab::DeleteTabPopup, input::{AwaitInput, InputPopup}, set_popup, PopupComponent}, state::{config, config_mut, get_mut_app}};
+use crate::{component::{block::{borders, files::FilesBlock, volume::VolumeBlock, waves::WavesBlock, BlockNavigation}, popup::{delete_tab::DeleteTabPopup, input::{AwaitInput, InputPopup}, set_popup, PopupComponent}}, state::{config, config_mut, get_app, get_mut_app}};
 
-use super::{border_style, border_type, loop_index, BlockHandleKey, BlockRenderArea};
+use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 
 pub struct TabsBlock {
-	title: String,
-	id: u8,
 	range: (i32, i32),
 	pub(super) selected: usize,
 }
@@ -17,8 +15,6 @@ pub struct TabsBlock {
 impl Default for TabsBlock {
 	fn default() -> Self {
 		Self {
-			title: "Tabs".to_string(),
-			id: 1,
 			range: (-1, -1),
 			selected: 0,
 		}
@@ -88,11 +84,12 @@ impl BlockRenderArea for TabsBlock {
 			self.range = (self.selected as i32 - count + 1, self.selected as i32);
 		}
 		
+		let (border_type, border_style) = borders(Self::ID);
 		let block = Block::default()
-			.title(self.title.clone())
+			.title("Tabs")
 			.borders(Borders::ALL)
-			.border_type(border_type(self.id))
-			.border_style(border_style(self.id));
+			.border_type(border_type)
+			.border_style(border_style);
 		let mut length = 0;
 		for (ii, span) in spans.iter().enumerate() {
 			if ii >= self.range.0 as usize * 2 {
@@ -114,6 +111,22 @@ impl BlockHandleKey for TabsBlock {
 			KeyCode::Left => self.handle_move(false, event.modifiers.contains(KeyModifiers::CONTROL)),
 			_ => false
 		}
+	}
+}
+
+impl BlockNavigation for TabsBlock {
+	const ID: u8 = 1;
+
+	fn navigate_block(&self, _dx: i16, dy: i16) -> u8 {
+		if dy > 0 {
+			if get_app().waves_opened {
+				return WavesBlock::ID;
+			}
+			return FilesBlock::ID;
+		} else if dy < 0 {
+			return VolumeBlock::ID;
+		}
+		return Self::ID;
 	}
 }
 

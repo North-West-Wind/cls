@@ -1,8 +1,6 @@
-use std::cmp::{max, min};
-
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::{state::{get_mut_app, SelectionLayer}, util::threads::spawn_save_thread};
+use crate::{component::block::{files::FilesBlock, settings::SettingsBlock, waves::WavesBlock, BlockNavigation}, state::{get_mut_app, SelectionLayer}, util::threads::spawn_save_thread};
 
 use super::{block::BlockHandleKey, popup::{help::HelpPopup, quit::QuitPopup, set_popup, PopupComponent}};
 
@@ -25,8 +23,18 @@ pub fn handle_key(event: KeyEvent) -> bool {
 		KeyCode::Char('c') => {
 			let app = get_mut_app();
 			app.settings_opened = !app.settings_opened;
-			if !app.settings_opened && app.block_selected == 3 {
-				app.block_selected = 2;
+			if !app.settings_opened && app.block_selected == SettingsBlock::ID {
+				app.block_selected = if app.waves_opened { WavesBlock::ID } else { FilesBlock::ID };
+			}
+			return true;
+		},
+		KeyCode::Char('w') => {
+			let app = get_mut_app();
+			app.waves_opened = !app.waves_opened;
+			if app.waves_opened && app.block_selected == FilesBlock::ID {
+				app.block_selected = WavesBlock::ID;
+			} else if !app.waves_opened && app.block_selected == WavesBlock::ID {
+				app.block_selected = FilesBlock::ID;
 			}
 			return true;
 		},
@@ -51,27 +59,11 @@ fn navigate_block(dx: i16, dy: i16) -> bool {
 	if dx == 0 && dy == 0 { return false }
 	let app = get_mut_app();
 	let old_block = app.block_selected;
-	let new_block: i16;
-	if dy > 0 {
-		// moving down
-		if old_block == 3 {
-			// don't move for settings
-			new_block = old_block as i16;
-		} else {
-			new_block = min(2, old_block as i16 + dy);
-		}
-	} else if dy < 0 {
-		// moving up
-		new_block = max(0, old_block as i16 + dy * (if old_block == 3 { 2 } else { 1 }));
-	} else if dx > 0 && old_block == 2 && app.settings_opened || dx < 0 && old_block == 3 {
-		new_block = old_block as i16 + dx;
-	} else {
-		new_block = old_block as i16;
-	}
+	let new_block = app.blocks[app.block_selected as usize].navigate_block(dx, dy);
 
-	if new_block as u8 != old_block {
-		app.block_selected = new_block as u8;
-		return true
+	if old_block != new_block {
+		app.block_selected = new_block;
+		return true;
 	}
 	false
 }

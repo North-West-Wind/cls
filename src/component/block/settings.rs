@@ -3,12 +3,11 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Padding, Paragraph}, Frame};
 use substring::Substring;
 
-use crate::{component::popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, config, state::{config_mut, get_mut_app}, util::pulseaudio::{loopback, unload_module}};
+use crate::{component::{block::{borders, files::FilesBlock, waves::WavesBlock, BlockNavigation}, popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}}, config, state::{config_mut, get_app, get_mut_app}, util::pulseaudio::{loopback, unload_module}};
 
-use super::{border_style, border_type, loop_index, BlockHandleKey, BlockRenderArea};
+use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
 pub struct SettingsBlock {
-	id: u8,
 	selected: u8,
 	options: u8,
 }
@@ -16,7 +15,6 @@ pub struct SettingsBlock {
 impl Default for SettingsBlock {
 	fn default() -> Self {
 		Self {
-			id: 3,
 			selected: 0,
 			options: 4,
 		}
@@ -26,10 +24,10 @@ impl Default for SettingsBlock {
 impl BlockRenderArea for SettingsBlock {
 	fn render_area(&mut self, f: &mut Frame, area: Rect) {
 		let config = config();
-
+		let (border_type, border_style) = borders(Self::ID);
 		let mut block = Block::bordered()
-			.border_style(border_style(self.id))
-			.border_type(border_type(self.id))
+			.border_style(border_style)
+			.border_type(border_type)
 			.title("Settings");
 		let mut width = area.width;
 
@@ -65,6 +63,20 @@ impl BlockHandleKey for SettingsBlock {
 			KeyCode::Delete => self.handle_delete(),
 			_ => false
 		}
+	}
+}
+
+impl BlockNavigation for SettingsBlock {
+	const ID: u8 = 3;
+
+	fn navigate_block(&self, dx: i16, _dy: i16) -> u8 {
+		if dx < 0 {
+			if get_app().waves_opened {
+				return WavesBlock::ID;
+			}
+			return FilesBlock::ID;
+		}
+		Self::ID
 	}
 }
 

@@ -1,8 +1,8 @@
 use std::{cmp::{max, min}, collections::HashSet, i32, path::Path};
 
-use crate::{component::popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}, state::{config, config_mut, get_app, get_mut_app, Scanning}, util::{self, selected_file_path, threads::spawn_scan_thread}};
+use crate::{component::{block::{borders, settings::SettingsBlock, tabs::TabsBlock, BlockNavigation}, popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}}, state::{config, config_mut, get_app, get_mut_app, Scanning}, util::{self, selected_file_path, threads::spawn_scan_thread}};
 
-use super::{border_style, border_type, loop_index, BlockHandleKey, BlockRenderArea};
+use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
 use crossterm::event::KeyCode;
 use rand::Rng;
@@ -10,8 +10,6 @@ use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span},
 use substring::Substring;
 
 pub struct FilesBlock {
-	title: String,
-	id: u8,
 	range: (i32, i32),
 	pub(super) selected: usize,
 }
@@ -19,8 +17,6 @@ pub struct FilesBlock {
 impl Default for FilesBlock {
 	fn default() -> Self {
 		Self {
-			title: "Files".to_string(),
-			id: 2,
 			range: (-1, -1),
 			selected: 0,
 		}
@@ -29,11 +25,12 @@ impl Default for FilesBlock {
 
 impl BlockRenderArea for FilesBlock {
 	fn render_area(&mut self, f: &mut Frame, area: Rect) {
+		let (border_type, border_style) = borders(Self::ID);
 		let block = Block::default()
-			.title(self.title.clone())
+			.title("Files")
 			.borders(Borders::ALL)
-			.border_type(border_type(self.id))
-			.border_style(border_style(self.id))
+			.border_type(border_type)
+			.border_style(border_style)
 			.padding(Padding::new(2, 2, 1, 1));
 	
 		let app = get_mut_app();
@@ -128,6 +125,20 @@ impl BlockHandleKey for FilesBlock {
 			KeyCode::End => self.navigate_file(i32::MAX),
 			_ => false,
 		}
+	}
+}
+
+impl BlockNavigation for FilesBlock {
+	const ID: u8 = 2;
+
+	fn navigate_block(&self, dx: i16, dy: i16) -> u8 {
+		if dy < 0 {
+			return TabsBlock::ID;
+		}
+		if dx > 0 && get_app().settings_opened {
+			return SettingsBlock::ID;
+		}
+		Self::ID
 	}
 }
 

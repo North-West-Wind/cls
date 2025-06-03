@@ -3,22 +3,19 @@ use std::cmp::{max, min};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 
-use crate::{config::FileEntry, state::{config, config_mut}, util::{pulseaudio::set_volume_percentage, selected_file_path}};
+use crate::{component::block::{borders, tabs::TabsBlock, BlockNavigation}, config::FileEntry, state::{config, config_mut}, util::{pulseaudio::set_volume_percentage, selected_file_path}};
 
-use super::{border_style, border_type, loop_index, BlockHandleKey, BlockRenderArea};
+use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
 pub struct VolumeBlock {
-	title: String,
-	id: u8,
 	pub(super) selected: usize,
 	options: u8,
 }
 
+
 impl Default for VolumeBlock {
 	fn default() -> Self {
 		Self {
-			title: "Volume".to_string(),
-			id: 0,
 			selected: 0,
 			options: 2,
 		}
@@ -28,11 +25,12 @@ impl Default for VolumeBlock {
 impl BlockRenderArea for VolumeBlock {
 	fn render_area(&mut self, f: &mut Frame, area: Rect) {
 		let config = config();
+		let (border_type, border_style) = borders(Self::ID);
 		let block = Block::default()
-			.title(self.title.clone())
+			.title("Volume")
 			.borders(Borders::ALL)
-			.border_type(border_type(self.id))
-			.border_style(border_style(self.id))
+			.border_type(border_type)
+			.border_style(border_style)
 			.padding(Padding::horizontal(1));
 		let mut lines = vec![
 			volume_line("Sink Volume".to_string(), config.volume, area.width, self.selected == 0)
@@ -65,6 +63,17 @@ impl BlockHandleKey for VolumeBlock {
 			KeyCode::Down => self.navigate_volume(1),
 			_ => false
 		}
+	}
+}
+
+impl BlockNavigation for VolumeBlock {
+	const ID: u8 = 0;
+
+	fn navigate_block(&self, _dx: i16, dy: i16) -> u8 {
+		if dy > 0 {
+			return TabsBlock::ID;
+		}
+		return Self::ID;
 	}
 }
 

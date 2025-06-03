@@ -7,7 +7,7 @@ use settings::SettingsBlock;
 use tabs::TabsBlock;
 use volume::VolumeBlock;
 
-use crate::state::{get_app, SelectionLayer};
+use crate::{component::block::waves::WavesBlock, state::{get_app, SelectionLayer}};
 
 use super::{layer, popup::{help::HelpPopup, set_popup, PopupComponent}};
 
@@ -17,6 +17,7 @@ pub mod playing;
 pub mod settings;
 pub mod tabs;
 pub mod volume;
+pub mod waves;
 
 pub enum BlockComponent {
 	Volume(VolumeBlock),
@@ -25,6 +26,7 @@ pub enum BlockComponent {
 	Settings(SettingsBlock),
 	Help(HelpBlock),
 	Playing(PlayingBlock),
+	Waves(WavesBlock),
 }
 
 pub trait BlockRender {
@@ -37,6 +39,11 @@ pub trait BlockRenderArea {
 
 pub trait BlockHandleKey {
 	fn handle_key(&mut self, event: KeyEvent) -> bool;
+}
+
+pub trait BlockNavigation {
+	const ID: u8;
+	fn navigate_block(&self, dx: i16, dy: i16) -> u8;
 }
 
 impl BlockRender for BlockComponent {
@@ -56,6 +63,7 @@ impl BlockRenderArea for BlockComponent {
 			BlockComponent::Files(block) => block.render_area(f, area),
 			BlockComponent::Settings(block) => block.render_area(f, area),
 			BlockComponent::Help(block) => block.render_area(f, area),
+			BlockComponent::Waves(block) => block.render_area(f, area),
 			_ => (),
 		}
 	}
@@ -80,24 +88,41 @@ impl BlockHandleKey for BlockComponent {
 	}
 }
 
-pub(self) fn border_style(id: u8) -> Style {
+impl BlockNavigation for BlockComponent {
+	const ID: u8 = 0; // Unused
+
+	fn navigate_block(&self, dx: i16, dy: i16) -> u8 {
+		use BlockComponent::*;
+		match self {
+			Volume(block) => block.navigate_block(dx, dy),
+			Tabs(block) => block.navigate_block(dx, dy),
+			Files(block) => block.navigate_block(dx, dy),
+			Settings(block) => block.navigate_block(dx, dy),
+			Waves(block) => block.navigate_block(dx, dy),
+			_ => Self::ID
+		}
+	}
+}
+
+pub(self) fn borders(id: u8) -> (BorderType, Style) {
 	let app = get_app();
-	Style::default().fg(
+	let style = Style::default().fg(
 		if app.block_selected == id {
 			Color::White
 		} else {
 			Color::DarkGray
 		}
-	)
-}
-
-pub(self) fn border_type(id: u8) -> BorderType {
-	let app = get_app();
-	if app.block_selected == id && app.selection_layer == SelectionLayer::Content {
-		BorderType::Double
+	);
+	let border_type = if app.block_selected == id {
+		if app.selection_layer == SelectionLayer::Content {
+			BorderType::Double
+		} else {
+			BorderType::Thick
+		}
 	} else {
 		BorderType::Rounded
-	}
+	};
+	(border_type, style)
 }
 
 impl BlockComponent {
