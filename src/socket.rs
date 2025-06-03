@@ -76,11 +76,12 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 		},
 		ReloadConfig => {
 			let app = get_mut_app();
-			let (config, stopkey, hotkey, rev_file_id) = load_app_config();
+			let (config, stopkey, hotkey, rev_file_id, waves) = load_app_config();
 			app.config = config;
 			app.stopkey = stopkey;
 			app.hotkey = hotkey;
 			app.rev_file_id = rev_file_id;
+			app.waves = waves;
 		},
 		AddTab => {
 			let mut path = String::new();

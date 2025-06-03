@@ -2,7 +2,7 @@ use std::{io, time::Duration};
 use crossterm::event::{poll, read, Event, KeyEvent};
 use mki::Action;
 
-use crate::{component::{block::BlockHandleKey, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{self, get_mut_app, SelectionLayer}, util::{notify_redraw, pulseaudio::{play_file, stop_all}}};
+use crate::{component::{block::BlockHandleKey, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{self, get_mut_app, SelectionLayer}, util::{notify_redraw, pulseaudio::{play_file, stop_all}, waveform::play_wave}};
 
 pub fn listen_events() -> io::Result<()> {
 	let app = state::get_app();
@@ -38,16 +38,29 @@ pub fn listen_global_input() {
 			app.popup.as_mut().unwrap().handle_global_key(key);
 			notify_redraw();
 		} else if !app.hotkey.is_empty() {
-			for (path, keys) in &app.hotkey {
+			// File hotkey
+			app.hotkey.iter().for_each(|(path, keys)| {
 				if keys.iter().all(|key| { key.is_pressed() }) {
 					play_file(path);
 				}
-			}
+			});
 			if !app.stopkey.is_empty() && !app.edit {
 				if app.stopkey.iter().all(|key| { key.is_pressed() }) {
 					stop_all();
 				}
 			}
+
+			// Waveform hotkey
+			app.waves.iter().for_each(|wave| {
+				if wave.keys.iter().all(|key| { key.is_pressed() }) {
+					play_wave(wave.clone(), false);
+				} else {
+					let mut playing = wave.playing.lock().expect("Failed to lock mutex");
+					if *playing {
+						*playing = false;
+					}
+				}
+			});
 		}
 	}));
 }

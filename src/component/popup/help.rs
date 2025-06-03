@@ -10,7 +10,6 @@ use super::{exit_popup, safe_centered_rect, PopupHandleKey, PopupRender};
 pub struct HelpPopup {
 	page: u8,
 	max_page: u8,
-	scroll: (i32, i32)
 }
 
 impl Default for HelpPopup {
@@ -18,7 +17,6 @@ impl Default for HelpPopup {
 		Self {
 			page: 1,
 			max_page: 3,
-			scroll: (0, 0)
 		}
 	}
 }
@@ -103,7 +101,7 @@ impl PopupRender for HelpPopup {
 		let height = (text.height() as u16) + 4;
 		let popup_area = safe_centered_rect(width, height, area);
 		Clear.render(popup_area, f.buffer_mut());
-		f.render_widget(Paragraph::new(text).block(Block::bordered().padding(Padding::uniform(1)).border_type(BorderType::Rounded)).scroll((max(0, self.scroll.1) as u16, max(0, self.scroll.0) as u16)), popup_area);
+		f.render_widget(Paragraph::new(text).block(Block::bordered().padding(Padding::uniform(1)).border_type(BorderType::Rounded)), popup_area);
 	}
 }
 

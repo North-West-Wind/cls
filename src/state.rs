@@ -4,7 +4,7 @@ use mki::Keyboard;
 use std_semaphore::Semaphore;
 use uuid::Uuid;
 
-use crate::{component::{block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, volume::VolumeBlock, waves::WavesBlock, BlockComponent}, popup::PopupComponent}, config::{load, SoundboardConfig}, util::{global_input::string_to_keyboard, pulseaudio::unload_module}};
+use crate::{component::{block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, volume::VolumeBlock, waves::WavesBlock, BlockComponent}, popup::PopupComponent}, config::{load, SoundboardConfig}, util::{global_input::string_to_keyboard, pulseaudio::unload_module, waveform::Waveform}};
 
 pub type CondvarPair = Arc<(Mutex<SharedCondvar>, Condvar)>;
 
@@ -63,9 +63,11 @@ pub struct App {
 	pub scanning: Scanning,
 	pub rev_file_id: HashMap<u32, String>,
 	// render states: playing
-	pub playing_file: HashMap<Uuid, String>,
-	pub playing_process: HashMap<Uuid, u32>,
+	pub playing_file: HashMap<Uuid, (u32, String)>,
 	pub playing_semaphore: Semaphore,
+	pub playing_wave: HashMap<Uuid, (u32, String)>,
+	// waves
+	pub waves: Vec<Waveform>
 }
 
 impl App {
@@ -96,19 +98,16 @@ impl App {
 // Global variables
 static mut APP: Option<App> = Option::None;
 
-pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Vec<Keyboard>>, HashMap<u32, String>) {
+pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Vec<Keyboard>>, HashMap<u32, String>, Vec<Waveform>) {
 	let config = load();
 	let mut stopkey = vec![];
 	if config.stop_key.len() > 0 {
-		for key in config.stop_key.clone() {
+		config.stop_key.iter().for_each(|key| {
 			let result = string_to_keyboard(key);
-			if !result.is_some_and(|result| {
-				stopkey.push(result);
-				true
-			}) {
-				break;
-			}
-		}
+			result.inspect(|result| {
+				stopkey.push(*result);
+			});
+		});
 		if stopkey.len() != config.stop_key.len() {
 			stopkey.clear();
 		}
@@ -119,16 +118,13 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 		for (name, entry) in map {
 			let path = Path::new(parent).join(name).to_str().unwrap().to_string();
 			let mut keyboard = vec![];
-			let key_len = entry.keys.len();
-			for key in entry.keys.clone() {
+			entry.keys.iter().for_each(|key| {
 				let result = string_to_keyboard(key);
-				if !result.is_some_and(|result| {
-					keyboard.push(result);
-					true
-				}) {
-					break;
-				}
-			}
+				result.inspect(|result| {
+					keyboard.push(*result);
+				});
+			});
+			let key_len = entry.keys.len();
 			if keyboard.len() > 0 && keyboard.len() == key_len {
 				hotkey.insert(path.clone(), keyboard);
 			}
@@ -138,13 +134,32 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 			});
 		}
 	}
-	(config, stopkey, hotkey, rev_file_id)
+	let mut waves = vec![];
+	for wave in config.waves.iter() {
+		let mut keyboard = vec![];
+		wave.keys.iter().for_each(|key| {
+			let result = string_to_keyboard(key);
+			result.inspect(|result| {
+				keyboard.push(*result);
+			});
+		});
+		if keyboard.len() == wave.keys.len() {
+			waves.push(Waveform {
+				label: wave.label.clone(),
+				keys: keyboard,
+				waves: wave.waves.clone(),
+				volume: wave.volume,
+				playing: Arc::new(Mutex::new(false))
+			});
+		}
+	}
+	(config, stopkey, hotkey, rev_file_id, waves)
 }
 
 pub fn init_app(hidden: bool, edit: bool) {
 	use BlockComponent::*;
 	unsafe {
-		let (config, stopkey, hotkey, rev_file_id) = load_app_config();
+		let (config, stopkey, hotkey, rev_file_id, waves) = load_app_config();
 		let app = App {
 			// config
 			config,
@@ -184,8 +199,10 @@ pub fn init_app(hidden: bool, edit: bool) {
 			rev_file_id,
 			// render states: playing
 			playing_file: HashMap::new(),
-			playing_process: HashMap::new(),
 			playing_semaphore: Semaphore::new(1),
+			playing_wave: HashMap::new(),
+			// waves
+			waves
 		};
 	
 		APP = Option::Some(app);

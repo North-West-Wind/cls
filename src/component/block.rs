@@ -71,17 +71,20 @@ impl BlockRenderArea for BlockComponent {
 
 impl BlockHandleKey for BlockComponent {
 	fn handle_key(&mut self, event: KeyEvent) -> bool {
+		use BlockComponent::*;
+		use KeyCode::*;
 		match event.code {
-			KeyCode::Char('q')|KeyCode::Esc => layer::navigate_layer(true),
-			KeyCode::Char('?') => {
+			Char('q')|KeyCode::Esc => layer::navigate_layer(true),
+			Char('?') => {
 				set_popup(PopupComponent::Help(HelpPopup::default()));
 				return true;
 			},
 			_ => match self {
-				BlockComponent::Volume(block) => block.handle_key(event),
-				BlockComponent::Tabs(block) => block.handle_key(event),
-				BlockComponent::Files(block) => block.handle_key(event),
-				BlockComponent::Settings(block) => block.handle_key(event),
+				Volume(block) => block.handle_key(event),
+				Tabs(block) => block.handle_key(event),
+				Files(block) => block.handle_key(event),
+				Settings(block) => block.handle_key(event),
+				Waves(block) => block.handle_key(event),
 				_ => false,
 			}
 		}

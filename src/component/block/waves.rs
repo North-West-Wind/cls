@@ -1,14 +1,27 @@
+use std::sync::{Arc, Mutex};
+
+use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{style::Color, widgets::{Block, Borders, Padding}};
 
-use crate::{component::block::{borders, settings::SettingsBlock, tabs::TabsBlock, BlockNavigation, BlockRenderArea}, state::get_app};
+use crate::{component::block::{borders, settings::SettingsBlock, tabs::TabsBlock, BlockHandleKey, BlockNavigation, BlockRenderArea}, state::get_app, util::waveform::{play_wave, Wave, WaveType, Waveform}};
 
 pub struct WavesBlock {
+	test_wave: Waveform
 }
 
 impl Default for WavesBlock {
 	fn default() -> Self {
 		Self {
-
+			test_wave: Waveform {
+				label: "test".to_string(),
+				keys: vec![],
+				waves: vec![Wave {
+					wave_type: WaveType::Sine,
+					frequency: 1000.0
+				}],
+				volume: 80,
+				playing: Arc::new(Mutex::new(false))
+			}
 		}
 	}
 }
@@ -27,6 +40,18 @@ impl BlockRenderArea for WavesBlock {
 			.padding(Padding::new(2, 2, 1, 1));
 
 		f.render_widget(block, area);
+	}
+}
+
+impl BlockHandleKey for WavesBlock {
+	fn handle_key(&mut self, event: KeyEvent) -> bool {
+		match event.code {
+			KeyCode::Enter => {
+				play_wave(self.test_wave.clone(), true);
+				true
+			},
+			_ => false
+		}
 	}
 }
 

@@ -15,7 +15,8 @@ pub enum AwaitInput {
 	AddTab,
 	Loopback1,
 	Loopback2,
-	SetFileId
+	SetFileId,
+	WaveFrequency,
 }
 
 pub struct InputPopup {
@@ -55,6 +56,7 @@ impl PopupRender for InputPopup {
 				AwaitInput::Loopback1 => "Loopback 1",
 				AwaitInput::Loopback2 => "Loopback 2",
 				AwaitInput::SetFileId => "File ID",
+				AwaitInput::WaveFrequency => "Frequency (Hz)",
 				_ => "Input"
 			}).padding(Padding::horizontal(1)).style(Style::default().fg(Color::Green)));
 		let input_area = safe_centered_rect(width, height, area);
@@ -177,4 +179,8 @@ fn send_file_id(str: String) {
 			config.insert_file_entry(path, entry);
 		}
 	}
+}
+
+fn send_wave_frequency(str: String) {
+	
 }

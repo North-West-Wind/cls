@@ -47,7 +47,7 @@ pub fn set_volume_percentage(percentage: u32) {
 	]).spawn().ok();
 }
 
-pub fn play_file(path: &str) {
+pub fn play_file(path: &String) {
 	let string = path.trim().to_string();
 	thread::spawn(move || {
 		let uuid = Uuid::new_v4();
@@ -55,7 +55,7 @@ pub fn play_file(path: &str) {
 		let config = config();
 
 		if app.edit {
-			app.playing_file.insert(uuid, "Edit-only mode!".to_string());
+			app.playing_file.insert(uuid, (0, "Edit-only mode!".to_string()));
 			notify_redraw();
 			thread::sleep(Duration::from_secs(1));
 			app.playing_file.remove(&uuid);
@@ -63,13 +63,13 @@ pub fn play_file(path: &str) {
 			return;
 		}
 
-		let info = ffprobe_info(string.as_str());
+		let info = ffprobe_info(&string);
 		info.inspect(|info| {
 			info.streams.iter()
 				.find(|stream| stream.codec_type == Option::Some("audio".to_string()))
 				.inspect(|stream| {
 					let using_semaphore = config.playlist_mode;
-					app.playing_file.insert(uuid, string.clone());
+					app.playing_file.insert(uuid, (0, string.to_string()));
 					notify_redraw();
 					if using_semaphore {
 						app.playing_semaphore.acquire();
@@ -79,7 +79,7 @@ pub fn play_file(path: &str) {
 						"-loglevel",
 						"-8",
 						"-i",
-						string.as_str(),
+						&string,
 						"-f",
 						"s16le",
 						"-"
@@ -108,7 +108,7 @@ pub fn play_file(path: &str) {
 						.stdin(Stdio::from(ffmpeg_child.stdout.expect("Failed to obtain ffmpeg stdout")))
 						.stdout(Stdio::piped()).spawn().expect("Failed to spawn pacat process");
 
-					app.playing_process.insert(uuid, pacat_child.id());
+					app.playing_file.insert(uuid, (pacat_child.id(), string.to_string()));
 
 					let _ = pacat_child.wait();
 					if using_semaphore {
@@ -117,17 +117,15 @@ pub fn play_file(path: &str) {
 				});
 		});
 		app.playing_file.remove(&uuid);
-		app.playing_process.remove(&uuid);
 		notify_redraw();
 	});
 }
 
 pub fn stop_all() {
 	let app = get_mut_app();
-	for id in app.playing_process.values() {
+	for (id, _file) in app.playing_file.values() {
 		signal::kill(Pid::from_raw(*id as i32), Signal::SIGTERM).ok();
 	}
-	app.playing_process.clear();
 	app.playing_file.clear();
 }
 

@@ -162,6 +162,7 @@ dependencies = [
  "event-listener",
  "ffprobe",
  "file-format",
+ "linked-hash-map",
  "mki",
  "nix 0.29.0",
  "normpath",

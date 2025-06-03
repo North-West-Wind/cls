@@ -25,8 +25,8 @@ pub fn keyboard_to_string(keyboard: Keyboard) -> String {
 	}
 }
 
-pub fn string_to_keyboard(string: String) -> Option<Keyboard> {
-	match string.as_str() {
+pub fn string_to_keyboard(string: &str) -> Option<Keyboard> {
+	match string {
 		"LeftAlt" => Option::Some(Keyboard::Other(56)),
 		"RightAlt" => Option::Some(Keyboard::Other(100)),
 		"LeftSuper" => Option::Some(Keyboard::Other(125)),

@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use config::Config;
 use serde::{Deserialize, Serialize};
 
-use crate::util::fs::separate_parent_file;
+use crate::util::{fs::separate_parent_file, waveform::Wave};
 
 use super::{get_config_path, migrate0::ConfigV0};
 
@@ -24,6 +24,14 @@ impl Default for FileEntry {
 	}
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default)]
+pub struct WaveformEntry {
+	pub label: String,
+	pub keys: HashSet<String>,
+	pub waves: Vec<Wave>,
+	pub volume: u32,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(default)]
 pub struct ConfigV1 {
@@ -36,6 +44,7 @@ pub struct ConfigV1 {
 	pub loopback_2: String,
 	pub playlist_mode: bool,
 	pub files: HashMap<String, HashMap<String, FileEntry>>,
+	pub waves: Vec<WaveformEntry>,
 }
 
 impl Default for ConfigV1 {
@@ -50,6 +59,7 @@ impl Default for ConfigV1 {
 			loopback_2: String::new(),
 			playlist_mode: false,
 			files: HashMap::new(),
+			waves: vec![]
 		}
 	}
 }

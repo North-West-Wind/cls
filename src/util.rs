@@ -9,6 +9,7 @@ pub mod fs;
 pub mod global_input;
 pub mod pulseaudio;
 pub mod threads;
+pub mod waveform;
 
 pub fn ffprobe_info(path: &str) -> Option<FfProbe> {
 	let result = ffprobe::ffprobe(path);

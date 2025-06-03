@@ -18,6 +18,7 @@ pub mod input;
 pub mod key_bind;
 pub mod quit;
 pub mod save;
+pub mod wave;
 
 pub enum PopupComponent {
 	DeleteTab(DeleteTabPopup),
