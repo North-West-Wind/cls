@@ -77,10 +77,9 @@ impl BlockRenderArea for FilesBlock {
 					} else {
 						Style::default().fg(Color::Cyan)
 					};
-					let mut extra: i32 = 0;
-					for span in spans.clone() {
-						extra += span.width() as i32;
-					}
+					let extra = spans.iter()
+						.map(|span| { span.width() as i32 })
+						.fold(0, |acc, width| { acc + width });
 					if file.len() + duration.len() + extra as usize > area.width as usize - 6 {
 						spans.push(Span::from(file.substring(0, max(0, area.width as i32 - 10 - extra - duration.len() as i32) as usize)).style(style));
 						spans.push(Span::from("... ".to_owned() + duration).style(style));
@@ -168,9 +167,9 @@ impl FilesBlock {
 	}
 
 	fn navigate_file(&mut self, dy: i32) -> bool {
-		let app = get_mut_app();
+		let app = get_app();
 		let files = app.files.get(&config().tabs[app.tab_selected()]);
-		return files.map_or_else(|| { false }, |files| {
+		return files.map_or(false, |files| {
 			let files = files.len();
 			let new_selected;
 			if dy.abs() > 1 {

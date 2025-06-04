@@ -1,10 +1,10 @@
-use std::{f32::consts::PI, io::Write, process::{Command, Stdio}, sync::{Arc, Mutex}, thread, time::Duration};
+use std::{collections::HashSet, f32::consts::PI, io::Write, process::{Command, Stdio}, sync::{Arc, Mutex}, thread, time::Duration};
 
 use mki::Keyboard;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{constant::APP_NAME, state::get_mut_app, util::{notify_redraw, waveform}};
+use crate::{config::WaveformEntry, constant::APP_NAME, state::get_mut_app, util::{global_input::keyboard_to_string, notify_redraw}};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
@@ -20,13 +20,17 @@ pub enum WaveType {
 pub struct Wave {
 	pub wave_type: WaveType,
 	pub frequency: f32,
+	pub phase: f32,
+	pub amplitude: f32,
 }
 
 impl Default for Wave {
 	fn default() -> Self {
 		Self {
 			wave_type: WaveType::Sine,
-			frequency: 1000.0
+			frequency: 1000.0,
+			phase: 0.0, // percentage of the period
+			amplitude: 1.0,
 		}
 	}
 }
@@ -34,6 +38,7 @@ impl Default for Wave {
 #[derive(Clone)]
 pub struct Waveform {
 	pub label: String,
+	pub id: Option<u32>,
 	pub keys: Vec<Keyboard>,
 	pub waves: Vec<Wave>,
 	pub volume: u32,
@@ -44,6 +49,7 @@ impl Default for Waveform {
 	fn default() -> Self {
 		Self {
 			label: "New Waveform".to_string(),
+			id: Option::None,
 			keys: vec![],
 			waves: vec![Wave::default()],
 			volume: 50,
@@ -52,10 +58,23 @@ impl Default for Waveform {
 	}
 }
 
+impl Waveform {
+	pub fn to_entry(&self) -> WaveformEntry {
+		WaveformEntry {
+			label: self.label.clone(),
+			id: self.id,
+			keys: self.keys.iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>(),
+			waves: self.waves.clone(),
+			volume: self.volume
+		}
+	}
+}
+
 struct PlayableWave {
 	pub wave_type: WaveType,
 	pub period: u32,
 	pub samples: u32,
+	pub amplitude: f32,
 }
 
 pub fn play_wave(wave: Waveform, auto_stop: bool) {
@@ -106,27 +125,28 @@ pub fn play_wave(wave: Waveform, auto_stop: bool) {
 				PlayableWave {
 					wave_type: w.wave_type,
 					period: (1.0 * 48000.0 / w.frequency) as u32,
-					samples: 0,
+					samples: (48000.0 * w.phase) as u32,
+					amplitude: w.amplitude
 				}
 			}).collect::<Vec<PlayableWave>>();
 			while playing {
 				let mut sum_bytes = [0_f32; 1600];
-				for waveform in &mut playable {
+				for wave in &mut playable {
 					for ii in 0..1600 {
-						sum_bytes[ii] += match waveform.wave_type {
-							WaveType::Sine => (PI * 2.0 * waveform.samples as f32 / waveform.period as f32).sin(),
-							WaveType::Square => if waveform.samples as f32 / waveform.period as f32 > 0.5 { 1.0 } else { -1.0 },
+						sum_bytes[ii] += match wave.wave_type {
+							WaveType::Sine => (PI * 2.0 * wave.samples as f32 / wave.period as f32).sin(),
+							WaveType::Square => if wave.samples as f32 / wave.period as f32 > 0.5 { 1.0 } else { -1.0 },
 							WaveType::Triangle => {
-								let portion = waveform.samples as f32 / waveform.period as f32;
+								let portion = wave.samples as f32 / wave.period as f32;
 								if portion > 0.5 {
 									-1.0 + (portion - 0.5) * 4.0
 								} else {
 									1.0 - portion * 4.0
 								}
 							},
-							WaveType::Saw => -1.0 + (waveform.samples as f32 / waveform.period as f32) * 2.0,
-						};
-						waveform.samples = (waveform.samples + 1) % waveform.period;
+							WaveType::Saw => -1.0 + (wave.samples as f32 / wave.period as f32) * 2.0,
+						} * wave.amplitude;
+						wave.samples = (wave.samples + 1) % wave.period;
 					}
 				}
 				// Average it out

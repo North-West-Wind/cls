@@ -5,7 +5,7 @@ use normpath::PathExt;
 use ratatui::{style::{Color, Style}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 use tui_input::{backend::crossterm::EventHandler, Input};
 
-use crate::{config::FileEntry, state::{config_mut, get_mut_app, Scanning}, util::{pulseaudio::{loopback, unload_module}, selected_file_path, threads::spawn_scan_thread}};
+use crate::{component::{block::waves::set_wave_name, popup::wave}, config::FileEntry, state::{config_mut, get_mut_app, Scanning}, util::{pulseaudio::{loopback, unload_module}, selected_file_path, threads::spawn_scan_thread}};
 
 use super::{exit_popup, safe_centered_rect, PopupHandleKey, PopupHandlePaste, PopupRender};
 
@@ -17,6 +17,9 @@ pub enum AwaitInput {
 	Loopback2,
 	SetFileId,
 	WaveFrequency,
+	WaveAmplitude,
+	WavePhase,
+	WaveName,
 }
 
 pub struct InputPopup {
@@ -44,6 +47,8 @@ impl InputPopup {
 
 impl PopupRender for InputPopup {
 	fn render(&self, f: &mut Frame) {
+		use AwaitInput::*;
+
 		let area = f.area();
 		let width = (area.width / 2).max(5);
 		let height = 3;
@@ -52,11 +57,14 @@ impl PopupRender for InputPopup {
 		let input_para = Paragraph::new(input.value())
 			.scroll((0, scroll as u16))
 			.block(Block::bordered().border_type(BorderType::Rounded).title(match self.await_input {
-				AwaitInput::AddTab => "Add directory as tab",
-				AwaitInput::Loopback1 => "Loopback 1",
-				AwaitInput::Loopback2 => "Loopback 2",
-				AwaitInput::SetFileId => "File ID",
-				AwaitInput::WaveFrequency => "Frequency (Hz)",
+				AddTab => "Add directory as tab",
+				Loopback1 => "Loopback 1",
+				Loopback2 => "Loopback 2",
+				SetFileId => "File ID",
+				WaveFrequency => "Frequency (Hz)",
+				WaveAmplitude => "Amplitude (default = 1)",
+				WavePhase => "Phase",
+				WaveName => "Waveform Label",
 				_ => "Input"
 			}).padding(Padding::horizontal(1)).style(Style::default().fg(Color::Green)));
 		let input_area = safe_centered_rect(width, height, area);
@@ -72,8 +80,8 @@ impl PopupRender for InputPopup {
 impl PopupHandleKey for InputPopup {
 	fn handle_key(&mut self, event: KeyEvent) -> bool {
 		match event.code {
-			KeyCode::Enter => self.complete(&self.input, true),
-			KeyCode::Esc => self.complete(&self.input, false),
+			KeyCode::Enter => self.complete(true),
+			KeyCode::Esc => self.complete(false),
 			_ => {
 				if self.await_input == AwaitInput::SetFileId && match event.code {
 					KeyCode::Char(c) => !c.is_digit(10),
@@ -98,89 +106,123 @@ impl PopupHandlePaste for InputPopup {
 }
 
 impl InputPopup {
-	fn complete(&self, input: &Input, send: bool) {
+	fn complete(&self, send: bool) {
+		use AwaitInput::*;
 		if send {
 			match self.await_input {
-				AwaitInput::AddTab => send_add_tab(input.value().to_string()),
-				AwaitInput::Loopback1 => send_loopback_1(input.value().to_string()),
-				AwaitInput::Loopback2 => send_loopback_2(input.value().to_string()),
-				AwaitInput::SetFileId => send_file_id(input.value().to_string()),
+				AddTab => self.send_add_tab(),
+				Loopback1 => self.send_loopback(true),
+				Loopback2 => self.send_loopback(false),
+				SetFileId => self.send_file_id(),
+				WaveFrequency => self.send_wave_frequency(),
+				WaveAmplitude => self.send_wave_amplitude(),
+				WavePhase => self.send_wave_phase(),
+				WaveName => self.send_wave_name(),
 				_ => (),
 			}
 		}
 		exit_popup();
 	}
-}
 
-fn send_add_tab(str: String) {
-	let app = get_mut_app();
-	let Ok(norm) = Path::new(&str).normalize() else { return; };
-	let config = config_mut();
-	config.tabs.push(norm.clone().into_os_string().into_string().unwrap());
-	app.set_tab_selected(config.tabs.len() - 1);
-	spawn_scan_thread(Scanning::One(app.tab_selected()));
-}
+	fn send_add_tab(&self) {
+		let app = get_mut_app();
+		let Ok(norm) = Path::new(self.input.value()).normalize() else { return; };
+		let config = config_mut();
+		config.tabs.push(norm.clone().into_os_string().into_string().unwrap());
+		app.set_tab_selected(config.tabs.len() - 1);
+		spawn_scan_thread(Scanning::One(app.tab_selected()));
+	}
 
-fn send_loopback_1(str: String) {
-	let config = config_mut();
-	config.loopback_1 = str;
-	
-	let app = get_mut_app();
-	if !app.module_loopback_1.is_empty() {
-		app.module_loopback_1 = unload_module(&app.module_loopback_1)
-			.map_or(app.module_loopback_1.clone(), |_| { String::new() });
+	fn send_loopback(&self, one: bool) {
+		let config = config_mut();
+		let app = get_mut_app();
 
-		if !config.loopback_1.is_empty() {
-			app.module_loopback_1 = loopback(config.loopback_1.clone()).unwrap_or(String::new());
+		if one {
+			config.loopback_1 = self.input.value().to_string();
+
+			if !app.module_loopback_1.is_empty() {
+				app.module_loopback_1 = unload_module(&app.module_loopback_1)
+					.map_or(app.module_loopback_1.clone(), |_| { String::new() });
+
+				if !config.loopback_1.is_empty() {
+					app.module_loopback_1 = loopback(config.loopback_1.clone()).unwrap_or(String::new());
+				}
+			}
+		} else {
+			config.loopback_2 = self.input.value().to_string();
+
+			if !app.module_loopback_2.is_empty() {
+				app.module_loopback_2 = unload_module(&app.module_loopback_2)
+					.map_or(app.module_loopback_2.clone(), |_| { String::new() });
+
+				if !config.loopback_2.is_empty() {
+					app.module_loopback_2 = loopback(config.loopback_2.clone()).unwrap_or(String::new());
+				}
+			}
 		}
 	}
-}
 
-fn send_loopback_2(str: String) {
-	let config = config_mut();
-	config.loopback_2 = str;
-	
-	let app = get_mut_app();
-	if !app.module_loopback_2.is_empty() {
-		app.module_loopback_2 = unload_module(&app.module_loopback_2)
-			.map_or(app.module_loopback_2.clone(), |_| { String::new() });
-
-		if !config.loopback_1.is_empty() {
-			app.module_loopback_2 = loopback(config.loopback_2.clone()).unwrap_or(String::new());
+	fn send_file_id(&self) {
+		let path = selected_file_path();
+		if path.is_empty() {
+			return;
+		}
+		let Ok(id) = u32::from_str_radix(self.input.value(), 10) else { return; };
+		let app = get_mut_app();
+		let rev_map = &mut app.rev_file_id;
+		if rev_map.get(&id).is_some_and(|p| {
+			if p != &path {
+				app.error = "File ID must be unique".to_string();
+			}
+			true
+		}) {
+			return;
+		}
+		rev_map.insert(id, path.clone());
+		let config = config_mut();
+		match config.get_file_entry_mut(path.clone()) {
+			Some(entry) => {
+				entry.id = Some(id);
+			},
+			None => {
+				let mut entry = FileEntry::default();
+				entry.id = Some(id);
+				config.insert_file_entry(path, entry);
+			}
 		}
 	}
-}
 
-fn send_file_id(str: String) {
-	let path = selected_file_path();
-	if path.is_empty() {
-		return;
-	}
-	let Ok(id) = u32::from_str_radix(&str, 10) else { return; };
-	let app = get_mut_app();
-	let rev_map = &mut app.rev_file_id;
-	if rev_map.get(&id).is_some_and(|p| {
-		if p != &path {
-			app.error = "File ID must be unique".to_string();
+	fn send_wave_frequency(&self) {
+		let Ok(freq) = self.input.value().parse::<f32>() else { return; };
+		let Some(popup) = wave::get_wave_popup() else { return; };
+		let wave = &mut popup.waveform.waves[popup.selected];
+		if wave.frequency != freq {
+			popup.changed = true;
 		}
-		true
-	}) {
-		return;
+		wave.frequency = freq;
 	}
-	rev_map.insert(id, path.clone());
-	let config = config_mut();
-	match config.get_file_entry_mut(path.clone()) {
-		Some(entry) => {
-			entry.id = Some(id);
-		},
-		None => {
-			let mut entry = FileEntry::default();
-			entry.id = Some(id);
-			config.insert_file_entry(path, entry);
-		}
-	}
-}
 
-fn send_wave_frequency(str: String) {
-	
+	fn send_wave_amplitude(&self) {
+		let Ok(amplitude) = self.input.value().parse::<f32>() else { return; };
+		let Some(popup) = wave::get_wave_popup() else { return; };
+		let wave = &mut popup.waveform.waves[popup.selected];
+		if wave.amplitude != amplitude {
+			popup.changed = true;
+		}
+		wave.amplitude = amplitude;
+	}
+
+	fn send_wave_phase(&self) {
+		let Ok(phase) = self.input.value().parse::<f32>() else { return; };
+		let Some(popup) = wave::get_wave_popup() else { return; };
+		let wave = &mut popup.waveform.waves[popup.selected];
+		if wave.phase != phase {
+			popup.changed = true;
+		}
+		wave.phase = phase;
+	}
+
+	fn send_wave_name(&self) {
+		set_wave_name(self.input.value().to_string());
+	}
 }

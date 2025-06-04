@@ -27,6 +27,7 @@ impl Default for FileEntry {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default)]
 pub struct WaveformEntry {
 	pub label: String,
+	pub id: Option<u32>,
 	pub keys: HashSet<String>,
 	pub waves: Vec<Wave>,
 	pub volume: u32,

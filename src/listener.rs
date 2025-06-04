@@ -34,34 +34,39 @@ pub fn listen_events() -> io::Result<()> {
 pub fn listen_global_input() {
 	mki::bind_any_key(Action::handle_kb(move |key| {
 		let app = get_mut_app();
-		if app.popup.as_ref().is_some_and(|popup| { popup.has_global_key_handler() }) {
-			app.popup.as_mut().unwrap().handle_global_key(key);
-			notify_redraw();
-		} else if !app.hotkey.is_empty() {
-			// File hotkey
-			app.hotkey.iter().for_each(|(path, keys)| {
-				if keys.iter().all(|key| { key.is_pressed() }) {
-					play_file(path);
-				}
-			});
-			if !app.stopkey.is_empty() && !app.edit {
-				if app.stopkey.iter().all(|key| { key.is_pressed() }) {
-					stop_all();
+		app.popups.iter_mut().for_each(|popup| {
+			if popup.has_global_key_handler() {
+				popup.handle_global_key(key);
+				notify_redraw();
+			}
+		});
+
+		// File hotkey
+		app.hotkey.iter().for_each(|(path, keys)| {
+			if keys.iter().all(|key| { key.is_pressed() }) {
+				play_file(path);
+			}
+		});
+		if !app.stopkey.is_empty() && !app.edit {
+			if app.stopkey.iter().all(|key| { key.is_pressed() }) {
+				stop_all();
+			}
+		}
+
+		// Waveform hotkey
+		app.waves.iter().for_each(|wave| {
+			if wave.keys.len() == 0 {
+				return;
+			}
+			if wave.keys.iter().all(|key| { key.is_pressed() }) {
+				play_wave(wave.clone(), false);
+			} else {
+				let mut playing = wave.playing.lock().expect("Failed to lock mutex");
+				if *playing {
+					*playing = false;
 				}
 			}
-
-			// Waveform hotkey
-			app.waves.iter().for_each(|wave| {
-				if wave.keys.iter().all(|key| { key.is_pressed() }) {
-					play_wave(wave.clone(), false);
-				} else {
-					let mut playing = wave.playing.lock().expect("Failed to lock mutex");
-					if *playing {
-						*playing = false;
-					}
-				}
-			});
-		}
+		});
 	}));
 }
 
@@ -87,8 +92,9 @@ fn on_key(event: KeyEvent) {
 			app.error = String::new();
 			need_redraw = true;
 		}
-	} else if app.popup.is_some() {
-		need_redraw = app.popup.as_mut().unwrap().handle_key(event);
+	} else if !app.popups.is_empty() {
+		need_redraw = app.popups.last_mut()
+			.map_or(false, |popup| { popup.handle_key(event) });
 	} else {
 		need_redraw = match app.selection_layer {
 			SelectionLayer::Block => layer::handle_key(event),
@@ -102,9 +108,9 @@ fn on_key(event: KeyEvent) {
 
 fn on_paste(data: String) {
 	let app = state::get_mut_app();
-	if app.popup.is_some() {
-		if app.popup.as_mut().unwrap().handle_paste(data) {
+	if app.popups.iter_mut()
+		.map(|popup| { popup.handle_paste(data.clone()) })
+		.fold(false, |acc, redraw| { acc || redraw }) {
 			notify_redraw();
 		}
-	}
 }

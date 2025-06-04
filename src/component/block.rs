@@ -163,6 +163,20 @@ impl BlockComponent {
 			_ => ()
 		}
 	}
+
+	pub fn wave_selected(&self) -> Option<usize> {
+		match self {
+			BlockComponent::Waves(block) => Option::Some(block.selected),
+			_ => Option::None
+		}
+	}
+
+	pub fn set_wave_selected(&mut self, selected: usize) {
+		match self {
+			BlockComponent::Waves(block) => block.selected = selected,
+			_ => ()
+		}
+	}
 }
 
 pub(self) fn loop_index(index: usize, delta: i32, max: usize) -> usize {

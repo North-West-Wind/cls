@@ -2,6 +2,7 @@ use std::{io::Write, path::PathBuf};
 use migrate::migrate_config;
 pub use migrate::SoundboardConfig;
 pub use migrate::FileEntry;
+pub use migrate::WaveformEntry;
 
 use crate::{constant::APP_NAME, state::get_app};
 

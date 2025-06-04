@@ -1,32 +1,29 @@
 use std::cmp::{max, min};
 
 use crossterm::event::KeyEvent;
-use delete_tab::DeleteTabPopup;
 use help::HelpPopup;
 use input::InputPopup;
 use key_bind::KeyBindPopup;
 use mki::Keyboard;
-use quit::QuitPopup;
 use ratatui::{layout::Rect, Frame};
 use save::SavePopup;
 
-use crate::state::get_mut_app;
+use crate::{component::popup::{confirm::ConfirmPopup, wave::WavePopup}, state::get_mut_app};
 
-pub mod delete_tab;
+pub mod confirm;
 pub mod help;
 pub mod input;
 pub mod key_bind;
-pub mod quit;
 pub mod save;
 pub mod wave;
 
 pub enum PopupComponent {
-	DeleteTab(DeleteTabPopup),
+	Confirm(ConfirmPopup),
 	Help(HelpPopup),
 	Input(InputPopup),
 	KeyBind(KeyBindPopup),
-	Quit(QuitPopup),
 	Save(SavePopup),
+	Wave(WavePopup)
 }
 
 pub trait PopupRender {
@@ -47,26 +44,28 @@ pub trait PopupHandleGlobalKey {
 
 impl PopupRender for PopupComponent {
 	fn render(&self, f: &mut Frame) {
+		use PopupComponent::*;
 		match self {
-			PopupComponent::DeleteTab(popup) => popup.render(f),
-			PopupComponent::Help(popup) => popup.render(f),
-			PopupComponent::Input(popup) => popup.render(f),
-			PopupComponent::KeyBind(popup) => popup.render(f),
-			PopupComponent::Quit(popup) => popup.render(f),
-			PopupComponent::Save(popup) => popup.render(f),
+			Confirm(popup) => popup.render(f),
+			Help(popup) => popup.render(f),
+			Input(popup) => popup.render(f),
+			KeyBind(popup) => popup.render(f),
+			Save(popup) => popup.render(f),
+			Wave(popup) => popup.render(f),
 		}
 	}
 }
 
 impl PopupHandleKey for PopupComponent {
 	fn handle_key(&mut self, event: KeyEvent) -> bool {
+		use PopupComponent::*;
 		match self {
-			PopupComponent::DeleteTab(popup) => popup.handle_key(event),
-			PopupComponent::Help(popup) => popup.handle_key(event),
-			PopupComponent::Input(popup) => popup.handle_key(event),
-			PopupComponent::KeyBind(popup) => popup.handle_key(event),
-			PopupComponent::Quit(popup) => popup.handle_key(event),
-			PopupComponent::Save(popup) => popup.handle_key(event),
+			Confirm(popup) => popup.handle_key(event),
+			Help(popup) => popup.handle_key(event),
+			Input(popup) => popup.handle_key(event),
+			KeyBind(popup) => popup.handle_key(event),
+			Save(popup) => popup.handle_key(event),
+			Wave(popup) => popup.handle_key(event)
 		}
 	}
 }
@@ -100,12 +99,12 @@ impl PopupComponent {
 
 pub fn exit_popup() {
 	let app = get_mut_app();
-	app.popup = Option::None;
+	app.popups.pop();
 }
 
 pub fn set_popup(popup: PopupComponent) {
 	let app = get_mut_app();
-	app.popup = Option::Some(popup);
+	app.popups.push(popup);
 }
 
 pub(self) fn safe_centered_rect(width: u16, height: u16, area: Rect) -> Rect {

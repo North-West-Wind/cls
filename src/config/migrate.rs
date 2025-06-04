@@ -8,6 +8,7 @@ use crate::constant::CONFIG_VERSION;
 use super::get_config_path;
 
 pub use migrate1::FileEntry;
+pub use migrate1::WaveformEntry;
 
 mod migrate0;
 mod migrate1;

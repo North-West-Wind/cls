@@ -1,8 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::{component::block::{files::FilesBlock, settings::SettingsBlock, waves::WavesBlock, BlockNavigation}, state::{get_mut_app, SelectionLayer}, util::threads::spawn_save_thread};
+use crate::{component::{block::{files::FilesBlock, settings::SettingsBlock, waves::WavesBlock, BlockNavigation}, popup::confirm::{ConfirmAction, ConfirmPopup}}, state::{get_mut_app, SelectionLayer}, util::threads::spawn_save_thread};
 
-use super::{block::BlockHandleKey, popup::{help::HelpPopup, quit::QuitPopup, set_popup, PopupComponent}};
+use super::{block::BlockHandleKey, popup::{help::HelpPopup, set_popup, PopupComponent}};
 
 pub fn handle_key(event: KeyEvent) -> bool {
 	match event.code {
@@ -73,7 +73,7 @@ pub fn navigate_layer(escape: bool) -> bool {
 	if escape {
 		match app.selection_layer {
 			SelectionLayer::Block => {
-				set_popup(PopupComponent::Quit(QuitPopup::default()));
+				set_popup(PopupComponent::Confirm(ConfirmPopup::new(ConfirmAction::Quit)));
 				return true
 			},
 			SelectionLayer::Content => {

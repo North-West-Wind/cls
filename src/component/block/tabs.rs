@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::{component::{block::{borders, files::FilesBlock, volume::VolumeBlock, waves::WavesBlock, BlockNavigation}, popup::{delete_tab::DeleteTabPopup, input::{AwaitInput, InputPopup}, set_popup, PopupComponent}}, state::{config, config_mut, get_app, get_mut_app}};
+use crate::{component::{block::{borders, files::FilesBlock, volume::VolumeBlock, waves::WavesBlock, BlockNavigation}, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, set_popup, PopupComponent}}, state::{config, config_mut, get_app, get_mut_app}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -105,7 +105,7 @@ impl BlockRenderArea for TabsBlock {
 impl BlockHandleKey for TabsBlock {
 	fn handle_key(&mut self, event: KeyEvent) -> bool {
 		match event.code {
-			KeyCode::Char('a') => handle_add(),
+			KeyCode::Char('a') => self.handle_add(),
 			KeyCode::Char('d') => self.handle_remove(),
 			KeyCode::Right => self.handle_move(true, event.modifiers.contains(KeyModifiers::CONTROL)),
 			KeyCode::Left => self.handle_move(false, event.modifiers.contains(KeyModifiers::CONTROL)),
@@ -133,7 +133,7 @@ impl BlockNavigation for TabsBlock {
 impl TabsBlock {
 	fn handle_remove(&self) -> bool {
 		if self.selected < config().tabs.len() {
-			set_popup(PopupComponent::DeleteTab(DeleteTabPopup::default()));
+			set_popup(PopupComponent::Confirm(ConfirmPopup::new(ConfirmAction::DeleteTab)));
 			return true;
 		}
 		false
@@ -154,9 +154,9 @@ impl TabsBlock {
 		}
 		false
 	}
-}
 
-fn handle_add() -> bool {
-	set_popup(PopupComponent::Input(InputPopup::new(std::env::current_dir().unwrap().to_str().unwrap().to_string(), AwaitInput::AddTab)));
-	true
+	fn handle_add(&self) -> bool {
+		set_popup(PopupComponent::Input(InputPopup::new(std::env::current_dir().unwrap().to_str().unwrap().to_string(), AwaitInput::AddTab)));
+		true
+	}
 }

@@ -4,7 +4,7 @@ use mki::Keyboard;
 use std_semaphore::Semaphore;
 use uuid::Uuid;
 
-use crate::{component::{block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, volume::VolumeBlock, waves::WavesBlock, BlockComponent}, popup::PopupComponent}, config::{load, SoundboardConfig}, util::{global_input::string_to_keyboard, pulseaudio::unload_module, waveform::Waveform}};
+use crate::{component::{block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, volume::VolumeBlock, waves::WavesBlock, BlockComponent, BlockNavigation}, popup::PopupComponent}, config::{load, SoundboardConfig}, util::{global_input::string_to_keyboard, pulseaudio::unload_module, waveform::Waveform}};
 
 pub type CondvarPair = Arc<(Mutex<SharedCondvar>, Condvar)>;
 
@@ -50,7 +50,7 @@ pub struct App {
 	pub blocks: Vec<BlockComponent>,
 	pub block_selected: u8,
 	pub selection_layer: SelectionLayer,
-	pub popup: Option<PopupComponent>,
+	pub popups: Vec<PopupComponent>,
 	pub settings_opened: bool,
 	pub waves_opened: bool,
 	// pulseaudio
@@ -72,19 +72,27 @@ pub struct App {
 
 impl App {
 	pub fn file_selected(&self) -> usize {
-		self.blocks[2].file_selected().unwrap()
+		self.blocks[FilesBlock::ID as usize].file_selected().unwrap()
 	}
 
 	pub fn set_file_selected(&mut self, selected: usize) {
-		self.blocks[2].set_file_selected(selected);
+		self.blocks[FilesBlock::ID as usize].set_file_selected(selected);
 	}
 
 	pub fn tab_selected(&self) -> usize {
-		self.blocks[1].tab_selected().unwrap()
+		self.blocks[TabsBlock::ID as usize].tab_selected().unwrap()
 	}
 
 	pub fn set_tab_selected(&mut self, selected: usize) {
-		self.blocks[1].set_tab_selected(selected);
+		self.blocks[TabsBlock::ID as usize].set_tab_selected(selected);
+	}
+
+	pub fn wave_selected(&self) -> usize {
+		self.blocks[WavesBlock::ID as usize].wave_selected().unwrap()
+	}
+
+	pub fn set_wave_selected(&mut self, selected: usize) {
+		self.blocks[WavesBlock::ID as usize].set_wave_selected(selected);
 	}
 
 	pub fn unload_modules(&self) {
@@ -146,6 +154,7 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 		if keyboard.len() == wave.keys.len() {
 			waves.push(Waveform {
 				label: wave.label.clone(),
+				id: wave.id,
 				keys: keyboard,
 				waves: wave.waves.clone(),
 				volume: wave.volume,
@@ -185,7 +194,7 @@ pub fn init_app(hidden: bool, edit: bool) {
 			],
 			block_selected: 0,
 			selection_layer: SelectionLayer::Block,
-			popup: Option::None,
+			popups: vec![],
 			settings_opened: false,
 			waves_opened: false,
 			// pulseaudio
