@@ -6,7 +6,7 @@ use rand::Rng;
 use ratatui::{style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}};
 use substring::Substring;
 
-use crate::{component::{block::loop_index, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}}, state::config_mut, util::notify_redraw};
+use crate::{component::{block::loop_index, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}}, state::config_mut, util::{global_input::sort_keys, notify_redraw}};
 use crate::component::popup::wave::WavePopup;
 use crate::component::popup::{set_popup, PopupComponent};
 use crate::state::get_mut_app;
@@ -57,7 +57,7 @@ impl BlockRenderArea for WavesBlock {
 					let mut keys = wave.keys.iter()
 						.map(|key| { keyboard_to_string(*key) })
 						.collect::<Vec<String>>();
-					keys.sort();
+					let keys = sort_keys(&mut keys);
 					spans.push(Span::from(format!("{{{}}}", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
 					spans.push(Span::from(" "));
 				}

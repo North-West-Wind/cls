@@ -1,5 +1,6 @@
 use std::{collections::HashMap, path::Path, sync::{Arc, Condvar, Mutex}};
 
+use linked_hash_map::LinkedHashMap;
 use mki::Keyboard;
 use std_semaphore::Semaphore;
 use uuid::Uuid;
@@ -63,9 +64,9 @@ pub struct App {
 	pub scanning: Scanning,
 	pub rev_file_id: HashMap<u32, String>,
 	// render states: playing
-	pub playing_file: HashMap<Uuid, (u32, String)>,
+	pub playing_file: LinkedHashMap<Uuid, (u32, String)>,
 	pub playing_semaphore: Semaphore,
-	pub playing_wave: HashMap<Uuid, (u32, String)>,
+	pub playing_wave: LinkedHashMap<Uuid, (u32, String)>,
 	// waves
 	pub waves: Vec<Waveform>,
 }
@@ -207,9 +208,9 @@ pub fn init_app(hidden: bool, edit: bool) {
 			scanning: Scanning::None,
 			rev_file_id,
 			// render states: playing
-			playing_file: HashMap::new(),
+			playing_file: LinkedHashMap::new(),
 			playing_semaphore: Semaphore::new(1),
-			playing_wave: HashMap::new(),
+			playing_wave: LinkedHashMap::new(),
 			// waves
 			waves
 		};

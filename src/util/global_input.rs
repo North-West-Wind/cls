@@ -1,6 +1,7 @@
-use std::str::FromStr;
+use std::{cmp::Ordering, str::FromStr};
 
 use mki::Keyboard;
+use regex::Regex;
 use substring::Substring;
 
 pub fn keyboard_to_string(keyboard: Keyboard) -> String {
@@ -92,5 +93,58 @@ pub fn string_to_keyboard(string: &str) -> Option<Keyboard> {
 			Keyboard::from_str(&string).ok()
 		}
 	}
-	
+}
+
+// Custom key name ordering:
+// 1. FN keys
+// 2. Other keys (backspace, shift, etc.)
+// 3. Letter keys
+// 4. Number keys
+// 5. Symbol keys
+pub fn sort_keys(vec: &mut Vec<String>) -> &mut Vec<String> {
+	let regex_fn = Regex::new(r"F\d").unwrap();
+	vec.sort_by(|a, b| {
+		let regex_a = regex_fn.is_match(a);
+		let regex_b = regex_fn.is_match(b);
+		if regex_a && !regex_b {
+			Ordering::Less
+		} else if !regex_a && regex_b {
+			Ordering::Greater
+		} else if regex_a && regex_b {
+			a.cmp(b)
+		} else {
+			let single_a = a.len() == 1;
+			let single_b = b.len() == 1;
+			if !single_a && single_b {
+				Ordering::Less
+			} else if single_a && !single_b {
+				Ordering::Greater
+			} else if !single_a && !single_b {
+				a.cmp(b)
+			} else {
+				let char_a = a.chars().next().expect("a is empty");
+				let char_b = b.chars().next().expect("a is empty");
+				let letter_a = char_a.is_alphabetic();
+				let letter_b = char_b.is_alphabetic();
+				if letter_a && !letter_b {
+					Ordering::Less
+				} else if !letter_a && letter_b {
+					Ordering::Greater
+				} else if letter_a && letter_b {
+					a.cmp(b)
+				} else {
+					let digit_a = char_a.is_digit(10);
+					let digit_b = char_b.is_digit(10);
+					if digit_a && !digit_b {
+						Ordering::Less
+					} else if !digit_a && digit_b {
+						Ordering::Greater
+					} else {
+						a.cmp(b)
+					}
+				}
+			}
+		}
+	});
+	vec
 }

@@ -1,6 +1,7 @@
 use std::{cmp::max, collections::HashSet};
 
 use crossterm::event::{KeyCode, KeyEvent};
+use linked_hash_set::LinkedHashSet;
 use mki::Keyboard;
 use ratatui::{style::{Color, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 
@@ -17,7 +18,7 @@ pub enum KeyBindFor {
 pub struct KeyBindPopup {
 	this_is_a: KeyBindFor,
 	recording: bool,
-	recorded: HashSet<Keyboard>
+	recorded: LinkedHashSet<Keyboard>
 }
 
 impl KeyBindPopup {
@@ -25,7 +26,7 @@ impl KeyBindPopup {
 		Self {
 			this_is_a,
 			recording: false,
-			recorded: recorded,
+			recorded: recorded.into_iter().collect::<LinkedHashSet<Keyboard>>(),
 		}
 	}
 }

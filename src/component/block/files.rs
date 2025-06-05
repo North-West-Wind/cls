@@ -1,6 +1,6 @@
 use std::{cmp::{max, min}, collections::HashSet, i32, path::Path};
 
-use crate::{component::{block::{borders, settings::SettingsBlock, tabs::TabsBlock, BlockNavigation}, popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}}, state::{config, config_mut, get_app, get_mut_app, Scanning}, util::{self, selected_file_path, threads::spawn_scan_thread}};
+use crate::{component::{block::{borders, settings::SettingsBlock, tabs::TabsBlock, BlockNavigation}, popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}}, state::{config, config_mut, get_app, get_mut_app, Scanning}, util::{self, global_input::sort_keys, selected_file_path, threads::spawn_scan_thread}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -66,8 +66,8 @@ impl BlockRenderArea for FilesBlock {
 							spans.push(Span::from(" "));
 						});
 						if entry.keys.len() > 0 {
-							let mut keys = Vec::from_iter(entry.keys.clone().into_iter());
-							keys.sort();
+							let mut keys = entry.keys.clone().into_iter().collect::<Vec<String>>();
+							let keys = sort_keys(&mut keys);
 							spans.push(Span::from(format!("{{{}}}", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
 							spans.push(Span::from(" "));
 						}

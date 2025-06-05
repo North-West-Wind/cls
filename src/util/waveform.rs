@@ -53,7 +53,7 @@ impl Default for Waveform {
 			id: Option::None,
 			keys: vec![],
 			waves: vec![Wave::default()],
-			volume: 50,
+			volume: 100,
 			playing: Arc::new(Mutex::new(false))
 		}
 	}
@@ -140,7 +140,8 @@ pub fn play_wave(wave: Waveform, auto_stop: bool) {
 					amplitude: w.amplitude
 				}
 			}).collect::<Vec<PlayableWave>>();
-			while playing {
+			let mut last = 1.0;
+			while playing || last > 0.0 {
 				let mut sum_bytes = [0_f32; 1600];
 				for wave in &mut playable {
 					for ii in 0..1600 {
@@ -164,17 +165,27 @@ pub fn play_wave(wave: Waveform, auto_stop: bool) {
 				let mut bytes = [0_u8; 6400];
 				let len = playable.len() as i32;
 				for ii in 0..1600 {
+					let mult = if playing {
+						1.0
+					} else {
+						// Fade out
+						last -= 1.0 / 4800.0;
+						last
+					};
 					[
 						bytes[ii * 4],
 						bytes[ii * 4 + 1],
 						bytes[ii * 4 + 2],
 						bytes[ii * 4 + 3]
-					] = ((sum_bytes[ii] / len as f32)).to_le_bytes();
+					] = ((sum_bytes[ii] / len as f32) * mult).to_le_bytes();
 				}
 				// Write bytes to stdin
 				stdin.write_all(&bytes).expect("Failed to write to pacat stdin");
 				// Wait to write next chunk
 				thread::sleep(Duration::from_secs_f32(1.0 / (48000.0 / 1600.0)));
+				if !playing && last <= 0.0 {
+					break;
+				}
 				lock = mutex.lock().expect("Failed to get shared mutex");
 				if !auto_stop &&
 						wave.keys.len() > 0 &&

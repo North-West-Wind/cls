@@ -1,6 +1,6 @@
 use ratatui::{layout::Rect, style::{Color, Style}, widgets::Paragraph, Frame};
 
-use crate::state::config;
+use crate::{state::config, util::global_input::sort_keys};
 
 use super::BlockRenderArea;
 
@@ -17,8 +17,8 @@ impl BlockRenderArea for HelpBlock {
 		let config = config();
 		let mut text = "? for help, q to quit".to_owned();
 		if !config.stop_key.is_empty() {
-			let mut keys = Vec::from_iter(config.stop_key.clone().into_iter());
-			keys.sort();
+			let mut keys = config.stop_key.clone().into_iter().collect::<Vec<String>>();
+			let keys = sort_keys(&mut keys);
 			text += &format!(", {} to stop", keys.join(" + "));
 		}
 		let paragraph = Paragraph::new(text)
