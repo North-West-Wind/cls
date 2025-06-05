@@ -35,6 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		.arg(Arg::new("help").short('h').long("help").help("print this help menu").action(ArgAction::SetTrue))
 		.arg(Arg::new("edit").short('e').long("edit").help("run the soundboard in edit mode, meaning you can only modify config and not play anything").action(ArgAction::SetTrue))
 		.arg(Arg::new("hidden").long("hidden").help("run the soundboard in the background, basically read-only").action(ArgAction::SetTrue))
+		.arg(Arg::new("no-save").long("no-save").help("disable auto-save of config when the program exits").action(ArgAction::SetTrue))
 		.subcommand(Command::new("exit").about("exit another instance"))
 		.subcommand(Command::new("reload-config").about("reload config for another instance"))
 		.subcommand(Command::new("add-tab").about("add a directory tab").arg(Arg::new("dir").required(true)))
@@ -51,7 +52,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		]))
 		.subcommand(Command::new("play").about("play a file").arg(Arg::new("path").required(true)))
 		.subcommand(Command::new("play-id").about("play a file by user-defined ID").arg(Arg::new("id").required(true)))
+		.subcommand(Command::new("play-wave").about("play a waveform by user-defined ID").arg(Arg::new("id").required(true)))
 		.subcommand(Command::new("stop").about("stop all playing files"))
+		.subcommand(Command::new("stop-wave").about("stop a waveform by user-defined ID").arg(Arg::new("id").required(true)))
 		.subcommand(Command::new("set-volume").about("set volume of the sink or a file").args([
 			Arg::new("volume").help("new volume or volume increment (-200 - +200)"),
 			Arg::new("increment").long("increment").help("increment volume instead of setting it").action(ArgAction::SetTrue),
@@ -133,7 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	// Finish up PulseAudio
 	app.unload_modules();
-	if !app.hidden {
+	if !app.hidden && !matches.get_flag("no-save") {
 		// Save config if not hidden
 		config::save();
 	}

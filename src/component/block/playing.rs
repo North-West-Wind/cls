@@ -33,8 +33,8 @@ impl BlockRender for PlayingBlock {
 		}
 
 		if waves.len() > 0 {
-			lines.extend(waves.values().map(|(id, label)| {
-				Line::from(format!("{} : {}", label, id)).style(Style::default().fg(Color::LightBlue))
+			lines.extend(waves.values().map(|(_id, label)| {
+				Line::from(label.clone()).style(Style::default().fg(Color::LightBlue))
 			}));
 		}
 

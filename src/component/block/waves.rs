@@ -66,11 +66,7 @@ impl BlockRenderArea for WavesBlock {
 				} else {
 					Style::default().fg(Color::Cyan)
 				};
-				let details = if wave.waves.len() == 1 {
-					format!("{:?} {:.2} Hz",  wave.waves[0].wave_type,  wave.waves[0].frequency)
-				} else {
-					format!("{:?} {:.2} Hz + {} more",  wave.waves[0].wave_type,  wave.waves[0].frequency, wave.waves.len() - 1)
-				};
+				let details = wave.details();
 				let label = &wave.label;
 				let extra = spans.iter()
 					.map(|span| { span.width() as i32 })

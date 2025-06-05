@@ -1,6 +1,7 @@
 use std::{collections::HashSet, f32::consts::PI, io::Write, process::{Command, Stdio}, sync::{Arc, Mutex}, thread, time::Duration};
 
 use mki::Keyboard;
+use nix::{sys::signal::{self, Signal::SIGTERM}, unistd::Pid};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -68,6 +69,14 @@ impl Waveform {
 			volume: self.volume
 		}
 	}
+
+	pub fn details(&self) -> String {
+		if self.waves.len() == 1 {
+			format!("{:?} {:.2} Hz", self.waves[0].wave_type,  self.waves[0].frequency)
+		} else {
+			format!("{:?} {:.2} Hz + {} more", self.waves[0].wave_type,  self.waves[0].frequency, self.waves.len() - 1)
+		}
+	}
 }
 
 struct PlayableWave {
@@ -114,6 +123,8 @@ pub fn play_wave(wave: Waveform, auto_stop: bool) {
 		])
 			.stdin(Stdio::piped())
 			.stdout(Stdio::piped()).spawn().expect("Failed to spawn pacat process");
+		let pid = pacat_child.id();
+		let label = format!("{} ({})", wave.label, wave.details());
 
 		let mut stdin = pacat_child.stdin.take().expect("Failed to obtain pacat stdin");
 		let mutex = wave.playing.clone();
@@ -165,12 +176,18 @@ pub fn play_wave(wave: Waveform, auto_stop: bool) {
 				// Wait to write next chunk
 				thread::sleep(Duration::from_secs_f32(1.0 / (48000.0 / 1600.0)));
 				lock = mutex.lock().expect("Failed to get shared mutex");
+				if !auto_stop &&
+						wave.keys.len() > 0 &&
+						wave.keys.iter().any(|key| { !key.is_pressed() }) {
+					*lock = false;
+				}
 				playing = *lock;
 				std::mem::drop(lock);
 			}
+			signal::kill(Pid::from_raw(pid as i32), SIGTERM).expect("Failed to kill pacat");
 		});
 
-		app.playing_wave.insert(uuid, (pacat_child.id(), wave.label));
+		app.playing_wave.insert(uuid, (pid, label));
 		notify_redraw();
 
 		if auto_stop {
