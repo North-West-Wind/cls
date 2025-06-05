@@ -3,7 +3,7 @@ use std::cmp::{max, min};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 
-use crate::{component::block::{borders, tabs::TabsBlock, BlockNavigation}, config::FileEntry, state::{config, config_mut}, util::{pulseaudio::set_volume_percentage, selected_file_path}};
+use crate::{component::block::{borders, tabs::TabsBlock, BlockNavigation}, config::FileEntry, state::{config, config_mut, get_app, get_mut_app}, util::{pulseaudio::set_volume_percentage, selected_file_path}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -35,18 +35,32 @@ impl BlockRenderArea for VolumeBlock {
 		let mut lines = vec![
 			volume_line("Sink Volume".to_string(), config.volume, area.width, self.selected == 0)
 		];
-		let path = selected_file_path();
-		if !path.is_empty() {
-			lines.push(Line::from(""));
-			lines.push(Line::from(vec![
-				Span::from("Selected "),
-				Span::from(path.clone()).style(Style::default().fg(Color::LightGreen))
-			]));
-			let volume = match config.get_file_entry(path) {
-				Some(entry) => entry.volume,
-				None => 100
-			};
-			lines.push(volume_line("File Volume".to_string(), volume, area.width, self.selected == 1));
+		let app = get_app();
+		if app.waves_opened {
+			let index = app.wave_selected();
+			if index < app.waves.len() {
+				let wave = &app.waves[index];
+				lines.push(Line::from(""));
+				lines.push(Line::from(vec![
+					Span::from("Selected "),
+					Span::from(format!("{} ({})", wave.label, wave.details())).style(Style::default().fg(Color::LightBlue))
+				]));
+				lines.push(volume_line("Wave Volume".to_string(), wave.volume, area.width, self.selected == 1));
+			}
+		} else {
+			let path = selected_file_path();
+			if !path.is_empty() {
+				lines.push(Line::from(""));
+				lines.push(Line::from(vec![
+					Span::from("Selected "),
+					Span::from(path.clone()).style(Style::default().fg(Color::LightGreen))
+				]));
+				let volume = match config.get_file_entry(path) {
+					Some(entry) => entry.volume,
+					None => 100
+				};
+				lines.push(volume_line("File Volume".to_string(), volume, area.width, self.selected == 1));
+			}
 		}
 		let paragraph = Paragraph::new(Text::from(lines))
 			.block(block);
@@ -95,7 +109,11 @@ impl VolumeBlock {
 
 	fn change_volume(&self, delta: i16) -> bool {
 		if self.selected == 1 {
-			return change_file_volume(delta);
+			if get_app().waves_opened {
+				return change_wave_volume(delta);
+			} else {
+				return change_file_volume(delta);
+			}
 		}
 		let config = config_mut();
 		let old_volume = config.volume as i16;
@@ -163,5 +181,21 @@ fn change_file_volume(delta: i16) -> bool {
 			return true;
 		}
 	};
+	false
+}
+
+fn change_wave_volume(delta: i16) -> bool {
+	let app = get_mut_app();
+	let index = app.wave_selected();
+	if index >= app.waves.len() {
+		return false;
+	}
+	let wave = &mut app.waves[index];
+	let new_volume = min(100, max(0, wave.volume as i16 + delta)) as u32;
+	if new_volume != wave.volume {
+		wave.volume = new_volume;
+		config_mut().waves[index].volume = new_volume;
+		return true;
+	}
 	false
 }

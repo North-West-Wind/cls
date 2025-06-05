@@ -184,6 +184,7 @@ pub fn play_wave(wave: Waveform, auto_stop: bool) {
 				playing = *lock;
 				std::mem::drop(lock);
 			}
+			stdin.flush().expect("Failed to flush pacat stdin");
 			signal::kill(Pid::from_raw(pid as i32), SIGTERM).expect("Failed to kill pacat");
 		});
 
