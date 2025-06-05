@@ -1,6 +1,6 @@
 use std::{cmp::{max, min}, collections::HashSet};
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use mki::Keyboard;
 use rand::Rng;
 use ratatui::{style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}};
@@ -95,6 +95,16 @@ impl BlockRenderArea for WavesBlock {
 
 impl BlockHandleKey for WavesBlock {
 	fn handle_key(&mut self, event: KeyEvent) -> bool {
+		if event.modifiers.contains(KeyModifiers::CONTROL) {
+			let moved = match event.code {
+				KeyCode::Up => Some(self.move_wave(-1)),
+				KeyCode::Down => Some(self.move_wave(1)),
+				_ => None,
+			};
+			if moved.is_some() {
+				return moved.unwrap();
+			}
+		}
 		match event.code {
 			KeyCode::Up => self.navigate_wave(-1),
 			KeyCode::Down => self.navigate_wave(1),
@@ -161,6 +171,17 @@ impl WavesBlock {
 			return true;
 		}
 		false
+	}
+
+	fn move_wave(&mut self, dy: i32) -> bool {
+		let app = get_mut_app();
+		if self.selected == 0 && dy < 0 || self.selected == app.waves.len() - 1 && dy > 0 {
+			return false;
+		}
+		app.waves.swap(self.selected, (self.selected as i32 + dy) as usize);
+		config_mut().waves.swap(self.selected, (self.selected as i32 + dy) as usize);
+		self.selected = (self.selected as i32 + dy) as usize;
+		true
 	}
 
 	fn add_wave(&mut self) -> bool {
