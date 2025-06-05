@@ -12,7 +12,9 @@ pub enum SocketCode {
 
 	Play,
 	PlayId,
+	PlayWaveId,
 	Stop,
+	StopWaveId,
 
 	SetVolume,
 }
@@ -29,7 +31,9 @@ impl SocketCode {
 			"reload-tab" => Some(ReloadTab),
 			"play" => Some(Play),
 			"play-id" => Some(PlayId),
+			"play-wave" => Some(PlayWaveId),
 			"stop" => Some(Stop),
+			"stop-wave" => Some(StopWaveId),
 			"set-volume" => Some(SetVolume),
 			_ => None,
 		}
@@ -46,7 +50,9 @@ impl SocketCode {
 			5 => Some(ReloadTab),
 			6 => Some(Play),
 			9 => Some(PlayId),
+			10 => Some(PlayWaveId),
 			7 => Some(Stop),
+			11 => Some(StopWaveId),
 			8 => Some(SetVolume),
 			_ => None,
 		}
@@ -62,7 +68,9 @@ impl SocketCode {
 			ReloadTab => 5,
 			Play => 6,
 			PlayId => 9,
+			PlayWaveId => 10,
 			Stop => 7,
+			StopWaveId => 11,
 			SetVolume => 8,
 		}
 	}
@@ -106,6 +114,10 @@ impl SocketCode {
 				buf.extend(path.expect("Missing `path` argument").as_bytes());
 			},
 			PlayId => {
+				let id = matches.get_one::<String>("id").expect("Missing `id` argument").parse::<u32>();
+				buf.extend(id.expect("Failed to parse ID").to_le_bytes());
+			},
+			PlayWaveId|StopWaveId => {
 				let id = matches.get_one::<String>("id").expect("Missing `id` argument").parse::<u32>();
 				buf.extend(id.expect("Failed to parse ID").to_le_bytes());
 			},

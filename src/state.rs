@@ -67,7 +67,7 @@ pub struct App {
 	pub playing_semaphore: Semaphore,
 	pub playing_wave: HashMap<Uuid, (u32, String)>,
 	// waves
-	pub waves: Vec<Waveform>
+	pub waves: Vec<Waveform>,
 }
 
 impl App {

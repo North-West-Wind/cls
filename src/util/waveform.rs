@@ -186,3 +186,11 @@ pub fn play_wave(wave: Waveform, auto_stop: bool) {
 		notify_redraw();
 	});
 }
+
+pub fn stop_all_waves() {
+	let app = get_mut_app();
+	app.waves.iter().for_each(|wave| {
+		let mut playing = wave.playing.lock().expect("Failed to lock mutex");
+		*playing = false;
+	});
+}

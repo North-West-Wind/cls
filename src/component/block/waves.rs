@@ -1,11 +1,12 @@
-use std::cmp::{max, min};
+use std::{cmp::{max, min}, collections::HashSet};
 
 use crossterm::event::{KeyCode, KeyEvent};
+use mki::Keyboard;
 use rand::Rng;
 use ratatui::{style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}};
 use substring::Substring;
 
-use crate::{component::{block::loop_index, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}}}, state::config_mut, util::notify_redraw};
+use crate::{component::{block::loop_index, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}}, state::config_mut, util::notify_redraw};
 use crate::component::popup::wave::WavePopup;
 use crate::component::popup::{set_popup, PopupComponent};
 use crate::state::get_mut_app;
@@ -57,7 +58,7 @@ impl BlockRenderArea for WavesBlock {
 						.map(|key| { keyboard_to_string(*key) })
 						.collect::<Vec<String>>();
 					keys.sort();
-					spans.push(Span::from(format!("{{{}}}", keys.join("+"))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
+					spans.push(Span::from(format!("{{{}}}", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
 					spans.push(Span::from(" "));
 				}
 				let style = if self.selected == ii {
@@ -107,6 +108,10 @@ impl BlockHandleKey for WavesBlock {
 			KeyCode::Char('e') => self.edit_wave(),
 			KeyCode::Char('r') => self.rename_wave(),
 			KeyCode::Char('d') => self.delete_wave(),
+			KeyCode::Char('x') => self.set_global_key_bind(),
+			KeyCode::Char('z') => self.unset_global_key_bind(),
+			KeyCode::Char('v') => self.set_wave_id(),
+			KeyCode::Char('b') => self.unset_wave_id(),
 			KeyCode::PageUp => self.navigate_wave(-(self.range.1 - self.range.0 + 1)),
 			KeyCode::PageDown => self.navigate_wave(self.range.1 - self.range.0 + 1),
 			KeyCode::Home => self.navigate_wave(-i32::MAX),
@@ -185,6 +190,35 @@ impl WavesBlock {
 
 	fn delete_wave(&mut self) -> bool {
 		set_popup(PopupComponent::Confirm(ConfirmPopup::new(ConfirmAction::DeleteWave)));
+		true
+	}
+
+	fn set_global_key_bind(&self) -> bool {
+		let wave = &get_app().waves[self.selected];
+		set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::Wave, wave.keys.clone().into_iter().collect::<HashSet<Keyboard>>())));
+		true
+	}
+
+	fn unset_global_key_bind(&self) -> bool {
+		let wave = &mut get_mut_app().waves[self.selected];
+		wave.keys.clear();
+		config_mut().waves[self.selected].keys.clear();
+		true
+	}
+
+	fn set_wave_id(&self) -> bool {
+		let wave = &mut get_mut_app().waves[self.selected];
+		let init = match wave.id {
+			Some(id) => id.to_string(),
+			None => String::new(),
+		};
+		set_popup(PopupComponent::Input(InputPopup::new(init, AwaitInput::SetWaveId)));
+		true
+	}
+
+	fn unset_wave_id(&self) -> bool {
+		get_mut_app().waves[self.selected].id = Option::None;
+		config_mut().waves[self.selected].id = Option::None;
 		true
 	}
 }

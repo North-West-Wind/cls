@@ -68,7 +68,7 @@ impl BlockRenderArea for FilesBlock {
 						if entry.keys.len() > 0 {
 							let mut keys = Vec::from_iter(entry.keys.clone().into_iter());
 							keys.sort();
-							spans.push(Span::from(format!("{{{}}}", keys.join("+"))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
+							spans.push(Span::from(format!("{{{}}}", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
 							spans.push(Span::from(" "));
 						}
 					});
@@ -114,10 +114,10 @@ impl BlockHandleKey for FilesBlock {
 			KeyCode::Down => self.navigate_file(1),
 			KeyCode::Enter => self.play_file(false),
 			KeyCode::Char('/') => self.play_file(true),
-			KeyCode::Char('x') => set_global_key_bind(),
-			KeyCode::Char('z') => unset_global_key_bind(),
-			KeyCode::Char('v') => set_file_id(),
-			KeyCode::Char('b') => unset_file_id(),
+			KeyCode::Char('x') => self.set_global_key_bind(),
+			KeyCode::Char('z') => self.unset_global_key_bind(),
+			KeyCode::Char('v') => self.set_file_id(),
+			KeyCode::Char('b') => self.unset_file_id(),
 			KeyCode::PageUp => self.navigate_file(-(self.range.1 - self.range.0 + 1)),
 			KeyCode::PageDown => self.navigate_file(self.range.1 - self.range.0 + 1),
 			KeyCode::Home => self.navigate_file(-i32::MAX),
@@ -192,69 +192,70 @@ impl FilesBlock {
 		}
 		false
 	}
-}
 
-fn set_global_key_bind() -> bool {
-	let path = selected_file_path();
-	if path.is_empty() {
-		return false;
-	}
-	let app = get_app();
-	let hotkey = app.hotkey.get(&path);
-	let recorded = match hotkey {
-		Option::Some(vec) => HashSet::from_iter(vec.iter().map(|key| { *key })),
-		Option::None => HashSet::new(),
-	};
-	set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::File, recorded)));
-	return true;
-}
-
-fn unset_global_key_bind() -> bool {
-	let path = selected_file_path();
-	if path.is_empty() {
-		return false;
-	}
-	let config = config_mut();
-	let entry = config.get_file_entry_mut(path.clone());
-	return entry.map_or_else(|| { false }, |entry| {
-		if entry.keys.is_empty() {
+	fn set_global_key_bind(&self) -> bool {
+		let path = selected_file_path();
+		if path.is_empty() {
 			return false;
 		}
-		entry.keys.clear();
-		get_mut_app().hotkey.remove(&path);
-		true
-	});
-}
-
-fn set_file_id() -> bool {
-	let path = selected_file_path();
-	if path.is_empty() {
-		return false;
+		let app = get_app();
+		let hotkey = app.hotkey.get(&path);
+		let recorded = match hotkey {
+			Option::Some(vec) => HashSet::from_iter(vec.iter().map(|key| { *key })),
+			Option::None => HashSet::new(),
+		};
+		set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::File, recorded)));
+		return true;
 	}
-	let init = match config().get_file_entry(path) {
-		Some(entry) => match entry.id {
-			Some(id) => id.to_string(),
-			None => String::new(),
-		},
-		None => String::new(),
-	};
-	set_popup(PopupComponent::Input(InputPopup::new(init, AwaitInput::SetFileId)));
-	return true;
-}
 
-fn unset_file_id() -> bool {
-	let path = selected_file_path();
-	if path.is_empty() {
-		return false;
-	}
-	let app = get_mut_app();
-	let entry = config_mut().get_file_entry_mut(path);
-	return entry.map_or_else(|| { false }, |entry| {
-		let id = entry.id;
-		return id.map_or_else(|| { false }, |id| {
-			app.rev_file_id.remove(&id);
-			entry.id = Option::None;
+	fn unset_global_key_bind(&self) -> bool {
+		let path = selected_file_path();
+		if path.is_empty() {
+			return false;
+		}
+		let config = config_mut();
+		let entry = config.get_file_entry_mut(path.clone());
+		return entry.map_or_else(|| { false }, |entry| {
+			if entry.keys.is_empty() {
+				return false;
+			}
+			entry.keys.clear();
+			get_mut_app().hotkey.remove(&path);
 			true
 		});
-	});
+	}
+
+	fn set_file_id(&self) -> bool {
+		let path = selected_file_path();
+		if path.is_empty() {
+			return false;
+		}
+		let init = match config().get_file_entry(path) {
+			Some(entry) => match entry.id {
+				Some(id) => id.to_string(),
+				None => String::new(),
+			},
+			None => String::new(),
+		};
+		set_popup(PopupComponent::Input(InputPopup::new(init, AwaitInput::SetFileId)));
+		return true;
+	}
+
+	fn unset_file_id(&self) -> bool {
+		let path = selected_file_path();
+		if path.is_empty() {
+			return false;
+		}
+		let app = get_mut_app();
+		let entry = config_mut().get_file_entry_mut(path);
+		return entry.map_or_else(|| { false }, |entry| {
+			let id = entry.id;
+			return id.map_or_else(|| { false }, |id| {
+				app.rev_file_id.remove(&id);
+				entry.id = Option::None;
+				true
+			});
+		});
+	}
 }
+

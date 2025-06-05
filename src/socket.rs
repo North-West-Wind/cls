@@ -4,7 +4,7 @@ use clap::ArgMatches;
 use code::SocketCode;
 use normpath::PathExt;
 
-use crate::{config::FileEntry, constant::APP_NAME, state::{config_mut, get_app, get_mut_app, load_app_config, Scanning}, util::{fs::separate_parent_file, notify_redraw, pulseaudio::{play_file, set_volume_percentage, stop_all}, threads::spawn_scan_thread}};
+use crate::{config::FileEntry, constant::APP_NAME, state::{config_mut, get_app, get_mut_app, load_app_config, Scanning}, util::{fs::separate_parent_file, notify_redraw, pulseaudio::{play_file, set_volume_percentage, stop_all}, threads::spawn_scan_thread, waveform::{play_wave, stop_all_waves}}};
 
 pub mod code;
 
@@ -167,8 +167,32 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 				}
 			}
 		},
+		PlayWaveId => {
+			let mut bytes = [0; 4];
+			stream.read_exact(&mut bytes)?;
+			let id = u32::from_le_bytes(bytes);
+			let app = get_app();
+			app.waves.iter()
+				.find(|wave| { wave.id.is_some_and(|wave_id| wave_id == id) })
+				.inspect(|wave| {
+					play_wave((*wave).clone(), false);
+				});
+		},
+		StopWaveId => {
+			let mut bytes = [0; 4];
+			stream.read_exact(&mut bytes)?;
+			let id = u32::from_le_bytes(bytes);
+			let app = get_app();
+			app.waves.iter()
+				.find(|wave| { wave.id.is_some_and(|wave_id| wave_id == id) })
+				.inspect(|wave| {
+					let mut playing = wave.playing.lock().expect("Failed to lock mutex");
+					*playing = false;
+				});
+		},
 		Stop => {
 			stop_all();
+			stop_all_waves();
 		},
 		SetVolume => {
 			let mut args = [0; 4];

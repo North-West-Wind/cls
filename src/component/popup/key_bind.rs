@@ -11,6 +11,7 @@ use super::{exit_popup, safe_centered_rect, PopupHandleGlobalKey, PopupHandleKey
 pub enum KeyBindFor {
 	File,
 	Stop,
+	Wave,
 }
 
 pub struct KeyBindPopup {
@@ -55,8 +56,9 @@ impl PopupHandleKey for KeyBindPopup {
 				} else {
 					self.recording = false;
 					match self.this_is_a {
-						KeyBindFor::File => set_file_key_bind(&self.recorded),
-						KeyBindFor::Stop => set_stop_key_bind(&self.recorded),
+						KeyBindFor::File => self.set_file_key_bind(),
+						KeyBindFor::Stop => self.set_stop_key_bind(),
+						KeyBindFor::Wave => self.set_wave_key_bind(),
 					}
 					exit_popup();
 				}
@@ -96,37 +98,39 @@ impl PopupHandleGlobalKey for KeyBindPopup {
 	}
 }
 
-fn set_file_key_bind(recorded: &HashSet<Keyboard>) {
-	let path = selected_file_path();
-	if path.is_empty() {
-		return;
-	}
-	let app = get_mut_app();
-	let config = config_mut();
-	match config.get_file_entry_mut(path.clone()) {
-		Some(entry) => {
-			entry.keys = HashSet::from_iter(recorded.into_iter().map(|key| { keyboard_to_string(*key) }).collect::<Vec<String>>());
-		},
-		None => {
-			let mut entry = FileEntry::default();
-			entry.keys = HashSet::from_iter(recorded.into_iter().map(|key| { keyboard_to_string(*key) }).collect::<Vec<String>>());
-			config.insert_file_entry(path.clone(), entry);
+impl KeyBindPopup {
+	fn set_file_key_bind(&self) {
+		let path = selected_file_path();
+		if path.is_empty() {
+			return;
 		}
+		let app = get_mut_app();
+		let config = config_mut();
+		match config.get_file_entry_mut(path.clone()) {
+			Some(entry) => {
+				entry.keys = self.recorded.iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>();
+			},
+			None => {
+				let mut entry = FileEntry::default();
+				entry.keys = self.recorded.iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>();
+				config.insert_file_entry(path.clone(), entry);
+			}
+		}
+		app.hotkey.insert(path, self.recorded.clone().into_iter().collect::<Vec<Keyboard>>());
 	}
-	let mut keyboard = vec![];
-	for key in recorded {
-		keyboard.push(*key);
-	}
-	app.hotkey.insert(path, keyboard);
-}
 
-fn set_stop_key_bind(recorded: &HashSet<Keyboard>) {
-	let app = get_mut_app();
-	config_mut().stop_key = HashSet::from_iter(recorded.into_iter().map(|key| { keyboard_to_string(*key) }).collect::<Vec<String>>());
-	let mut keyboard = vec![];
-	for key in recorded {
-		keyboard.push(*key);
+	fn set_stop_key_bind(&self) {
+		let app = get_mut_app();
+		config_mut().stop_key = self.recorded.iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>();
+		app.stopkey = self.recorded.clone().into_iter().collect::<Vec<Keyboard>>();
+		notify_redraw();
 	}
-	app.stopkey.clear();
-	notify_redraw();
+
+	fn set_wave_key_bind(&self) {
+		let app = get_mut_app();
+		let selected = app.wave_selected();
+		config_mut().waves[selected].keys = self.recorded.iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>();
+		app.waves[selected].keys = self.recorded.clone().into_iter().collect::<Vec<Keyboard>>();
+		notify_redraw();
+	}
 }

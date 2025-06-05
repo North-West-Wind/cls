@@ -16,6 +16,7 @@ pub enum AwaitInput {
 	Loopback1,
 	Loopback2,
 	SetFileId,
+	SetWaveId,
 	WaveFrequency,
 	WaveAmplitude,
 	WavePhase,
@@ -61,6 +62,7 @@ impl PopupRender for InputPopup {
 				Loopback1 => "Loopback 1",
 				Loopback2 => "Loopback 2",
 				SetFileId => "File ID",
+				SetWaveId => "Wave ID",
 				WaveFrequency => "Frequency (Hz)",
 				WaveAmplitude => "Amplitude (default = 1)",
 				WavePhase => "Phase",
@@ -79,22 +81,26 @@ impl PopupRender for InputPopup {
 
 impl PopupHandleKey for InputPopup {
 	fn handle_key(&mut self, event: KeyEvent) -> bool {
+		use AwaitInput::*;
 		match event.code {
 			KeyCode::Enter => self.complete(true),
 			KeyCode::Esc => self.complete(false),
-			_ => {
-				if self.await_input == AwaitInput::SetFileId && match event.code {
-					KeyCode::Char(c) => !c.is_digit(10),
-					_ => false
+			KeyCode::Char(c) => {
+				if match self.await_input {
+					SetFileId|SetWaveId => c.is_digit(10),
+					_ => true
 				} {
-					return false;
+					self.input.handle_event(&Event::Key(event));
+					true
+				} else {
+					false
 				}
-				
+			},
+			_ => {
 				self.input.handle_event(&Event::Key(event));
-				return true;
+				true
 			}
 		}
-		return true
 	}
 }
 
@@ -106,7 +112,7 @@ impl PopupHandlePaste for InputPopup {
 }
 
 impl InputPopup {
-	fn complete(&self, send: bool) {
+	fn complete(&self, send: bool) -> bool {
 		use AwaitInput::*;
 		if send {
 			match self.await_input {
@@ -114,6 +120,7 @@ impl InputPopup {
 				Loopback1 => self.send_loopback(true),
 				Loopback2 => self.send_loopback(false),
 				SetFileId => self.send_file_id(),
+				SetWaveId => self.send_wave_id(),
 				WaveFrequency => self.send_wave_frequency(),
 				WaveAmplitude => self.send_wave_amplitude(),
 				WavePhase => self.send_wave_phase(),
@@ -122,6 +129,7 @@ impl InputPopup {
 			}
 		}
 		exit_popup();
+		true
 	}
 
 	fn send_add_tab(&self) {
@@ -190,6 +198,14 @@ impl InputPopup {
 				config.insert_file_entry(path, entry);
 			}
 		}
+	}
+
+	fn send_wave_id(&self) {
+		let Ok(id) = u32::from_str_radix(self.input.value(), 10) else { return; };
+		let app = get_mut_app();
+		let selected = app.wave_selected();
+		app.waves[selected].id = Some(id);
+		config_mut().waves[selected].id = Some(id);
 	}
 
 	fn send_wave_frequency(&self) {

@@ -33,7 +33,7 @@ impl PopupRender for WavePopup {
 			Line::from("enter / esc - save / discard changes"),
 			Line::from(""),
 
-			Line::from("Wave List")
+			Line::from("Wave List").style(Style::default().add_modifier(Modifier::BOLD)).centered()
 		];
 
 		for (ii, wave) in self.waveform.waves.iter().enumerate() {
