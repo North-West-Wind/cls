@@ -8,6 +8,7 @@ It's just a file manager and command runner.
 - Global Hotkey (also works on Wayland)
 - Play any file that `ffmpeg` supports
 - Directory tabs
+- Waveforms (>=2.0.0)
 
 ## Usage
 As I told you, this is just a file manager and command runner.  
@@ -33,9 +34,20 @@ The binary file will be available as `target/release/cls`
 ### Setup
 This soundboard is a very bare-bones program. It is built to fit my existing streaming configuration, so I'll run you down on how to set it up.
 
-First of all, this program creates a null-sink from PulseAudio that is called `cls`, and all sounds are played into this sink. If you want the sound to be played somewhere, you'll have to load a few modules.
+First of all, this program creates a null-sink from PulseAudio that is called `cls`, and all sounds are played into this sink. A loopback of the sink is automatically created to the current audio output. There's a good chance you don't (just) want this. To change that, press `c` in the TUI. 
 
-#### To Mic
+#### Auto Loopback (>=1.2.0)
+Starting from v1.2.0, settings have been implemented to automatically load loopback modules. To configure them, simply open the settings menu by pressing `c` in the TUI. On the right, you will see `Loopback 1`, `Loopback 2` and `Loopback Default` (only in >=2.0.0).
+- `Loopback 1` and `Loopback 2` will create a loopback to the spcified sinks
+	- This can be a monitor to a source
+- `Loopback Default` is a boolean variable that determines if the `cls` sink will play to the current audio output
+
+Before v2.0.0, changing these settings requires a reload (exiting and relaunching) of the program.
+
+#### Manual Loopback (<1.2.0)
+If you want the sound to be played somewhere, you'll have to load a few modules.
+
+##### To Mic
 Redirecting the sink to a source is unreasonably complicated. I wish there was a single module that does it all.
 
 We need to create an input mixer.
@@ -53,7 +65,7 @@ pactl load-module module-remap-source master=input_mixer.monitor source_name=mic
 
 The last step may not be necessary if you intend to use this for the browser, but other applications may not pick up the input mixer monitor as an input.
 
-#### To Speaker
+##### To Speaker
 In comparison, redirecting a sink to another sink is much easier.
 
 ```bash
@@ -110,7 +122,10 @@ Here's the current list of subcommands implemented:
 	- `--name` will delete the tab that matches the base name (i.e. the name you see in the `Tabs` block).
 - `cls reload-tab [--index <index>] [--path <path>] [--name <name>]`: Reloads a directory tab. Options serve the same functions as in `delete-tab`.
 - `cls play <path>`: Plays a file.
+- `cls play-id <id>`: Plays a file by its user-defined ID.
+- `cls play-wave <id>`: Plays a waveform by its user-defined ID.
 - `cls stop`: Stops all the audio files that are playing.
+- `cls stop-wave <id>`: Stops a waveform by its user-defined ID.
 - `cls set-volume <volume> [--increment] [--path <path>]`: Set the volume for the `cls` sink or a specific file.
 	- If `--increment` is **NOT** set, the volume is set to `<volume>` provided.
 	- If `--increment` is **SET**, the volume is incremented by `<volume>` (can be negative).
