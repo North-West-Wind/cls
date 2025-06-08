@@ -12,6 +12,7 @@ use substring::Substring;
 
 pub struct FilesBlock {
 	range: (i32, i32),
+	height: u16,
 	pub selected: usize,
 }
 
@@ -21,6 +22,7 @@ impl BlockSingleton for FilesBlock {
 		BLOCK.get_or_init(|| {
 			Mutex::new(Self {
 				range: (-1, -1),
+				height: 0,
 				selected: 0,
 			})
 		}).lock().unwrap()
@@ -39,8 +41,9 @@ impl BlockRenderArea for FilesBlock {
 			.border_style(border_style)
 			.padding(Padding::new(2, 2, 1, 1));
 	
-		if self.range.0 == -1 {
+		if self.range.0 == -1 || self.height != area.height {
 			self.range = (0, area.height as i32 - 5);
+			self.height = area.height;
 		}
 		let paragraph: Paragraph;
 		if app.scanning == Scanning::All {

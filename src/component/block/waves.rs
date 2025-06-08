@@ -1,4 +1,4 @@
-use std::{cmp::{max, min}, collections::HashSet, sync::{LazyLock, Mutex, MutexGuard}};
+use std::{cmp::{max, min}, collections::HashSet, sync::{Arc, LazyLock, Mutex, MutexGuard}};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use mki::Keyboard;
@@ -13,6 +13,7 @@ use crate::{component::block::{settings::SettingsBlock, tabs::TabsBlock, BlockHa
 
 pub struct WavesBlock {
 	range: (i32, i32),
+	height: u16,
 	pub selected: usize,
 }
 
@@ -20,6 +21,7 @@ impl BlockSingleton for WavesBlock {
 	fn instance() -> MutexGuard<'static, Self> {
 		static BLOCK: LazyLock<Mutex<WavesBlock>> = LazyLock::new(|| { Mutex::new(WavesBlock {
 			range: (-1, -1),
+			height: 0,
 			selected: 0
 		}) });
 		BLOCK.lock().unwrap()
@@ -28,8 +30,9 @@ impl BlockSingleton for WavesBlock {
 
 impl BlockRenderArea for WavesBlock {
 	fn render_area(&mut self, f: &mut ratatui::Frame, area: ratatui::prelude::Rect) {
-		if self.range.0 == -1 {
-			self.range = (0, area.height as i32);
+		if self.range.0 == -1 || self.height != area.height {
+			self.range = (0, area.height as i32 - 5);
+			self.height = area.height;
 		}
 
 		let app = acquire();
@@ -113,6 +116,7 @@ impl BlockHandleKey for WavesBlock {
 			KeyCode::Char('e') => self.edit_wave(),
 			KeyCode::Char('r') => self.rename_wave(),
 			KeyCode::Char('d') => self.delete_wave(),
+			KeyCode::Char('f') => self.duplicate_wave(),
 			KeyCode::Char('x') => self.set_global_key_bind(),
 			KeyCode::Char('z') => self.unset_global_key_bind(),
 			KeyCode::Char('v') => self.set_wave_id(),
@@ -204,9 +208,21 @@ impl WavesBlock {
 		true
 	}
 
-	fn delete_wave(&mut self) -> bool {
+	fn delete_wave(&self) -> bool {
 		set_popup(PopupComponent::Confirm(ConfirmPopup::new(ConfirmAction::DeleteWave)));
 		true
+	}
+	
+	fn duplicate_wave(&mut self) -> bool {
+		let mut app = acquire();
+		let mut waveform = app.waves[self.selected].clone();
+		waveform.playing = Arc::new(Mutex::new((false, false)));
+		let entry = waveform.to_entry();
+		app.waves.push(waveform);
+		app.config.waves.push(entry);
+		self.selected = app.waves.len() - 1;
+		drop(app);
+		self.edit_wave()
 	}
 
 	fn set_global_key_bind(&self) -> bool {

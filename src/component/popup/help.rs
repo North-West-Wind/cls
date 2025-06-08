@@ -85,6 +85,7 @@ impl PopupRender for HelpPopup {
 					Line::from("e - Edit waveform"),
 					Line::from("r - Rename waveform"),
 					Line::from("d - Delete waveform"),
+					Line::from("f - Duplicate waveform"),
 					Line::from("enter - Play waveform"),
 					Line::from("/ - Play random waveform"),
 					Line::from("x - Set global hotkey"),
