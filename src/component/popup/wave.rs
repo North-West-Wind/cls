@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 use std::cmp::max;
 
-use crate::{component::popup::{confirm::{ConfirmAction, ConfirmPopup}, exit_popup, input::{AwaitInput, InputPopup}, set_popup, PopupComponent, PopupHandleKey, PopupRender}, state::acquire, util::waveform::{Wave, WaveType, Waveform}};
+use crate::{component::popup::{confirm::{ConfirmAction, ConfirmPopup}, defer_exit_popup, defer_set_popup, input::{AwaitInput, InputPopup}, PopupComponent, PopupHandleKey, PopupRender}, state::acquire, util::waveform::{Wave, WaveType, Waveform}};
 
 pub struct WavePopup {
 	index: usize,
@@ -146,23 +146,23 @@ impl WavePopup {
 		}
 		self.waveform.waves.remove(self.selected);
 		if self.selected >= self.waveform.waves.len() {
-			self.selected = self.waveform.waves.len();
+			self.selected = self.waveform.waves.len() - 1;
 		}
 		true
 	}
 
 	fn popup_frequency(&self) -> bool {
-		set_popup(PopupComponent::Input(InputPopup::new(self.selected_wave().frequency.to_string(), AwaitInput::WaveFrequency)));
+		defer_set_popup(PopupComponent::Input(InputPopup::new(self.selected_wave().frequency.to_string(), AwaitInput::WaveFrequency)));
 		true
 	}
 
 	fn popup_amplitude(&self) -> bool {
-		set_popup(PopupComponent::Input(InputPopup::new(self.selected_wave().amplitude.to_string(), AwaitInput::WaveAmplitude)));
+		defer_set_popup(PopupComponent::Input(InputPopup::new(self.selected_wave().amplitude.to_string(), AwaitInput::WaveAmplitude)));
 		true
 	}
 
 	fn popup_phase(&self) -> bool {
-		set_popup(PopupComponent::Input(InputPopup::new(self.selected_wave().phase.to_string(), AwaitInput::WavePhase)));
+		defer_set_popup(PopupComponent::Input(InputPopup::new(self.selected_wave().phase.to_string(), AwaitInput::WavePhase)));
 		true
 	}
 
@@ -170,15 +170,15 @@ impl WavePopup {
 		let mut app = acquire();
 		app.waves[self.index] = self.waveform.clone();
 		app.config.waves[self.index] = self.waveform.to_entry();
-		exit_popup();
+		defer_exit_popup();
 		true
 	}
 
 	fn discard_changes(&self) -> bool {
 		if self.changed {
-			set_popup(PopupComponent::Confirm(ConfirmPopup::new(ConfirmAction::DiscardWaveChanges)));
+			defer_set_popup(PopupComponent::Confirm(ConfirmPopup::new(ConfirmAction::DiscardWaveChanges)));
 		} else {
-			exit_popup();
+			defer_exit_popup();
 		}
 		true
 	}

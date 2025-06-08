@@ -65,7 +65,9 @@ pub fn listen_global() {
 				play_wave(wave.clone(), false);
 			} else {
 				let mut playing = wave.playing.lock().expect("Failed to lock mutex");
-				*playing = false;
+				if !playing.1 {
+					playing.0 = false;
+				}
 			}
 		});
 	}));

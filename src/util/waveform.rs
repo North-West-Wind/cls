@@ -42,7 +42,7 @@ pub struct Waveform {
 	pub keys: Vec<Keyboard>,
 	pub waves: Vec<Wave>,
 	pub volume: u32,
-	pub playing: Arc<Mutex<bool>>,
+	pub playing: Arc<Mutex<(bool, bool)>>,
 }
 
 impl Default for Waveform {
@@ -53,7 +53,7 @@ impl Default for Waveform {
 			keys: vec![],
 			waves: vec![Wave::default()],
 			volume: 100,
-			playing: Arc::new(Mutex::new(false))
+			playing: Arc::new(Mutex::new((false, false)))
 		}
 	}
 }
@@ -105,10 +105,10 @@ pub fn play_wave(wave: Waveform, auto_stop: bool) {
 		}
 
 		let mut playing = wave.playing.lock().expect("Failed to check if wave is playing");
-		if *playing {
+		if playing.0 {
 			return;
 		}
-		*playing = true;
+		playing.0 = true;
 		drop(playing);
 
 		let playable = wave.waves.iter().map(|w| {
@@ -124,15 +124,17 @@ pub fn play_wave(wave: Waveform, auto_stop: bool) {
 		drop(app);
 		notify_redraw();
 
-		let mutex = wave.playing.clone();
 		if auto_stop {
 			thread::sleep(Duration::from_secs(1));
 		} else {
-			while *mutex.lock().unwrap() && wave.keys.iter().all(|key| { key.is_pressed() }) {
+			while {
+				let (playing, force) = *wave.playing.lock().unwrap();
+				playing && force
+			} || wave.keys.iter().all(|key| { key.is_pressed() }) {
 				thread::sleep(Duration::from_secs_f32(1600.0 / 48000.0));
 			}
 		}
-		*mutex.lock().unwrap() = false;
+		wave.playing.lock().unwrap().0 = false;
 
 		acquire().playing_wave.remove(&uuid);
 		acquire_playing_waves().remove(&uuid);
@@ -146,7 +148,8 @@ pub fn stop_all_waves() {
 		let app = acquire();
 		app.waves.iter().for_each(|wave| {
 			let mut playing = wave.playing.lock().expect("Failed to lock mutex");
-			*playing = false;
+			playing.0 = false;
+			playing.1 = false;
 		});
 	});
 }

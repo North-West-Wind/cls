@@ -99,7 +99,7 @@ pub fn spawn_save_thread() {
 	thread::spawn(move || {
 		set_popup(PopupComponent::Save(SavePopup::new(false)));
 		notify_redraw();
-		let _ = config::save();
+		config::save();
 		exit_popup();
 		set_popup(PopupComponent::Save(SavePopup::new(true)));
 		notify_redraw();

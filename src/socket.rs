@@ -175,6 +175,7 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 			app.waves.iter()
 				.find(|wave| { wave.id.is_some_and(|wave_id| wave_id == id) })
 				.inspect(|wave| {
+					{ wave.playing.lock().unwrap().1 = true; }
 					play_wave((*wave).clone(), false);
 				});
 		},
@@ -186,7 +187,8 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 				.find(|wave| { wave.id.is_some_and(|wave_id| wave_id == id) })
 				.inspect(|wave| {
 					let mut playing = wave.playing.lock().expect("Failed to lock mutex");
-					*playing = false;
+					playing.0 = false;
+					playing.1 = false;
 				});
 		},
 		Stop => {

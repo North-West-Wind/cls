@@ -6,10 +6,9 @@ use rand::Rng;
 use ratatui::{style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}};
 use substring::Substring;
 
-use crate::{component::{block::{loop_index, BlockSingleton}, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}}, state::notify_redraw, util::global_input::sort_keys};
+use crate::{component::{block::{loop_index, BlockSingleton}, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}}, state::notify_redraw, util::{global_input::sort_keys, waveform::play_wave}};
 use crate::component::popup::wave::WavePopup;
 use crate::component::popup::{set_popup, PopupComponent};
-use crate::util;
 use crate::{component::block::{settings::SettingsBlock, tabs::TabsBlock, BlockHandleKey, BlockNavigation, BlockRenderArea}, state::acquire, util::{global_input::keyboard_to_string, waveform::Waveform}};
 
 pub struct WavesBlock {
@@ -153,7 +152,7 @@ impl WavesBlock {
 			}
 			index = self.selected;
 		}
-		util::waveform::play_wave(app.waves[index].clone(), true);
+		play_wave(app.waves[index].clone(), true);
 		true
 	}
 
@@ -191,6 +190,7 @@ impl WavesBlock {
 		app.waves.push(waveform);
 		app.config.waves.push(entry);
 		self.selected = app.waves.len() - 1;
+		drop(app);
 		self.edit_wave()
 	}
 

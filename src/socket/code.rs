@@ -113,11 +113,7 @@ impl SocketCode {
 				let path = matches.get_one::<String>("path");
 				buf.extend(path.expect("Missing `path` argument").as_bytes());
 			},
-			PlayId => {
-				let id = matches.get_one::<String>("id").expect("Missing `id` argument").parse::<u32>();
-				buf.extend(id.expect("Failed to parse ID").to_le_bytes());
-			},
-			PlayWaveId|StopWaveId => {
+			PlayId|PlayWaveId|StopWaveId => {
 				let id = matches.get_one::<String>("id").expect("Missing `id` argument").parse::<u32>();
 				buf.extend(id.expect("Failed to parse ID").to_le_bytes());
 			},

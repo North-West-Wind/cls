@@ -117,7 +117,7 @@ pub fn scan_tabs() -> Result<(), std::io::Error> {
 	Ok(())
 }
 
-pub fn selected_file_path(tabs: &Vec<String>, files: &HashMap<String, Vec<(String, String)>>) -> String {
+pub fn selected_file_path(tabs: &Vec<String>, files: &HashMap<String, Vec<(String, String)>>, selected: Option<usize>) -> String {
 	let tab_selected = { TabsBlock::instance().selected };
 	if tab_selected >= tabs.len() {
 		return String::new();
@@ -128,7 +128,7 @@ pub fn selected_file_path(tabs: &Vec<String>, files: &HashMap<String, Vec<(Strin
 		return String::new();
 	}
 	let files = files.unwrap();
-	let selected = { FilesBlock::instance().selected };
+	let selected = selected.unwrap_or_else(|| { FilesBlock::instance().selected });
 	if selected >= files.len() {
 		return String::new();
 	}

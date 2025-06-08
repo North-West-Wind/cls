@@ -1,9 +1,9 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Style}, text::{Line, Text}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 
-use crate::{component::block::{tabs::TabsBlock, waves::WavesBlock, BlockSingleton}, state::{acquire, acquire_running}};
+use crate::{component::{block::{tabs::TabsBlock, waves::WavesBlock, BlockSingleton}, popup::defer_exit_popup}, state::{acquire, acquire_running}};
 
-use super::{exit_popup, PopupHandleKey, PopupRender};
+use super::{PopupHandleKey, PopupRender};
 
 pub enum ConfirmAction {
 	DeleteTab,
@@ -41,7 +41,7 @@ impl PopupRender for ConfirmPopup {
 impl PopupHandleKey for ConfirmPopup {
 	fn handle_key(&mut self, event: KeyEvent) -> bool {
 		use ConfirmAction::*;
-		exit_popup();
+		defer_exit_popup();
 		match event.code {
 			KeyCode::Char('y') => {
 				match self.action {
@@ -110,7 +110,7 @@ impl ConfirmPopup {
 	}
 
 	fn discard_wave_changes(&self) -> bool {
-		exit_popup(); // exit the wave popup
+		defer_exit_popup(); // exit the wave popup
 		true
 	}
 

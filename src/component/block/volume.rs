@@ -47,7 +47,7 @@ impl BlockRenderArea for VolumeBlock {
 				lines.push(volume_line("Wave Volume".to_string(), wave.volume, area.width, self.selected == 1));
 			}
 		} else {
-			let path = selected_file_path(&app.config.tabs, &app.files);
+			let path = selected_file_path(&app.config.tabs, &app.files, None);
 			if !path.is_empty() {
 				lines.push(Line::from(""));
 				lines.push(Line::from(vec![
@@ -96,7 +96,7 @@ impl VolumeBlock {
 		if new_selected != self.selected {
 			if new_selected == 1 {
 				let app = acquire();
-				let selected_file = selected_file_path(&app.config.tabs, &app.files);
+				let selected_file = selected_file_path(&app.config.tabs, &app.files, None);
 				if selected_file.is_empty() {
 					return false;
 				}
@@ -108,14 +108,15 @@ impl VolumeBlock {
 	}
 
 	fn change_volume(&self, delta: i16) -> bool {
-		let mut app = acquire();
+		let waves_opened = { acquire().waves_opened };
 		if self.selected == 1 {
-			if app.waves_opened {
+			if waves_opened {
 				return change_wave_volume(delta);
 			} else {
 				return change_file_volume(delta);
 			}
 		}
+		let mut app = acquire();
 		let old_volume = app.config.volume as i16;
 		let new_volume = min(200, max(0, old_volume + delta));
 		if new_volume != old_volume {
@@ -158,7 +159,7 @@ fn volume_line(title: String, volume: u32, width: u16, highlight: bool) -> Line<
 
 fn change_file_volume(delta: i16) -> bool {
 	let mut app = acquire();
-	let path = selected_file_path(&app.config.tabs, &app.files);
+	let path = selected_file_path(&app.config.tabs, &app.files, None);
 	if path.is_empty() {
 		return false;
 	}

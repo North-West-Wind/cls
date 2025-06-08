@@ -5,6 +5,7 @@ use crate::{component::{block::{settings::SettingsBlock, tabs::TabsBlock, BlockN
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
 use crossterm::event::KeyCode;
+use mki::Keyboard;
 use rand::Rng;
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph, Wrap}, Frame};
 use substring::Substring;
@@ -195,14 +196,13 @@ impl FilesBlock {
 
 	fn set_global_key_bind(&self) -> bool {
 		let app = acquire();
-		let path = selected_file_path(&app.config.tabs, &app.files);
+		let path = selected_file_path(&app.config.tabs, &app.files, Some(self.selected));
 		if path.is_empty() {
 			return false;
 		}
-		let app = acquire();
 		let hotkey = app.hotkey.get(&path);
 		let recorded = match hotkey {
-			Option::Some(vec) => HashSet::from_iter(vec.iter().map(|key| { *key })),
+			Option::Some(vec) => vec.iter().map(|key| { *key }).collect::<HashSet<Keyboard>>(),
 			Option::None => HashSet::new(),
 		};
 		set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::File, recorded)));
@@ -210,12 +210,11 @@ impl FilesBlock {
 	}
 
 	fn unset_global_key_bind(&self) -> bool {
-		let app = acquire();
-		let path = selected_file_path(&app.config.tabs, &app.files);
+		let mut app = acquire();
+		let path = selected_file_path(&app.config.tabs, &app.files, Some(self.selected));
 		if path.is_empty() {
 			return false;
 		}
-		let mut app = acquire();
 		let Some(entry) = app.config.get_file_entry_mut(path.clone()) else { return false };
 		if entry.keys.is_empty() {
 			return false;
@@ -227,11 +226,11 @@ impl FilesBlock {
 
 	fn set_file_id(&self) -> bool {
 		let app = acquire();
-		let path = selected_file_path(&app.config.tabs, &app.files);
+		let path = selected_file_path(&app.config.tabs, &app.files, Some(self.selected));
 		if path.is_empty() {
 			return false;
 		}
-		let init = match acquire().config.get_file_entry(path) {
+		let init = match app.config.get_file_entry(path) {
 			Some(entry) => match entry.id {
 				Some(id) => id.to_string(),
 				None => String::new(),
@@ -243,12 +242,11 @@ impl FilesBlock {
 	}
 
 	fn unset_file_id(&self) -> bool {
-		let app = acquire();
-		let path = selected_file_path(&app.config.tabs, &app.files);
+		let mut app = acquire();
+		let path = selected_file_path(&app.config.tabs, &app.files, Some(self.selected));
 		if path.is_empty() {
 			return false;
 		}
-		let mut app = acquire();
 		let Some(entry) = app.config.get_file_entry_mut(path) else { return false };
 		let Some(id) = entry.id else { return false };
 		entry.id = Option::None;

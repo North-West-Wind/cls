@@ -104,14 +104,23 @@ pub fn popups() -> MutexGuard<'static, Vec<PopupComponent>> {
 }
 
 pub fn exit_popup() {
-	// Defer to avoid deadlock
-	thread::spawn(move || {
-		popups().pop();
-	});
+	popups().pop();
 }
 
 pub fn set_popup(popup: PopupComponent) {
 	popups().push(popup);
+}
+
+pub fn defer_exit_popup() {
+	thread::spawn(move || {
+		exit_popup();
+	});
+}
+
+pub fn defer_set_popup(popup: PopupComponent) {
+	thread::spawn(move || {
+		set_popup(popup);
+	});
 }
 
 pub(self) fn safe_centered_rect(width: u16, height: u16, area: Rect) -> Rect {

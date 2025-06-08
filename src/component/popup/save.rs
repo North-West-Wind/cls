@@ -1,7 +1,9 @@
 use crossterm::event::KeyEvent;
 use ratatui::{layout::Rect, style::{Color, Stylize}, widgets::{Block, BorderType, Padding, Paragraph}, Frame};
 
-use super::{exit_popup, PopupHandleKey, PopupRender};
+use crate::component::popup::defer_exit_popup;
+
+use super::{PopupHandleKey, PopupRender};
 
 pub struct SavePopup {
 	done: bool
@@ -42,7 +44,7 @@ impl PopupHandleKey for SavePopup {
 		if !self.done {
 			return false;
 		}
-		exit_popup();
+		defer_exit_popup();
 		return true;
 	}
 }

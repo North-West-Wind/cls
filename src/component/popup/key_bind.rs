@@ -5,9 +5,9 @@ use linked_hash_set::LinkedHashSet;
 use mki::Keyboard;
 use ratatui::{style::{Color, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 
-use crate::{component::block::{waves::WavesBlock, BlockSingleton}, config::FileEntry, state::{acquire, notify_redraw}, util::{global_input::keyboard_to_string, selected_file_path}};
+use crate::{component::{block::{waves::WavesBlock, BlockSingleton}, popup::defer_exit_popup}, config::FileEntry, state::{acquire, notify_redraw}, util::{global_input::keyboard_to_string, selected_file_path}};
 
-use super::{exit_popup, safe_centered_rect, PopupHandleGlobalKey, PopupHandleKey, PopupRender};
+use super::{safe_centered_rect, PopupHandleGlobalKey, PopupHandleKey, PopupRender};
 
 pub enum KeyBindFor {
 	File,
@@ -61,7 +61,7 @@ impl PopupHandleKey for KeyBindPopup {
 						KeyBindFor::Stop => self.set_stop_key_bind(),
 						KeyBindFor::Wave => self.set_wave_key_bind(),
 					}
-					exit_popup();
+					defer_exit_popup();
 				}
 				return true;
 			},
@@ -70,7 +70,7 @@ impl PopupHandleKey for KeyBindPopup {
 					self.recording = false;
 				} else {
 					self.recorded.clear();
-					exit_popup();
+					defer_exit_popup();
 				}
 				return true;
 			},
@@ -102,7 +102,7 @@ impl PopupHandleGlobalKey for KeyBindPopup {
 impl KeyBindPopup {
 	fn set_file_key_bind(&self) {
 		let mut app = acquire();
-		let path = selected_file_path(&app.config.tabs, &app.files);
+		let path = selected_file_path(&app.config.tabs, &app.files, None);
 		if path.is_empty() {
 			return;
 		}

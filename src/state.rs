@@ -3,7 +3,6 @@ use std::{collections::HashMap, path::Path, sync::{Arc, Condvar, LazyLock, Mutex
 use linked_hash_map::LinkedHashMap;
 use mki::Keyboard;
 use ratatui::{style::{Color, Style}, widgets::BorderType};
-use std_semaphore::Semaphore;
 use uuid::Uuid;
 
 use crate::{config::{load, SoundboardConfig}, util::{global_input::string_to_keyboard, pulseaudio::unload_module, waveform::Waveform}};
@@ -48,7 +47,6 @@ pub struct App {
 	pub rev_file_id: HashMap<u32, String>,
 	// render states: playing
 	pub playing_file: LinkedHashMap<Uuid, (u32, String)>,
-	pub playing_semaphore: Semaphore,
 	pub playing_wave: LinkedHashMap<Uuid, String>,
 	// waves
 	pub waves: Vec<Waveform>,
@@ -135,7 +133,7 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 				keys: keyboard,
 				waves: wave.waves.clone(),
 				volume: wave.volume,
-				playing: Arc::new(Mutex::new(false))
+				playing: Arc::new(Mutex::new((false, false)))
 			});
 		}
 	}
@@ -173,7 +171,6 @@ fn static_app(hidden: bool, edit: bool) -> &'static Mutex<App> {
 			rev_file_id,
 			// render states: playing
 			playing_file: LinkedHashMap::new(),
-			playing_semaphore: Semaphore::new(1),
 			playing_wave: LinkedHashMap::new(),
 			// waves
 			waves

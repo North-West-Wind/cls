@@ -1,13 +1,13 @@
-use std::path::Path;
+use std::{path::Path, thread};
 
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use normpath::PathExt;
 use ratatui::{style::{Color, Style}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 use tui_input::{backend::crossterm::EventHandler, Input};
 
-use crate::{component::{block::{tabs::TabsBlock, waves::{set_wave_name, WavesBlock}, BlockSingleton}, popup::{popups, PopupComponent}}, config::FileEntry, state::{acquire, Scanning}, util::{pulseaudio::{loopback, unload_module}, selected_file_path, threads::spawn_scan_thread}};
+use crate::{component::{block::{tabs::TabsBlock, waves::{set_wave_name, WavesBlock}, BlockSingleton}, popup::{defer_exit_popup, popups, PopupComponent}}, config::FileEntry, state::{acquire, Scanning}, util::{pulseaudio::{loopback, unload_module}, selected_file_path, threads::spawn_scan_thread}};
 
-use super::{exit_popup, safe_centered_rect, PopupHandleKey, PopupHandlePaste, PopupRender};
+use super::{safe_centered_rect, PopupHandleKey, PopupHandlePaste, PopupRender};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum AwaitInput {
@@ -128,7 +128,7 @@ impl InputPopup {
 				_ => (),
 			}
 		}
-		exit_popup();
+		defer_exit_popup();
 		true
 	}
 
@@ -171,7 +171,7 @@ impl InputPopup {
 
 	fn send_file_id(&self) {
 		let mut app = acquire();
-		let path = selected_file_path(&app.config.tabs, &app.files);
+		let path = selected_file_path(&app.config.tabs, &app.files, None);
 		if path.is_empty() {
 			return;
 		}
@@ -206,50 +206,56 @@ impl InputPopup {
 
 	fn send_wave_frequency(&self) {
 		let Ok(freq) = self.input.value().parse::<f32>() else { return; };
-		let mut popups = popups();
-		let Some(popup) = popups.iter_mut().find_map(|popup| {
-			match popup {
-				PopupComponent::Wave(popup) => { Option::Some(popup) },
-				_ => Option::None
+		thread::spawn(move || {
+			let mut popups = popups();
+			let Some(popup) = popups.iter_mut().find_map(|popup| {
+				match popup {
+					PopupComponent::Wave(popup) => { Option::Some(popup) },
+					_ => Option::None
+				}
+			}) else { return; };
+			let wave = &mut popup.waveform.waves[popup.selected];
+			if wave.frequency != freq {
+				popup.changed = true;
 			}
-		}) else { return; };
-		let wave = &mut popup.waveform.waves[popup.selected];
-		if wave.frequency != freq {
-			popup.changed = true;
-		}
-		wave.frequency = freq;
+			wave.frequency = freq;
+		});
 	}
 
 	fn send_wave_amplitude(&self) {
 		let Ok(amplitude) = self.input.value().parse::<f32>() else { return; };
-		let mut popups = popups();
-		let Some(popup) = popups.iter_mut().find_map(|popup| {
-			match popup {
-				PopupComponent::Wave(popup) => { Option::Some(popup) },
-				_ => Option::None
+		thread::spawn(move || {
+			let mut popups = popups();
+			let Some(popup) = popups.iter_mut().find_map(|popup| {
+				match popup {
+					PopupComponent::Wave(popup) => { Option::Some(popup) },
+					_ => Option::None
+				}
+			}) else { return; };
+			let wave = &mut popup.waveform.waves[popup.selected];
+			if wave.amplitude != amplitude {
+				popup.changed = true;
 			}
-		}) else { return; };
-		let wave = &mut popup.waveform.waves[popup.selected];
-		if wave.amplitude != amplitude {
-			popup.changed = true;
-		}
-		wave.amplitude = amplitude;
+			wave.amplitude = amplitude;
+		});
 	}
 
 	fn send_wave_phase(&self) {
 		let Ok(phase) = self.input.value().parse::<f32>() else { return; };
-		let mut popups = popups();
-		let Some(popup) = popups.iter_mut().find_map(|popup| {
-			match popup {
-				PopupComponent::Wave(popup) => { Option::Some(popup) },
-				_ => Option::None
+		thread::spawn(move || {
+			let mut popups = popups();
+			let Some(popup) = popups.iter_mut().find_map(|popup| {
+				match popup {
+					PopupComponent::Wave(popup) => { Option::Some(popup) },
+					_ => Option::None
+				}
+			}) else { return; };
+			let wave = &mut popup.waveform.waves[popup.selected];
+			if wave.phase != phase {
+				popup.changed = true;
 			}
-		}) else { return; };
-		let wave = &mut popup.waveform.waves[popup.selected];
-		if wave.phase != phase {
-			popup.changed = true;
-		}
-		wave.phase = phase;
+			wave.phase = phase;
+		});
 	}
 
 	fn send_wave_name(&self) {

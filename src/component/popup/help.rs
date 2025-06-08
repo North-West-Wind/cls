@@ -3,9 +3,9 @@ use std::cmp::{max, min};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{style::{Modifier, Style}, text::{Line, Text}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 
-use crate::constant::{APP_NAME, APP_VERSION};
+use crate::{component::popup::defer_exit_popup, constant::{APP_NAME, APP_VERSION}};
 
-use super::{exit_popup, safe_centered_rect, PopupHandleKey, PopupRender};
+use super::{safe_centered_rect, PopupHandleKey, PopupRender};
 
 pub struct HelpPopup {
 	page: u8,
@@ -110,7 +110,7 @@ impl PopupHandleKey for HelpPopup {
 	fn handle_key(&mut self, event: KeyEvent) -> bool {
 		match event.code {
 			KeyCode::Char('q')|KeyCode::Esc => {
-				exit_popup();
+				defer_exit_popup();
 				return true
 			},
 			KeyCode::Left => self.prev_page(),
