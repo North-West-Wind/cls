@@ -1,4 +1,4 @@
-use std::{cmp::{max, min}, collections::HashSet};
+use std::{cmp::{max, min}, collections::HashSet, sync::{LazyLock, Mutex, MutexGuard}};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use mki::Keyboard;
@@ -6,35 +6,35 @@ use rand::Rng;
 use ratatui::{style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}};
 use substring::Substring;
 
-use crate::{component::{block::loop_index, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}}, state::config_mut, util::{global_input::sort_keys, notify_redraw}};
+use crate::{component::{block::{loop_index, BlockSingleton}, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}}, state::notify_redraw, util::global_input::sort_keys};
 use crate::component::popup::wave::WavePopup;
 use crate::component::popup::{set_popup, PopupComponent};
-use crate::state::get_mut_app;
 use crate::util;
-use crate::{component::block::{borders, settings::SettingsBlock, tabs::TabsBlock, BlockHandleKey, BlockNavigation, BlockRenderArea}, state::get_app, util::{global_input::keyboard_to_string, waveform::Waveform}};
+use crate::{component::block::{settings::SettingsBlock, tabs::TabsBlock, BlockHandleKey, BlockNavigation, BlockRenderArea}, state::acquire, util::{global_input::keyboard_to_string, waveform::Waveform}};
 
 pub struct WavesBlock {
 	range: (i32, i32),
-	pub(super) selected: usize,
+	pub selected: usize,
 }
 
-impl Default for WavesBlock {
-	fn default() -> Self {
-		Self {
+impl BlockSingleton for WavesBlock {
+	fn instance() -> MutexGuard<'static, Self> {
+		static BLOCK: LazyLock<Mutex<WavesBlock>> = LazyLock::new(|| { Mutex::new(WavesBlock {
 			range: (-1, -1),
-			selected: 0,
-		}
+			selected: 0
+		}) });
+		BLOCK.lock().unwrap()
 	}
 }
 
 impl BlockRenderArea for WavesBlock {
 	fn render_area(&mut self, f: &mut ratatui::Frame, area: ratatui::prelude::Rect) {
-		let app = get_app();
 		if self.range.0 == -1 {
 			self.range = (0, area.height as i32);
 		}
 
-		let (border_type, border_style) = borders(Self::ID);
+		let app = acquire();
+		let (border_type, border_style) = app.borders(Self::ID);
 		let block = Block::default()
 			.title("Waveforms")
 			.borders(Borders::ALL)
@@ -134,7 +134,7 @@ impl BlockNavigation for WavesBlock {
 		if dy < 0 {
 			return TabsBlock::ID;
 		}
-		if dx > 0 && get_app().settings_opened {
+		if dx > 0 && acquire().settings_opened {
 			return SettingsBlock::ID;
 		}
 		Self::ID
@@ -143,7 +143,7 @@ impl BlockNavigation for WavesBlock {
 
 impl WavesBlock {
 	fn play_wave(&self, random: bool) -> bool {
-		let app = get_app();
+		let app = acquire();
 		let index;
 		if random {
 			index = rand::thread_rng().gen_range(0..app.waves.len());
@@ -158,7 +158,7 @@ impl WavesBlock {
 	}
 
 	fn navigate_wave(&mut self, dy: i32) -> bool {
-		let app = get_app();
+		let app = acquire();
 		let len = app.waves.len();
 		let new_selected;
 		if dy.abs() > 1 {
@@ -174,23 +174,22 @@ impl WavesBlock {
 	}
 
 	fn move_wave(&mut self, dy: i32) -> bool {
-		let app = get_mut_app();
+		let mut app = acquire();
 		if self.selected == 0 && dy < 0 || self.selected == app.waves.len() - 1 && dy > 0 {
 			return false;
 		}
 		app.waves.swap(self.selected, (self.selected as i32 + dy) as usize);
-		config_mut().waves.swap(self.selected, (self.selected as i32 + dy) as usize);
+		app.config.waves.swap(self.selected, (self.selected as i32 + dy) as usize);
 		self.selected = (self.selected as i32 + dy) as usize;
 		true
 	}
 
 	fn add_wave(&mut self) -> bool {
-		let app = get_mut_app();
-		let config = config_mut();
+		let mut app = acquire();
 		let waveform = Waveform::default();
 		let entry = waveform.to_entry();
 		app.waves.push(waveform);
-		config.waves.push(entry);
+		app.config.waves.push(entry);
 		self.selected = app.waves.len() - 1;
 		self.edit_wave()
 	}
@@ -201,7 +200,7 @@ impl WavesBlock {
 	}
 
 	fn rename_wave(&self) -> bool {
-		set_popup(PopupComponent::Input(InputPopup::new(get_app().waves[self.selected].label.clone(), AwaitInput::WaveName)));
+		set_popup(PopupComponent::Input(InputPopup::new(acquire().waves[self.selected].label.clone(), AwaitInput::WaveName)));
 		true
 	}
 
@@ -211,20 +210,21 @@ impl WavesBlock {
 	}
 
 	fn set_global_key_bind(&self) -> bool {
-		let wave = &get_app().waves[self.selected];
+		let wave = &acquire().waves[self.selected];
 		set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::Wave, wave.keys.clone().into_iter().collect::<HashSet<Keyboard>>())));
 		true
 	}
 
 	fn unset_global_key_bind(&self) -> bool {
-		let wave = &mut get_mut_app().waves[self.selected];
+		let mut app = acquire();
+		let wave = &mut app.waves[self.selected];
 		wave.keys.clear();
-		config_mut().waves[self.selected].keys.clear();
+		app.config.waves[self.selected].keys.clear();
 		true
 	}
 
 	fn set_wave_id(&self) -> bool {
-		let wave = &mut get_mut_app().waves[self.selected];
+		let wave = &mut acquire().waves[self.selected];
 		let init = match wave.id {
 			Some(id) => id.to_string(),
 			None => String::new(),
@@ -234,17 +234,17 @@ impl WavesBlock {
 	}
 
 	fn unset_wave_id(&self) -> bool {
-		get_mut_app().waves[self.selected].id = Option::None;
-		config_mut().waves[self.selected].id = Option::None;
+		let mut app = acquire();
+		app.waves[self.selected].id = Option::None;
+		app.config.waves[self.selected].id = Option::None;
 		true
 	}
 }
 
 pub fn set_wave_name(name: String) {
-	let app = get_mut_app();
-	let config = config_mut();
-	let selected = app.wave_selected();
+	let mut app = acquire();
+	let selected = { WavesBlock::instance().selected };
 	app.waves[selected].label = name.clone();
-	config.waves[selected].label = name;
+	app.config.waves[selected].label = name;
 	notify_redraw();
 }

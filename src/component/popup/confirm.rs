@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Style}, text::{Line, Text}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 
-use crate::state::{config_mut, get_mut_app};
+use crate::{component::block::{tabs::TabsBlock, waves::WavesBlock, BlockSingleton}, state::{acquire, acquire_running}};
 
 use super::{exit_popup, PopupHandleKey, PopupRender};
 
@@ -83,25 +83,28 @@ impl ConfirmPopup {
 	}
 
 	fn delete_tab(&self) -> bool {
-		let app = get_mut_app();
-		let config = config_mut();
-		let selected = app.tab_selected();
-		app.files.remove(&config.tabs[selected]);
-		config.tabs.remove(selected);
-		if selected >= config.tabs.len() && config.tabs.len() != 0 {
-			app.set_tab_selected(config.tabs.len() - 1);
+		let mut app = acquire();
+		let mut tabs_block = TabsBlock::instance();
+		let selected = tabs_block.selected;
+		let tab = app.config.tabs[selected].clone();
+		app.files.remove(&tab);
+		app.config.tabs.remove(selected);
+		let len = app.config.tabs.len();
+		if selected >= len && len != 0 {
+			tabs_block.selected = len - 1;
 		}
 		true
 	}
 
 	fn delete_wave(&self) -> bool {
-		let app = get_mut_app();
-		let config = config_mut();
-		let selected = app.wave_selected();
+		let mut app = acquire();
+		let mut wave_block = WavesBlock::instance();
+		let selected = wave_block.selected;
 		app.waves.remove(selected);
-		config.waves.remove(selected);
-		if selected >= config.waves.len() && config.waves.len() != 0 {
-			app.set_wave_selected(config.waves.len() - 1);
+		app.config.waves.remove(selected);
+		let len = app.config.waves.len();
+		if selected >= len && len != 0 {
+			wave_block.selected = len - 1;
 		}
 		true
 	}
@@ -112,8 +115,7 @@ impl ConfirmPopup {
 	}
 
 	fn quit(&self) -> bool {
-		let app = get_mut_app();
-		app.running = false;
+		*acquire_running() = false;
 		false
 	}
 }

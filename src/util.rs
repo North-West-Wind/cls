@@ -1,9 +1,9 @@
-use std::{path::Path, thread};
+use std::{collections::HashMap, path::Path, thread};
 
 use ffprobe::FfProbe;
 use file_format::{FileFormat, Kind};
 
-use crate::state::{config, get_app, get_mut_app};
+use crate::{component::block::{files::FilesBlock, tabs::TabsBlock, BlockSingleton}, state::{acquire, notify_redraw}};
 
 pub mod fs;
 pub mod global_input;
@@ -30,13 +30,15 @@ pub fn ffprobe_info(path: &str) -> Option<FfProbe> {
 
 fn add_duration(tab: String) {
 	thread::spawn(move || {
-		let app = get_mut_app();
+		let app = acquire();
 		let files = app.files.get(&tab);
 		if files.is_none() {
 			return;
 		}
+		let files = files.unwrap().clone();
+		drop(app);
 		let mut new_files = vec![];
-		for (filename, _) in files.unwrap() {
+		for (filename, _) in &files {
 			let longpath = Path::new(&tab).join(filename);
 			let filepath = longpath.into_os_string().into_string().unwrap();
 			let info = ffprobe_info(filepath.as_str());
@@ -72,18 +74,19 @@ fn add_duration(tab: String) {
 				new_files.push((filename.clone(), duration_str));
 			});
 		}
-		app.files.insert(tab, new_files);
+		acquire().files.insert(tab, new_files);
 		notify_redraw();
 	});
 }
 
 pub fn scan_tab(index: usize) -> Result<(), std::io::Error> {
-	let app = get_mut_app();
-	let config = config();
-	if index >= config.tabs.len() {
+	let app = acquire();
+	let tabs = &app.config.tabs;
+	if index >= tabs.len() {
 		return Ok(());
 	}
-	let tab = config.tabs[index].clone();
+	let tab = tabs[index].clone();
+	drop(app);
 	let mut files = vec![];
 	let path = Path::new(tab.as_str());
 	if path.is_dir() {
@@ -100,44 +103,34 @@ pub fn scan_tab(index: usize) -> Result<(), std::io::Error> {
 			}
 		}
     files.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
-		app.files.insert(tab.clone(), files);
+		{ acquire().files.insert(tab.clone(), files); }
 		add_duration(tab);
 	}
 	Ok(())
 }
 
 pub fn scan_tabs() -> Result<(), std::io::Error> {
-	let app = get_mut_app();
-	for ii in 0..app.config.tabs.len() {
+	let len = { acquire().config.tabs.len() };
+	for ii in 0..len {
 		scan_tab(ii)?;
 	}
 	Ok(())
 }
 
-pub fn selected_file_path() -> String {
-	let app = get_app();
-	let config = config();
-	if app.tab_selected() >= config.tabs.len() {
+pub fn selected_file_path(tabs: &Vec<String>, files: &HashMap<String, Vec<(String, String)>>) -> String {
+	let tab_selected = { TabsBlock::instance().selected };
+	if tab_selected >= tabs.len() {
 		return String::new();
 	}
-	let tab = config.tabs[app.tab_selected()].clone();
-	let files = app.files.get(&tab);
+	let tab = tabs[tab_selected].clone();
+	let files = files.get(&tab);
 	if files.is_none() {
 		return String::new();
 	}
 	let files = files.unwrap();
-	if app.file_selected() >= files.len() {
+	let selected = { FilesBlock::instance().selected };
+	if selected >= files.len() {
 		return String::new();
 	}
-	return Path::new(&tab).join(&files[app.file_selected()].0).into_os_string().into_string().unwrap();
-}
-
-pub fn notify_redraw() {
-	let app = get_app();
-	let pair = app.pair.clone();
-	let (lock, cvar) = &*pair;
-	let mut shared = lock.lock().expect("Failed to get shared mutex");
-	shared.redraw = true;
-	cvar.notify_all();
-	std::mem::drop(shared);
+	return Path::new(&tab).join(&files[selected].0).into_os_string().into_string().unwrap();
 }

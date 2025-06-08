@@ -3,9 +3,7 @@ use std::{path::Path, process::{Command, Stdio}, thread, time::Duration};
 use nix::{sys::signal::{self, Signal}, unistd::Pid};
 use uuid::Uuid;
 
-use crate::{constant::APP_NAME, state::{config, get_mut_app}, util::ffprobe_info};
-
-use super::notify_redraw;
+use crate::{constant::APP_NAME, state::{acquire, acquire_playlist_lock, notify_redraw}, util::ffprobe_info};
 
 pub fn load_null_sink() -> Result<String, Box<dyn std::error::Error>> {
 	let appname = APP_NAME;
@@ -51,29 +49,33 @@ pub fn play_file(path: &String) {
 	let string = path.trim().to_string();
 	thread::spawn(move || {
 		let uuid = Uuid::new_v4();
-		let app = get_mut_app();
-		let config = config();
-
+		let mut app = acquire();
 		if app.edit {
 			app.playing_file.insert(uuid, (0, "Edit-only mode!".to_string()));
 			notify_redraw();
+			drop(app);
 			thread::sleep(Duration::from_secs(1));
-			app.playing_file.remove(&uuid);
+			acquire().playing_file.remove(&uuid);
 			notify_redraw();
 			return;
 		}
+		drop(app);
 
 		let info = ffprobe_info(&string);
 		info.inspect(|info| {
 			info.streams.iter()
 				.find(|stream| stream.codec_type == Option::Some("audio".to_string()))
 				.inspect(|stream| {
-					let using_semaphore = config.playlist_mode;
+					let mut app = acquire();
+					let using_semaphore = app.config.playlist_mode;
 					app.playing_file.insert(uuid, (0, string.to_string()));
+					drop(app);
 					notify_redraw();
-					if using_semaphore {
-						app.playing_semaphore.acquire();
-					}
+					let playlist_lock = if using_semaphore {
+						Some(acquire_playlist_lock())
+					} else {
+						None
+					};
 
 					let ffmpeg_child = Command::new("ffmpeg").args([
 						"-loglevel",
@@ -85,10 +87,11 @@ pub fn play_file(path: &String) {
 						"-"
 					]).stdout(Stdio::piped()).spawn().expect("Failed to spawn ffmpeg process");
 
+					let mut app = acquire();
 					let path = Path::new(&string);
 					let parent = path.parent().unwrap().to_str().unwrap().to_string();
 					let name = path.file_name().unwrap().to_os_string().into_string().unwrap();
-					let volume: u16 = match config.files.get(&parent) {
+					let volume: u16 = match app.config.files.get(&parent) {
 						Some(map) => {
 							match map.get(&name) {
 								Some(entry) => (entry.volume * 65535 / 100) as u16,
@@ -109,24 +112,29 @@ pub fn play_file(path: &String) {
 						.stdout(Stdio::piped()).spawn().expect("Failed to spawn pacat process");
 
 					app.playing_file.insert(uuid, (pacat_child.id(), string.to_string()));
+					drop(app);
 
 					let _ = pacat_child.wait();
-					if using_semaphore {
-						app.playing_semaphore.release();
+					if playlist_lock.is_some() {
+						drop(playlist_lock.unwrap());
 					}
 				});
 		});
+		let mut app = acquire();
 		app.playing_file.remove(&uuid);
 		notify_redraw();
 	});
 }
 
 pub fn stop_all() {
-	let app = get_mut_app();
-	for (id, _file) in app.playing_file.values() {
-		signal::kill(Pid::from_raw(*id as i32), Signal::SIGTERM).ok();
-	}
-	app.playing_file.clear();
+	// Defer to avoid deadlock
+	thread::spawn(move || {
+		let mut app = acquire();
+		for (id, _file) in app.playing_file.values() {
+			signal::kill(Pid::from_raw(*id as i32), Signal::SIGTERM).ok();
+		}
+		app.playing_file.clear();
+	});
 }
 
 pub fn loopback(sink: String) -> Result<String, Box<dyn std::error::Error>> {

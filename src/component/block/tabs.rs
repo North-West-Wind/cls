@@ -1,6 +1,6 @@
-use std::path::Path;
+use std::{path::Path, sync::{Mutex, MutexGuard, OnceLock}};
 
-use crate::{component::{block::{borders, files::FilesBlock, volume::VolumeBlock, waves::WavesBlock, BlockNavigation}, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, set_popup, PopupComponent}}, state::{config, config_mut, get_app, get_mut_app}};
+use crate::{component::{block::{files::FilesBlock, volume::VolumeBlock, waves::WavesBlock, BlockNavigation, BlockSingleton}, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, set_popup, PopupComponent}}, state::acquire};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -9,21 +9,25 @@ use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span},
 
 pub struct TabsBlock {
 	range: (i32, i32),
-	pub(super) selected: usize,
+	pub selected: usize,
 }
 
-impl Default for TabsBlock {
-	fn default() -> Self {
-		Self {
-			range: (-1, -1),
-			selected: 0,
-		}
+impl BlockSingleton for TabsBlock {
+	fn instance() -> MutexGuard<'static, Self> {
+		static BLOCK: OnceLock<Mutex<TabsBlock>> = OnceLock::new();
+		BLOCK.get_or_init(|| {
+			Mutex::new(TabsBlock {
+				range: (-1, -1),
+				selected: 0
+			})
+		}).lock().unwrap()
 	}
 }
 
 impl BlockRenderArea for TabsBlock {
 	fn render_area(&mut self, f: &mut Frame, area: Rect) {
-		let tabs = config().tabs.clone();
+		let app = acquire();
+		let tabs = app.config.tabs.clone();
 	
 		let mut spans: Vec<Span> = vec![];
 		for (ii, tab) in tabs.iter().enumerate() {
@@ -84,7 +88,7 @@ impl BlockRenderArea for TabsBlock {
 			self.range = (self.selected as i32 - count + 1, self.selected as i32);
 		}
 		
-		let (border_type, border_style) = borders(Self::ID);
+		let (border_type, border_style) = app.borders(Self::ID);
 		let block = Block::default()
 			.title("Tabs")
 			.borders(Borders::ALL)
@@ -119,7 +123,7 @@ impl BlockNavigation for TabsBlock {
 
 	fn navigate_block(&self, _dx: i16, dy: i16) -> u8 {
 		if dy > 0 {
-			if get_app().waves_opened {
+			if acquire().waves_opened {
 				return WavesBlock::ID;
 			}
 			return FilesBlock::ID;
@@ -132,7 +136,7 @@ impl BlockNavigation for TabsBlock {
 
 impl TabsBlock {
 	fn handle_remove(&self) -> bool {
-		if self.selected < config().tabs.len() {
+		if self.selected < acquire().config.tabs.len() {
 			set_popup(PopupComponent::Confirm(ConfirmPopup::new(ConfirmAction::DeleteTab)));
 			return true;
 		}
@@ -141,15 +145,14 @@ impl TabsBlock {
 
 	fn handle_move(&mut self, right: bool, modify: bool) -> bool {
 		let delta = if right { 1 } else { -1 };
-		let app = get_mut_app();
-		let config = config_mut();
-		let new_selected = loop_index(self.selected, delta, config.tabs.len());
+		let mut app = acquire();
+		let new_selected = loop_index(self.selected, delta, app.config.tabs.len());
 		if self.selected != new_selected {
 			if modify {
-				config.tabs.swap(self.selected, new_selected as usize);
+				app.config.tabs.swap(self.selected, new_selected as usize);
 			}
 			self.selected = new_selected as usize;
-			app.set_file_selected(0);
+			FilesBlock::instance().selected = 0;
 			return true;
 		}
 		false

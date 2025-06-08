@@ -171,6 +171,7 @@ dependencies = [
  "event-listener",
  "ffprobe",
  "file-format",
+ "lazy_static",
  "linked-hash-map",
  "linked_hash_set",
  "mki",

@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 use std::cmp::max;
 
-use crate::{component::popup::{confirm::{ConfirmAction, ConfirmPopup}, exit_popup, input::{AwaitInput, InputPopup}, set_popup, PopupComponent, PopupHandleKey, PopupRender}, state::{config_mut, get_app, get_mut_app}, util::waveform::{Wave, WaveType, Waveform}};
+use crate::{component::popup::{confirm::{ConfirmAction, ConfirmPopup}, exit_popup, input::{AwaitInput, InputPopup}, set_popup, PopupComponent, PopupHandleKey, PopupRender}, state::acquire, util::waveform::{Wave, WaveType, Waveform}};
 
 pub struct WavePopup {
 	index: usize,
@@ -15,7 +15,7 @@ impl WavePopup {
 	pub fn new(index: usize) -> Self {
 		Self {
 			index,
-			waveform: get_app().waves[index].clone(),
+			waveform: acquire().waves[index].clone(),
 			selected: 0,
 			changed: false
 		}
@@ -167,8 +167,9 @@ impl WavePopup {
 	}
 
 	fn commit_changes(&self) -> bool {
-		get_mut_app().waves[self.index] = self.waveform.clone();
-		config_mut().waves[self.index] = self.waveform.to_entry();
+		let mut app = acquire();
+		app.waves[self.index] = self.waveform.clone();
+		app.config.waves[self.index] = self.waveform.to_entry();
 		exit_popup();
 		true
 	}
@@ -181,13 +182,4 @@ impl WavePopup {
 		}
 		true
 	}
-}
-
-pub(super) fn get_wave_popup() -> Option<&'static mut WavePopup> {
-	return get_mut_app().popups.iter_mut().find_map(|popup| {
-		match popup {
-			PopupComponent::Wave(popup) => { Option::Some(popup) },
-			_ => Option::None
-		}
-	});
 }

@@ -1,6 +1,6 @@
-use std::{cmp::{max, min}, collections::HashSet, i32, path::Path};
+use std::{cmp::{max, min}, collections::HashSet, i32, path::Path, sync::{Mutex, MutexGuard, OnceLock}};
 
-use crate::{component::{block::{borders, settings::SettingsBlock, tabs::TabsBlock, BlockNavigation}, popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}}, state::{config, config_mut, get_app, get_mut_app, Scanning}, util::{self, global_input::sort_keys, selected_file_path, threads::spawn_scan_thread}};
+use crate::{component::{block::{settings::SettingsBlock, tabs::TabsBlock, BlockNavigation, BlockSingleton}, popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}}, state::{acquire, Scanning}, util::{self, global_input::sort_keys, selected_file_path, threads::spawn_scan_thread}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -11,21 +11,26 @@ use substring::Substring;
 
 pub struct FilesBlock {
 	range: (i32, i32),
-	pub(super) selected: usize,
+	pub selected: usize,
 }
 
-impl Default for FilesBlock {
-	fn default() -> Self {
-		Self {
-			range: (-1, -1),
-			selected: 0,
-		}
+impl BlockSingleton for FilesBlock {
+	fn instance() -> MutexGuard<'static, Self> {
+		static BLOCK: OnceLock<Mutex<FilesBlock>> = OnceLock::new();
+		BLOCK.get_or_init(|| {
+			Mutex::new(Self {
+				range: (-1, -1),
+				selected: 0,
+			})
+		}).lock().unwrap()
 	}
 }
 
 impl BlockRenderArea for FilesBlock {
 	fn render_area(&mut self, f: &mut Frame, area: Rect) {
-		let (border_type, border_style) = borders(Self::ID);
+		let app = acquire();
+		let tab_selected = { TabsBlock::instance().selected };
+		let (border_type, border_style) = app.borders(Self::ID);
 		let block = Block::default()
 			.title("Files")
 			.borders(Borders::ALL)
@@ -33,33 +38,28 @@ impl BlockRenderArea for FilesBlock {
 			.border_style(border_style)
 			.padding(Padding::new(2, 2, 1, 1));
 	
-		let app = get_mut_app();
 		if self.range.0 == -1 {
 			self.range = (0, area.height as i32 - 5);
 		}
-		let config = config();
 		let paragraph: Paragraph;
 		if app.scanning == Scanning::All {
 			paragraph = Paragraph::new("Performing initial scan...").wrap(Wrap { trim: false });
-		} else if config.tabs.len() == 0 {
+		} else if app.config.tabs.len() == 0 {
 			paragraph = Paragraph::new("Add a tab to get started :>").wrap(Wrap { trim: false });
-		} else if app.scanning == Scanning::One(app.tab_selected()) {
+		} else if app.scanning == Scanning::One(tab_selected) {
 			paragraph = Paragraph::new("Scanning this directory...\nComeback later :>").wrap(Wrap { trim: false });
 		} else {
-			let tab = config.tabs[app.tab_selected()].clone();
+			let tab = app.config.tabs[tab_selected].clone();
 			let files = app.files.get(&tab);
-			paragraph = files.map_or_else(|| {
-				Paragraph::new("Failed to read this directory :<\nDoes it exist? Is it readable?").wrap(Wrap { trim: false })
-			}, |files| {
+			paragraph = files.map_or(Paragraph::new("Failed to read this directory :<\nDoes it exist? Is it readable?").wrap(Wrap { trim: false }), |files| {
 				if files.len() == 0 {
 					return Paragraph::new("There are no playable files in this directory :<").wrap(Wrap { trim: false });
 				}
 				let mut lines = vec![];
 				for (ii, (file, duration)) in files.iter().enumerate() {
 					let mut spans = vec![];
-					let tab_selected = app.tab_selected();
-					let full_path = &Path::new(&config.tabs[tab_selected]).join(file).into_os_string().into_string().unwrap();
-					let entry = config.get_file_entry(full_path.clone());
+					let full_path = &Path::new(&app.config.tabs[tab_selected]).join(file).into_os_string().into_string().unwrap();
+					let entry = app.config.get_file_entry(full_path.clone());
 					entry.inspect(|entry| {
 						entry.id.inspect(|id| {
 							spans.push(Span::from(format!("({})", id)).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)));
@@ -104,8 +104,8 @@ impl BlockRenderArea for FilesBlock {
 
 impl BlockHandleKey for FilesBlock {
 	fn handle_key(&mut self, event: crossterm::event::KeyEvent) -> bool {
-		let app = get_app();
-		if app.scanning == Scanning::All || app.scanning == Scanning::One(self.selected) {
+		let scanning = { acquire().scanning };
+		if scanning == Scanning::All || scanning == Scanning::One(self.selected) {
 			return false;
 		}
 		match event.code {
@@ -134,7 +134,7 @@ impl BlockNavigation for FilesBlock {
 		if dy < 0 {
 			return TabsBlock::ID;
 		}
-		if dx > 0 && get_app().settings_opened {
+		if dx > 0 && acquire().settings_opened {
 			return SettingsBlock::ID;
 		}
 		Self::ID
@@ -143,13 +143,12 @@ impl BlockNavigation for FilesBlock {
 
 impl FilesBlock {
 	fn play_file(&self, random: bool) -> bool {
-		let app = get_app();
-		let selected = app.tab_selected();
-		let config = config();
-		if selected >= config.tabs.len() {
+		let app = acquire();
+		let selected = { TabsBlock::instance().selected };
+		if selected >= app.config.tabs.len() {
 			return false;
 		}
-		let tab = config.tabs[selected].clone();
+		let tab = app.config.tabs[selected].clone();
 		let files = app.files.get(&tab);
 		return files.map_or_else(|| { false }, |files| {
 			let index;
@@ -167,8 +166,9 @@ impl FilesBlock {
 	}
 
 	fn navigate_file(&mut self, dy: i32) -> bool {
-		let app = get_app();
-		let files = app.files.get(&config().tabs[app.tab_selected()]);
+		let app = acquire();
+		let tab_selected = { TabsBlock::instance().selected };
+		let files = app.files.get(&app.config.tabs[tab_selected]);
 		return files.map_or(false, |files| {
 			let files = files.len();
 			let new_selected;
@@ -186,7 +186,7 @@ impl FilesBlock {
 	}
 
 	fn reload_tab(&self) -> bool {
-		if self.selected < config().tabs.len() {
+		if self.selected < acquire().config.tabs.len() {
 			spawn_scan_thread(Scanning::One(self.selected));
 			return true;
 		}
@@ -194,11 +194,12 @@ impl FilesBlock {
 	}
 
 	fn set_global_key_bind(&self) -> bool {
-		let path = selected_file_path();
+		let app = acquire();
+		let path = selected_file_path(&app.config.tabs, &app.files);
 		if path.is_empty() {
 			return false;
 		}
-		let app = get_app();
+		let app = acquire();
 		let hotkey = app.hotkey.get(&path);
 		let recorded = match hotkey {
 			Option::Some(vec) => HashSet::from_iter(vec.iter().map(|key| { *key })),
@@ -209,28 +210,28 @@ impl FilesBlock {
 	}
 
 	fn unset_global_key_bind(&self) -> bool {
-		let path = selected_file_path();
+		let app = acquire();
+		let path = selected_file_path(&app.config.tabs, &app.files);
 		if path.is_empty() {
 			return false;
 		}
-		let config = config_mut();
-		let entry = config.get_file_entry_mut(path.clone());
-		return entry.map_or_else(|| { false }, |entry| {
-			if entry.keys.is_empty() {
-				return false;
-			}
-			entry.keys.clear();
-			get_mut_app().hotkey.remove(&path);
-			true
-		});
+		let mut app = acquire();
+		let Some(entry) = app.config.get_file_entry_mut(path.clone()) else { return false };
+		if entry.keys.is_empty() {
+			return false;
+		}
+		entry.keys.clear();
+		app.hotkey.remove(&path);
+		true
 	}
 
 	fn set_file_id(&self) -> bool {
-		let path = selected_file_path();
+		let app = acquire();
+		let path = selected_file_path(&app.config.tabs, &app.files);
 		if path.is_empty() {
 			return false;
 		}
-		let init = match config().get_file_entry(path) {
+		let init = match acquire().config.get_file_entry(path) {
 			Some(entry) => match entry.id {
 				Some(id) => id.to_string(),
 				None => String::new(),
@@ -242,20 +243,17 @@ impl FilesBlock {
 	}
 
 	fn unset_file_id(&self) -> bool {
-		let path = selected_file_path();
+		let app = acquire();
+		let path = selected_file_path(&app.config.tabs, &app.files);
 		if path.is_empty() {
 			return false;
 		}
-		let app = get_mut_app();
-		let entry = config_mut().get_file_entry_mut(path);
-		return entry.map_or_else(|| { false }, |entry| {
-			let id = entry.id;
-			return id.map_or_else(|| { false }, |id| {
-				app.rev_file_id.remove(&id);
-				entry.id = Option::None;
-				true
-			});
-		});
+		let mut app = acquire();
+		let Some(entry) = app.config.get_file_entry_mut(path) else { return false };
+		let Some(id) = entry.id else { return false };
+		entry.id = Option::None;
+		app.rev_file_id.remove(&id);
+		true
 	}
 }
 

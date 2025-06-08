@@ -5,7 +5,7 @@ use linked_hash_set::LinkedHashSet;
 use mki::Keyboard;
 use ratatui::{style::{Color, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 
-use crate::{config::FileEntry, state::{config_mut, get_mut_app}, util::{global_input::keyboard_to_string, notify_redraw, selected_file_path}};
+use crate::{component::block::{waves::WavesBlock, BlockSingleton}, config::FileEntry, state::{acquire, notify_redraw}, util::{global_input::keyboard_to_string, selected_file_path}};
 
 use super::{exit_popup, safe_centered_rect, PopupHandleGlobalKey, PopupHandleKey, PopupRender};
 
@@ -101,36 +101,35 @@ impl PopupHandleGlobalKey for KeyBindPopup {
 
 impl KeyBindPopup {
 	fn set_file_key_bind(&self) {
-		let path = selected_file_path();
+		let mut app = acquire();
+		let path = selected_file_path(&app.config.tabs, &app.files);
 		if path.is_empty() {
 			return;
 		}
-		let app = get_mut_app();
-		let config = config_mut();
-		match config.get_file_entry_mut(path.clone()) {
+		match app.config.get_file_entry_mut(path.clone()) {
 			Some(entry) => {
 				entry.keys = self.recorded.iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>();
 			},
 			None => {
 				let mut entry = FileEntry::default();
 				entry.keys = self.recorded.iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>();
-				config.insert_file_entry(path.clone(), entry);
+				app.config.insert_file_entry(path.clone(), entry);
 			}
 		}
 		app.hotkey.insert(path, self.recorded.clone().into_iter().collect::<Vec<Keyboard>>());
 	}
 
 	fn set_stop_key_bind(&self) {
-		let app = get_mut_app();
-		config_mut().stop_key = self.recorded.iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>();
+		let mut app = acquire();
+		app.config.stop_key = self.recorded.iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>();
 		app.stopkey = self.recorded.clone().into_iter().collect::<Vec<Keyboard>>();
 		notify_redraw();
 	}
 
 	fn set_wave_key_bind(&self) {
-		let app = get_mut_app();
-		let selected = app.wave_selected();
-		config_mut().waves[selected].keys = self.recorded.iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>();
+		let mut app = acquire();
+		let selected = { WavesBlock::instance().selected };
+		app.config.waves[selected].keys = self.recorded.iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>();
 		app.waves[selected].keys = self.recorded.clone().into_iter().collect::<Vec<Keyboard>>();
 		notify_redraw();
 	}

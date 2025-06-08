@@ -1,9 +1,9 @@
-use std::{cmp::max, collections::HashSet};
+use std::{cmp::max, collections::HashSet, sync::{Mutex, MutexGuard, OnceLock}};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Padding, Paragraph}, Frame};
 use substring::Substring;
 
-use crate::{component::{block::{borders, files::FilesBlock, waves::WavesBlock, BlockNavigation}, popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}}, config, state::{config_mut, get_app, get_mut_app}, util::pulseaudio::{loopback, unload_module}};
+use crate::{component::{block::{files::FilesBlock, waves::WavesBlock, BlockNavigation, BlockSingleton}, popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}}, state::acquire, util::pulseaudio::{loopback, unload_module}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -12,19 +12,22 @@ pub struct SettingsBlock {
 	options: u8,
 }
 
-impl Default for SettingsBlock {
-	fn default() -> Self {
-		Self {
-			selected: 0,
-			options: 4,
-		}
+impl BlockSingleton for SettingsBlock {
+	fn instance() -> MutexGuard<'static, Self> {
+		static BLOCK: OnceLock<Mutex<SettingsBlock>> = OnceLock::new();
+		BLOCK.get_or_init(|| {
+			Mutex::new(SettingsBlock {
+				selected: 0,
+				options: 5
+			})
+		}).lock().unwrap()
 	}
 }
 
 impl BlockRenderArea for SettingsBlock {
 	fn render_area(&mut self, f: &mut Frame, area: Rect) {
-		let config = config();
-		let (border_type, border_style) = borders(Self::ID);
+		let app = acquire();
+		let (border_type, border_style) = app.borders(Self::ID);
 		let mut block = Block::bordered()
 			.border_style(border_style)
 			.border_type(border_type)
@@ -38,18 +41,18 @@ impl BlockRenderArea for SettingsBlock {
 
 		let mut lines = vec![];
 		let stop_key;
-		if config.stop_key.is_empty() {
+		if app.config.stop_key.is_empty() {
 			stop_key = "".to_string();
 		} else {
-			let mut keys = Vec::from_iter(config.stop_key.clone().into_iter());
+			let mut keys = Vec::from_iter(app.config.stop_key.clone().into_iter());
 			keys.sort();
 			stop_key = format!("{}", keys.join(" + "));
 		}
 		self.left_right_line("Stop Key".to_string(), stop_key, width as usize, &mut lines);
-		self.left_right_line("Loopback Default".to_string(), config.loopback_default.to_string(), width as usize, &mut lines);
-		self.left_right_line("Loopback 1".to_string(), config.loopback_1.clone(), width as usize, &mut lines);
-		self.left_right_line("Loopback 2".to_string(), config.loopback_2.clone(), width as usize, &mut lines);
-		self.left_right_line("Playlist Mode".to_string(), config.playlist_mode.to_string(), width as usize, &mut lines);
+		self.left_right_line("Loopback Default".to_string(), app.config.loopback_default.to_string(), width as usize, &mut lines);
+		self.left_right_line("Loopback 1".to_string(), app.config.loopback_1.clone(), width as usize, &mut lines);
+		self.left_right_line("Loopback 2".to_string(), app.config.loopback_2.clone(), width as usize, &mut lines);
+		self.left_right_line("Playlist Mode".to_string(), app.config.playlist_mode.to_string(), width as usize, &mut lines);
 		f.render_widget(Paragraph::new(lines).block(block), area);
 	}
 }
@@ -71,7 +74,7 @@ impl BlockNavigation for SettingsBlock {
 
 	fn navigate_block(&self, dx: i16, _dy: i16) -> u8 {
 		if dx < 0 {
-			if get_app().waves_opened {
+			if acquire().waves_opened {
 				return WavesBlock::ID;
 			}
 			return FilesBlock::ID;
@@ -121,12 +124,11 @@ impl SettingsBlock {
 			},
 			// Loopback default toggle
 			1 => {
-				let config = config_mut();
-				config.loopback_default = !config.loopback_default;
-				let app = get_mut_app();
-				if config.loopback_default && app.module_loopback_default.is_empty() {
+				let mut app = acquire();
+				app.config.loopback_default = !app.config.loopback_default;
+				if app.config.loopback_default && app.module_loopback_default.is_empty() {
 					app.module_loopback_default = loopback("@DEFAULT_SINK@".to_string()).unwrap_or(String::new());
-				} else if !config.loopback_default && !app.module_loopback_default.is_empty() {
+				} else if !app.config.loopback_default && !app.module_loopback_default.is_empty() {
 					app.module_loopback_default = unload_module(&app.module_loopback_default)
 						.map_or(app.module_loopback_default.clone(), |_| { String::new() });
 				}
@@ -145,8 +147,8 @@ impl SettingsBlock {
 			},
 			// Playlist mode toggle
 			4 => {
-				let config = config_mut();
-				config.playlist_mode = !config.playlist_mode;
+				let mut app = acquire();
+				app.config.playlist_mode = !app.config.playlist_mode;
 				return true;
 			},
 			_ => false
@@ -154,23 +156,22 @@ impl SettingsBlock {
 	}
 
 	fn handle_delete(&mut self) -> bool {
-		let app = get_mut_app();
-		let config = config_mut();
+		let mut app = acquire();
 		match self.selected {
 			0 => {
-				config.stop_key.clear();
+				app.config.stop_key.clear();
 				app.stopkey.clear();
 				return true;
 			},
 			1 => {
-				config.loopback_default = true;
+				app.config.loopback_default = true;
 				if app.module_loopback_default.is_empty() {
 					app.module_loopback_default = loopback("@DEFAULT_SINK@".to_string()).unwrap_or(String::new());
 				}
 				return true;
 			},
 			2 => {
-				config.loopback_1 = String::new();
+				app.config.loopback_1 = String::new();
 				if !app.module_loopback_1.is_empty() {
 					app.module_loopback_1 = unload_module(&app.module_loopback_1)
 						.map_or(app.module_loopback_1.clone(), |_| { String::new() });
@@ -178,7 +179,7 @@ impl SettingsBlock {
 				return true;
 			},
 			3 => {
-				config.loopback_2 = String::new();
+				app.config.loopback_2 = String::new();
 				if !app.module_loopback_2.is_empty() {
 					app.module_loopback_2 = unload_module(&app.module_loopback_2)
 						.map_or(app.module_loopback_2.clone(), |_| { String::new() });
@@ -186,7 +187,7 @@ impl SettingsBlock {
 				return true;
 			},
 			4 => {
-				config.playlist_mode = false;
+				app.config.playlist_mode = false;
 				return true;
 			},
 			_ => false

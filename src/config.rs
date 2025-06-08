@@ -4,7 +4,8 @@ pub use migrate::SoundboardConfig;
 pub use migrate::FileEntry;
 pub use migrate::WaveformEntry;
 
-use crate::{constant::APP_NAME, state::get_app};
+use crate::constant::APP_NAME;
+use crate::state::acquire;
 
 mod migrate;
 
@@ -18,7 +19,7 @@ pub fn load() -> SoundboardConfig {
 }
 
 pub fn save() {
-	let serialized = serde_json::to_string(&get_app().config).expect("Failed to serialize app config");
+	let serialized = serde_json::to_string(&acquire().config).expect("Failed to serialize app config");
 	let _ = std::fs::File::create(get_config_path(false).to_str().unwrap()).is_ok_and(|mut output| {
 		output.write_all(serialized.as_bytes()).is_ok()
 	});

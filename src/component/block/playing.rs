@@ -1,26 +1,23 @@
-use std::cmp::min;
+use std::{cmp::min, sync::{LazyLock, Mutex}};
 
 use ratatui::{layout::Rect, style::{Color, Style}, text::{Line, Text}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 
-use crate::state::get_app;
+use crate::{component::block::BlockSingleton, state::acquire};
 
 use super::BlockRender;
 
-pub struct PlayingBlock {
-	title: String,
-}
+pub struct PlayingBlock { }
 
-impl Default for PlayingBlock {
-	fn default() -> Self {
-		Self {
-			title: "Playing".to_string()
-		}
+impl BlockSingleton for PlayingBlock {
+	fn instance() -> std::sync::MutexGuard<'static, Self> {
+		static BLOCK: LazyLock<Mutex<PlayingBlock>> = LazyLock::new(|| { Mutex::new(PlayingBlock {}) });
+		BLOCK.lock().unwrap()
 	}
 }
 
 impl BlockRender for PlayingBlock {
 	fn render(&self, f: &mut Frame) {
-		let app = get_app();
+		let app = acquire();
 		let playing = &app.playing_file;
 		let waves = &app.playing_wave;
 
@@ -33,8 +30,8 @@ impl BlockRender for PlayingBlock {
 		}
 
 		if waves.len() > 0 {
-			lines.extend(waves.values().map(|(_id, label)| {
-				Line::from(label.clone()).style(Style::default().fg(Color::LightBlue))
+			lines.extend(waves.values().map(|wave| {
+				Line::from(wave.clone()).style(Style::default().fg(Color::LightBlue))
 			}));
 		}
 
@@ -52,7 +49,7 @@ impl BlockRender for PlayingBlock {
 			height: 2 + inner_height
 		};
 		Clear.render(block_area, f.buffer_mut());
-		let paragraph = Paragraph::new(Text::from(lines)).block(Block::bordered().border_type(BorderType::Rounded).title(format!("{} ({len})", self.title)).padding(Padding::horizontal(1)));
+		let paragraph = Paragraph::new(Text::from(lines)).block(Block::bordered().border_type(BorderType::Rounded).title(format!("Playing ({len})")).padding(Padding::horizontal(1)));
 		f.render_widget(paragraph, block_area);
 	}
 }

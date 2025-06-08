@@ -1,13 +1,13 @@
+use std::sync::MutexGuard;
+
 use crossterm::event::{KeyCode, KeyEvent};
 use files::FilesBlock;
-use help::HelpBlock;
-use playing::PlayingBlock;
-use ratatui::{layout::Rect, style::{Color, Style}, widgets::BorderType, Frame};
+use ratatui::{layout::Rect, Frame};
 use settings::SettingsBlock;
 use tabs::TabsBlock;
 use volume::VolumeBlock;
 
-use crate::{component::block::waves::WavesBlock, state::{get_app, SelectionLayer}};
+use crate::{component::block::waves::WavesBlock};
 
 use super::{layer, popup::{help::HelpPopup, set_popup, PopupComponent}};
 
@@ -19,14 +19,8 @@ pub mod tabs;
 pub mod volume;
 pub mod waves;
 
-pub enum BlockComponent {
-	Volume(VolumeBlock),
-	Tabs(TabsBlock),
-	Files(FilesBlock),
-	Settings(SettingsBlock),
-	Help(HelpBlock),
-	Playing(PlayingBlock),
-	Waves(WavesBlock),
+pub trait BlockSingleton {
+	fn instance() -> MutexGuard<'static, Self>;
 }
 
 pub trait BlockRender {
@@ -46,136 +40,33 @@ pub trait BlockNavigation {
 	fn navigate_block(&self, dx: i16, dy: i16) -> u8;
 }
 
-impl BlockRender for BlockComponent {
-	fn render(&self, f: &mut Frame) {
-		match self {
-			BlockComponent::Playing(block) => block.render(f),
-			_ => (),
+pub fn handle_key(block_id: u8, event: KeyEvent) -> bool {
+	use KeyCode::*;
+	match event.code {
+		Char('q')|KeyCode::Esc => layer::navigate_layer(true),
+		Char('?') => {
+			set_popup(PopupComponent::Help(HelpPopup::default()));
+			return true;
+		},
+		_ => match block_id {
+			VolumeBlock::ID => VolumeBlock::instance().handle_key(event),
+			TabsBlock::ID => TabsBlock::instance().handle_key(event),
+			FilesBlock::ID => FilesBlock::instance().handle_key(event),
+			SettingsBlock::ID => SettingsBlock::instance().handle_key(event),
+			WavesBlock::ID => WavesBlock::instance().handle_key(event),
+			_ => false,
 		}
 	}
 }
 
-impl BlockRenderArea for BlockComponent {
-	fn render_area(&mut self, f: &mut Frame, area: Rect) {
-		match self {
-			BlockComponent::Volume(block) => block.render_area(f, area),
-			BlockComponent::Tabs(block) => block.render_area(f, area),
-			BlockComponent::Files(block) => block.render_area(f, area),
-			BlockComponent::Settings(block) => block.render_area(f, area),
-			BlockComponent::Help(block) => block.render_area(f, area),
-			BlockComponent::Waves(block) => block.render_area(f, area),
-			_ => (),
-		}
-	}
-}
-
-impl BlockHandleKey for BlockComponent {
-	fn handle_key(&mut self, event: KeyEvent) -> bool {
-		use BlockComponent::*;
-		use KeyCode::*;
-		match event.code {
-			Char('q')|KeyCode::Esc => layer::navigate_layer(true),
-			Char('?') => {
-				set_popup(PopupComponent::Help(HelpPopup::default()));
-				return true;
-			},
-			_ => match self {
-				Volume(block) => block.handle_key(event),
-				Tabs(block) => block.handle_key(event),
-				Files(block) => block.handle_key(event),
-				Settings(block) => block.handle_key(event),
-				Waves(block) => block.handle_key(event),
-				_ => false,
-			}
-		}
-	}
-}
-
-impl BlockNavigation for BlockComponent {
-	const ID: u8 = 0; // Unused
-
-	fn navigate_block(&self, dx: i16, dy: i16) -> u8 {
-		use BlockComponent::*;
-		match self {
-			Volume(block) => block.navigate_block(dx, dy),
-			Tabs(block) => block.navigate_block(dx, dy),
-			Files(block) => block.navigate_block(dx, dy),
-			Settings(block) => block.navigate_block(dx, dy),
-			Waves(block) => block.navigate_block(dx, dy),
-			_ => Self::ID
-		}
-	}
-}
-
-pub(self) fn borders(id: u8) -> (BorderType, Style) {
-	let app = get_app();
-	let style = Style::default().fg(
-		if app.block_selected == id {
-			Color::White
-		} else {
-			Color::DarkGray
-		}
-	);
-	let border_type = if app.block_selected == id {
-		if app.selection_layer == SelectionLayer::Content {
-			BorderType::Double
-		} else {
-			BorderType::Thick
-		}
-	} else {
-		BorderType::Rounded
-	};
-	(border_type, style)
-}
-
-impl BlockComponent {
-	pub fn _volume_selected(&self) -> Option<usize> {
-		match self {
-			BlockComponent::Volume(block) => Option::Some(block.selected),
-			_ => Option::None
-		}
-	}
-
-	pub fn file_selected(&self) -> Option<usize> {
-		match self {
-			BlockComponent::Files(block) => Option::Some(block.selected),
-			_ => Option::None
-		}
-	}
-
-	pub fn set_file_selected(&mut self, selected: usize) {
-		match self {
-			BlockComponent::Files(block) => block.selected = selected,
-			_ => ()
-		}
-	}
-
-	pub fn tab_selected(&self) -> Option<usize> {
-		match self {
-			BlockComponent::Tabs(block) => Option::Some(block.selected),
-			_ => Option::None
-		}
-	}
-
-	pub fn set_tab_selected(&mut self, selected: usize) {
-		match self {
-			BlockComponent::Tabs(block) => block.selected = selected,
-			_ => ()
-		}
-	}
-
-	pub fn wave_selected(&self) -> Option<usize> {
-		match self {
-			BlockComponent::Waves(block) => Option::Some(block.selected),
-			_ => Option::None
-		}
-	}
-
-	pub fn set_wave_selected(&mut self, selected: usize) {
-		match self {
-			BlockComponent::Waves(block) => block.selected = selected,
-			_ => ()
-		}
+pub fn navigate_block(block_id: u8, dx: i16, dy: i16) -> u8 {
+	match block_id {
+		VolumeBlock::ID => VolumeBlock::instance().navigate_block(dx, dy),
+		TabsBlock::ID => TabsBlock::instance().navigate_block(dx, dy),
+		FilesBlock::ID => FilesBlock::instance().navigate_block(dx, dy),
+		SettingsBlock::ID => SettingsBlock::instance().navigate_block(dx, dy),
+		WavesBlock::ID => WavesBlock::instance().navigate_block(dx, dy),
+		_ => block_id
 	}
 }
 

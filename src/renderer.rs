@@ -2,10 +2,10 @@ use ratatui::{
 	layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, widgets::{Block, BorderType, Borders, Paragraph}, Frame
 };
 
-use crate::{component::{block::{BlockRender, BlockRenderArea}, popup::PopupRender}, state};
+use crate::{component::{block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, volume::VolumeBlock, waves::WavesBlock, BlockRender, BlockRenderArea, BlockSingleton}, popup::{popups, PopupRender}}, state::acquire};
 
 pub fn ui(f: &mut Frame) {
-	let app = state::get_mut_app();
+	let app = acquire();
 	if !app.error.is_empty() {
 		return draw_error(f);
 	}
@@ -22,11 +22,14 @@ pub fn ui(f: &mut Frame) {
 			].as_ref()
 		)
 		.split(f.area());
-	for ii in 0..2 {
-		app.blocks[ii].render_area(f, chunks[ii]);
-	}
+
+	let settings = app.settings_opened;
+	let waves = app.waves_opened;
+	drop(app);
+	{ VolumeBlock::instance().render_area(f, chunks[0]); }
+	{ TabsBlock::instance().render_area(f, chunks[1]); }
 	let files_area: Rect;
-	if app.settings_opened {
+	if settings {
 		let mid_chunks1 = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Fill(1), Constraint::Length(20)].as_ref()).split(chunks[2]);
 		let mid_chunks2 = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Fill(1), Constraint::Percentage(30)].as_ref()).split(chunks[2]);
 		let mid_chunks;
@@ -37,24 +40,24 @@ pub fn ui(f: &mut Frame) {
 			mid_chunks = mid_chunks2;
 		}
 		files_area = mid_chunks[0];
-		app.blocks[3].render_area(f, mid_chunks[1]);
+		{ SettingsBlock::instance().render_area(f, mid_chunks[1]); }
 	} else {
 		files_area = chunks[2];
 	}
-	if app.waves_opened {
-		app.blocks[6].render_area(f, files_area);
+	if waves {
+		WavesBlock::instance().render_area(f, files_area);
 	} else {
-		app.blocks[2].render_area(f, files_area);
+		FilesBlock::instance().render_area(f, files_area);
 	}
-	app.blocks[4].render_area(f, chunks[3]);
-	app.blocks[5].render(f); // playing block render
-	app.popups.iter().for_each(|popup| {
+	{ HelpBlock::instance().render_area(f, chunks[3]); }
+	{ PlayingBlock::instance().render(f); }
+	popups().iter().for_each(|popup| {
 		popup.render(f);
 	});
 }
 
 fn draw_error(f: &mut Frame) {
-	let app = state::get_app();
+	let app = acquire();
 	let paragraph = Paragraph::new(app.error.clone())
 		.alignment(Alignment::Center)
 		.style(Style::default().fg(Color::Red))

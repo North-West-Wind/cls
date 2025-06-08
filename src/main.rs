@@ -1,21 +1,11 @@
-use std::{io, thread::{self, JoinHandle}, time::Duration};
-use constant::{MIN_HEIGHT, MIN_WIDTH};
-use signal_hook::iterator::Signals;
-use socket::{ensure_socket, listen_socket, send_exit, send_socket, socket_path};
+use std::{thread::{self}, time::Duration};
+use socket::{ensure_socket, send_exit, send_socket, socket_path};
 use util::pulseaudio::{load_null_sink, loopback, set_volume_percentage};
-use listener::{listen_events, listen_global_input};
-use ratatui::{
-	backend::CrosstermBackend,
-	Terminal
-};
-use crossterm::{
-	event::{DisableMouseCapture, EnableMouseCapture},
-	execute,
-	terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-};
-use state::{config, get_mut_app, Scanning};
+use state::Scanning;
 use util::threads::spawn_scan_thread;
 use clap::{command, Arg, ArgAction, Command};
+
+use crate::{state::acquire, util::threads::{spawn_drawing_thread, spawn_listening_thread, spawn_pacat_wave_thread, spawn_signal_thread, spawn_socket_thread}};
 mod component;
 mod config;
 mod constant;
@@ -76,8 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		return Ok(());
 	}
 	// Initialize global app object
-	state::init_app(matches.get_flag("hidden"), matches.get_flag("edit"));
-	let app = get_mut_app();
+	let mut app = state::init_app(matches.get_flag("hidden"), matches.get_flag("edit"));
 
 	if app.hidden && app.edit {
 		// Mutually exclusive options
@@ -87,7 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	}
 	if !app.edit {
 		// If not write-only, ensure we can use the socket
-		ensure_socket();
+		app.socket_holder = ensure_socket();
 		if !app.socket_holder {
 			println!("Found existing socket! That probably means another instance is running. Forcing edit mode...");
 			println!("If there isn't another instance running, delete {}", socket_path().to_str().unwrap());
@@ -97,32 +86,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	}
 
 	// PulseAudio setup
-	let config = config();
 	if !app.edit {
 		app.module_null_sink = load_null_sink()?;
-		if config.loopback_default {
+		if app.config.loopback_default {
 			app.module_loopback_default = loopback("@DEFAULT_SINK@".to_string())?;
 		}
-		if !config.loopback_1.is_empty() {
-			app.module_loopback_1 = loopback(config.loopback_1.clone())?;
+		if !app.config.loopback_1.is_empty() {
+			app.module_loopback_1 = loopback(app.config.loopback_1.clone())?;
 		}
-		if !config.loopback_2.is_empty() {
-			app.module_loopback_2 = loopback(config.loopback_2.clone())?;
+		if !app.config.loopback_2.is_empty() {
+			app.module_loopback_2 = loopback(app.config.loopback_2.clone())?;
 		}
 	}
-	set_volume_percentage(config.volume);
+	set_volume_percentage(app.config.volume);
 
-	app.running = true;
+	let (has_socket, is_edit, is_hidden) = (app.socket_holder, app.edit, app.hidden);
+	drop(app);
 
 	// Create threads for all background listeners
 	spawn_signal_thread()?;
 	spawn_scan_thread(Scanning::All);
 	let listen_thread = spawn_listening_thread();
 	let mut socket_thread = Option::None;
-	if app.socket_holder {
+	if has_socket {
 		socket_thread = Option::Some(spawn_socket_thread());
 	}
-	if !app.hidden {
+	// Wave playing thread
+	if !is_edit {
+		spawn_pacat_wave_thread();
+	}
+	if !is_hidden {
 		// If not hidden, we need to render the UI
 		let draw_thread = spawn_drawing_thread();
 		draw_thread.join().ok();
@@ -135,89 +128,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	}
 
 	// Finish up PulseAudio
-	app.unload_modules();
-	if !app.hidden && !matches.get_flag("no-save") {
+	{ acquire().unload_modules(); }
+	if !is_hidden && !matches.get_flag("no-save") {
 		// Save config if not hidden
 		config::save();
 	}
 	Ok(())
-}
-
-fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
-	return thread::spawn(move || -> Result<(), io::Error> {
-		// Setup terminal
-		enable_raw_mode()?;
-		let mut stdout = io::stdout();
-		execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-		let backend = CrosstermBackend::new(stdout);
-		let mut terminal = Terminal::new(backend)?;
-
-		// Check minimum terminal size
-		let size = terminal.size()?;
-		if size.width < MIN_WIDTH || size.height < MIN_HEIGHT {
-			let width = size.width;
-			let height = size.height;
-			let app = state::get_mut_app();
-			app.error = String::from(format!("Terminal size requires at least {MIN_WIDTH}x{MIN_HEIGHT}.\nCurrent size: {width}x{height}"));
-			app.error_important = true;
-		}
-
-		// Render to the terminal
-		let app = state::get_app();
-		let pair = app.pair.clone();
-		while app.running {
-			let (lock, cvar) = &*pair;
-			let mut shared = lock.lock().expect("Failed to get shared mutex");
-			// Wait for redraw notice
-			while !(*shared).redraw {
-				shared = cvar.wait(shared).expect("Failed to get shared mutex");
-			}
-			(*shared).redraw = false;
-			// Render again
-			terminal.draw(|f| { renderer::ui(f); })?;
-		}
-
-		// Restore terminal
-		disable_raw_mode()?;
-		execute!(
-			terminal.backend_mut(),
-			LeaveAlternateScreen,
-			DisableMouseCapture
-		)?;
-		terminal.show_cursor()?;
-		Ok(())
-	});
-}
-
-// A thread for listening for inputs
-fn spawn_listening_thread() -> JoinHandle<()> {
-	return thread::spawn(move || {
-		listen_global_input();
-		listen_events().ok();
-	});
-}
-
-// A thread for listening for signals
-fn spawn_signal_thread() -> Result<JoinHandle<()>, io::Error> {
-	use signal_hook::consts::*;
-	let mut signals = Signals::new([SIGINT, SIGTERM])?;
-	return Ok(thread::spawn(move || {
-		for sig in signals.forever() {
-			let app = get_mut_app();
-			match sig {
-				SIGINT|SIGTERM => {
-					app.running = false;
-					break;
-				},
-				_ => (),
-			}
-		}
-	}));
-}
-
-// A thread for listening for socket (IPC)
-fn spawn_socket_thread() -> JoinHandle<()> {
-	return thread::spawn(move || {
-		listen_socket().ok();
-	});
 }

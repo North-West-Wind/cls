@@ -1,25 +1,12 @@
-use std::{collections::HashMap, path::Path, sync::{Arc, Condvar, Mutex}};
+use std::{collections::HashMap, path::Path, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard, OnceLock}};
 
 use linked_hash_map::LinkedHashMap;
 use mki::Keyboard;
+use ratatui::{style::{Color, Style}, widgets::BorderType};
 use std_semaphore::Semaphore;
 use uuid::Uuid;
 
-use crate::{component::{block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, volume::VolumeBlock, waves::WavesBlock, BlockComponent, BlockNavigation}, popup::PopupComponent}, config::{load, SoundboardConfig}, util::{global_input::string_to_keyboard, pulseaudio::unload_module, waveform::Waveform}};
-
-pub type CondvarPair = Arc<(Mutex<SharedCondvar>, Condvar)>;
-
-pub struct SharedCondvar {
-	pub redraw: bool,
-}
-
-impl Default for SharedCondvar {
-	fn default() -> Self {
-		Self {
-			redraw: true
-		}
-	}
-}
+use crate::{config::{load, SoundboardConfig}, util::{global_input::string_to_keyboard, pulseaudio::unload_module, waveform::Waveform}};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum SelectionLayer {
@@ -40,18 +27,14 @@ pub struct App {
 	pub hotkey: HashMap<String, Vec<Keyboard>>,
 	pub stopkey: Vec<Keyboard>,
 	// states
-	pub running: bool,
 	pub error: String,
 	pub error_important: bool,
-	pub pair: CondvarPair,
 	pub socket_holder: bool,
 	pub hidden: bool,
 	pub edit: bool,
 	// render states: root
-	pub blocks: Vec<BlockComponent>,
 	pub block_selected: u8,
 	pub selection_layer: SelectionLayer,
-	pub popups: Vec<PopupComponent>,
 	pub settings_opened: bool,
 	pub waves_opened: bool,
 	// pulseaudio
@@ -66,34 +49,30 @@ pub struct App {
 	// render states: playing
 	pub playing_file: LinkedHashMap<Uuid, (u32, String)>,
 	pub playing_semaphore: Semaphore,
-	pub playing_wave: LinkedHashMap<Uuid, (u32, String)>,
+	pub playing_wave: LinkedHashMap<Uuid, String>,
 	// waves
 	pub waves: Vec<Waveform>,
 }
 
 impl App {
-	pub fn file_selected(&self) -> usize {
-		self.blocks[FilesBlock::ID as usize].file_selected().unwrap()
-	}
-
-	pub fn set_file_selected(&mut self, selected: usize) {
-		self.blocks[FilesBlock::ID as usize].set_file_selected(selected);
-	}
-
-	pub fn tab_selected(&self) -> usize {
-		self.blocks[TabsBlock::ID as usize].tab_selected().unwrap()
-	}
-
-	pub fn set_tab_selected(&mut self, selected: usize) {
-		self.blocks[TabsBlock::ID as usize].set_tab_selected(selected);
-	}
-
-	pub fn wave_selected(&self) -> usize {
-		self.blocks[WavesBlock::ID as usize].wave_selected().unwrap()
-	}
-
-	pub fn set_wave_selected(&mut self, selected: usize) {
-		self.blocks[WavesBlock::ID as usize].set_wave_selected(selected);
+	pub fn borders(&self, id: u8) -> (BorderType, Style) {
+		let style = Style::default().fg(
+			if self.block_selected == id {
+				Color::White
+			} else {
+				Color::DarkGray
+			}
+		);
+		let border_type = if self.block_selected == id {
+			if self.selection_layer == SelectionLayer::Content {
+				BorderType::Double
+			} else {
+				BorderType::Thick
+			}
+		} else {
+			BorderType::Rounded
+		};
+		(border_type, style)
 	}
 
 	pub fn unload_modules(&self) {
@@ -103,9 +82,6 @@ impl App {
 		unload_module(&self.module_null_sink).ok();
 	}
 }
-
-// Global variables
-static mut APP: Option<App> = Option::None;
 
 pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Vec<Keyboard>>, HashMap<u32, String>, Vec<Waveform>) {
 	let config = load();
@@ -166,9 +142,9 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 	(config, stopkey, hotkey, rev_file_id, waves)
 }
 
-pub fn init_app(hidden: bool, edit: bool) {
-	use BlockComponent::*;
-	unsafe {
+fn static_app(hidden: bool, edit: bool) -> &'static Mutex<App> {
+	static APP: OnceLock<Mutex<App>> = OnceLock::new();
+	APP.get_or_init(|| {
 		let (config, stopkey, hotkey, rev_file_id, waves) = load_app_config();
 		let app = App {
 			// config
@@ -176,26 +152,14 @@ pub fn init_app(hidden: bool, edit: bool) {
 			hotkey,
 			stopkey,
 			// states
-			running: false,
 			error: String::new(),
 			error_important: false,
-			pair: Arc::new((Mutex::new(SharedCondvar::default()), Condvar::new())),
 			socket_holder: false,
 			hidden,
 			edit,
 			// render states: root
-			blocks: vec![
-				Volume(VolumeBlock::default()),
-				Tabs(TabsBlock::default()),
-				Files(FilesBlock::default()),
-				Settings(SettingsBlock::default()),
-				Help(HelpBlock::default()),
-				Playing(PlayingBlock::default()),
-				Waves(WavesBlock::default())
-			],
 			block_selected: 0,
 			selection_layer: SelectionLayer::Block,
-			popups: vec![],
 			settings_opened: false,
 			waves_opened: false,
 			// pulseaudio
@@ -214,23 +178,45 @@ pub fn init_app(hidden: bool, edit: bool) {
 			// waves
 			waves
 		};
-	
-		APP = Option::Some(app);
+		Mutex::new(app)
+	})
+}
+
+pub fn init_app(hidden: bool, edit: bool) -> MutexGuard<'static, App> {
+	static_app(hidden, edit).lock().unwrap()
+}
+
+pub fn acquire() -> MutexGuard<'static, App> {
+	let app = static_app(false, false).lock().unwrap();
+	//println!("acquire: {}", Backtrace::capture());
+	app
+}
+
+static REDRAW: LazyLock<(Mutex<bool>, Condvar)> = LazyLock::new(|| (Mutex::new(true), Condvar::new()));
+
+pub fn notify_redraw() {
+	let (lock, cvar) = &*REDRAW;
+	let mut shared = lock.lock().expect("Failed to get shared mutex");
+	*shared = true;
+	cvar.notify_all();
+}
+
+pub fn wait_redraw() {
+	let (lock, cvar) = &*REDRAW;
+	let mut shared = lock.lock().expect("Failed to get shared mutex");
+	// Wait for redraw notice
+	while !(*shared) {
+		shared = cvar.wait(shared).expect("Failed to get shared mutex");
 	}
+	*shared = false;
 }
 
-pub fn get_mut_app() -> &'static mut App {
-	unsafe { APP.as_mut().unwrap() }
+pub fn acquire_running() -> MutexGuard<'static, bool> {
+	static RUNNING: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(true));
+	RUNNING.lock().unwrap()
 }
 
-pub fn get_app() -> &'static App {
-	unsafe { APP.as_ref().unwrap() }
-}
-
-pub fn config() -> &'static SoundboardConfig {
-	&get_app().config
-}
-
-pub fn config_mut() -> &'static mut SoundboardConfig {
-	&mut get_mut_app().config
+pub fn acquire_playlist_lock() -> MutexGuard<'static, ()> {
+	static PLAYLIST_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+	PLAYLIST_LOCK.lock().unwrap()
 }

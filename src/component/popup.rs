@@ -1,4 +1,4 @@
-use std::cmp::{max, min};
+use std::{cmp::{max, min}, sync::{LazyLock, Mutex, MutexGuard}, thread};
 
 use crossterm::event::KeyEvent;
 use help::HelpPopup;
@@ -8,7 +8,7 @@ use mki::Keyboard;
 use ratatui::{layout::Rect, Frame};
 use save::SavePopup;
 
-use crate::{component::popup::{confirm::ConfirmPopup, wave::WavePopup}, state::get_mut_app};
+use crate::{component::popup::{confirm::ConfirmPopup, wave::WavePopup}};
 
 pub mod confirm;
 pub mod help;
@@ -16,6 +16,8 @@ pub mod input;
 pub mod key_bind;
 pub mod save;
 pub mod wave;
+
+static POPUPS: LazyLock<Mutex<Vec<PopupComponent>>> = LazyLock::new(|| { Mutex::new(vec![]) });
 
 pub enum PopupComponent {
 	Confirm(ConfirmPopup),
@@ -97,14 +99,19 @@ impl PopupComponent {
 	}
 }
 
+pub fn popups() -> MutexGuard<'static, Vec<PopupComponent>> {
+	POPUPS.lock().unwrap()
+}
+
 pub fn exit_popup() {
-	let app = get_mut_app();
-	app.popups.pop();
+	// Defer to avoid deadlock
+	thread::spawn(move || {
+		popups().pop();
+	});
 }
 
 pub fn set_popup(popup: PopupComponent) {
-	let app = get_mut_app();
-	app.popups.push(popup);
+	popups().push(popup);
 }
 
 pub(self) fn safe_centered_rect(width: u16, height: u16, area: Rect) -> Rect {

@@ -5,7 +5,7 @@ use normpath::PathExt;
 use ratatui::{style::{Color, Style}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 use tui_input::{backend::crossterm::EventHandler, Input};
 
-use crate::{component::{block::waves::set_wave_name, popup::wave}, config::FileEntry, state::{config_mut, get_mut_app, Scanning}, util::{pulseaudio::{loopback, unload_module}, selected_file_path, threads::spawn_scan_thread}};
+use crate::{component::{block::{tabs::TabsBlock, waves::{set_wave_name, WavesBlock}, BlockSingleton}, popup::{popups, PopupComponent}}, config::FileEntry, state::{acquire, Scanning}, util::{pulseaudio::{loopback, unload_module}, selected_file_path, threads::spawn_scan_thread}};
 
 use super::{exit_popup, safe_centered_rect, PopupHandleKey, PopupHandlePaste, PopupRender};
 
@@ -133,84 +133,86 @@ impl InputPopup {
 	}
 
 	fn send_add_tab(&self) {
-		let app = get_mut_app();
+		let mut app = acquire();
 		let Ok(norm) = Path::new(self.input.value()).normalize() else { return; };
-		let config = config_mut();
-		config.tabs.push(norm.clone().into_os_string().into_string().unwrap());
-		app.set_tab_selected(config.tabs.len() - 1);
-		spawn_scan_thread(Scanning::One(app.tab_selected()));
+		app.config.tabs.push(norm.clone().into_os_string().into_string().unwrap());
+		let len = app.config.tabs.len() - 1;
+		{ TabsBlock::instance().selected = len; }
+		spawn_scan_thread(Scanning::One(len));
 	}
 
 	fn send_loopback(&self, one: bool) {
-		let config = config_mut();
-		let app = get_mut_app();
+		let mut app = acquire();
 
 		if one {
-			config.loopback_1 = self.input.value().to_string();
+			app.config.loopback_1 = self.input.value().to_string();
 
 			if !app.module_loopback_1.is_empty() {
 				app.module_loopback_1 = unload_module(&app.module_loopback_1)
 					.map_or(app.module_loopback_1.clone(), |_| { String::new() });
 
-				if !config.loopback_1.is_empty() {
-					app.module_loopback_1 = loopback(config.loopback_1.clone()).unwrap_or(String::new());
+				if !app.config.loopback_1.is_empty() {
+					app.module_loopback_1 = loopback(app.config.loopback_1.clone()).unwrap_or(String::new());
 				}
 			}
 		} else {
-			config.loopback_2 = self.input.value().to_string();
+			app.config.loopback_2 = self.input.value().to_string();
 
 			if !app.module_loopback_2.is_empty() {
 				app.module_loopback_2 = unload_module(&app.module_loopback_2)
 					.map_or(app.module_loopback_2.clone(), |_| { String::new() });
 
-				if !config.loopback_2.is_empty() {
-					app.module_loopback_2 = loopback(config.loopback_2.clone()).unwrap_or(String::new());
+				if !app.config.loopback_2.is_empty() {
+					app.module_loopback_2 = loopback(app.config.loopback_2.clone()).unwrap_or(String::new());
 				}
 			}
 		}
 	}
 
 	fn send_file_id(&self) {
-		let path = selected_file_path();
+		let mut app = acquire();
+		let path = selected_file_path(&app.config.tabs, &app.files);
 		if path.is_empty() {
 			return;
 		}
 		let Ok(id) = u32::from_str_radix(self.input.value(), 10) else { return; };
-		let app = get_mut_app();
-		let rev_map = &mut app.rev_file_id;
-		if rev_map.get(&id).is_some_and(|p| {
-			if p != &path {
+		let existing = app.rev_file_id.get(&id);
+		if existing.is_some() {
+			if existing.unwrap() != &path {
 				app.error = "File ID must be unique".to_string();
 			}
-			true
-		}) {
 			return;
 		}
-		rev_map.insert(id, path.clone());
-		let config = config_mut();
-		match config.get_file_entry_mut(path.clone()) {
+		app.rev_file_id.insert(id, path.clone());
+		match app.config.get_file_entry_mut(path.clone()) {
 			Some(entry) => {
 				entry.id = Some(id);
 			},
 			None => {
 				let mut entry = FileEntry::default();
 				entry.id = Some(id);
-				config.insert_file_entry(path, entry);
+				app.config.insert_file_entry(path, entry);
 			}
 		}
 	}
 
 	fn send_wave_id(&self) {
 		let Ok(id) = u32::from_str_radix(self.input.value(), 10) else { return; };
-		let app = get_mut_app();
-		let selected = app.wave_selected();
+		let mut app = acquire();
+		let selected = { WavesBlock::instance().selected };
 		app.waves[selected].id = Some(id);
-		config_mut().waves[selected].id = Some(id);
+		app.config.waves[selected].id = Some(id);
 	}
 
 	fn send_wave_frequency(&self) {
 		let Ok(freq) = self.input.value().parse::<f32>() else { return; };
-		let Some(popup) = wave::get_wave_popup() else { return; };
+		let mut popups = popups();
+		let Some(popup) = popups.iter_mut().find_map(|popup| {
+			match popup {
+				PopupComponent::Wave(popup) => { Option::Some(popup) },
+				_ => Option::None
+			}
+		}) else { return; };
 		let wave = &mut popup.waveform.waves[popup.selected];
 		if wave.frequency != freq {
 			popup.changed = true;
@@ -220,7 +222,13 @@ impl InputPopup {
 
 	fn send_wave_amplitude(&self) {
 		let Ok(amplitude) = self.input.value().parse::<f32>() else { return; };
-		let Some(popup) = wave::get_wave_popup() else { return; };
+		let mut popups = popups();
+		let Some(popup) = popups.iter_mut().find_map(|popup| {
+			match popup {
+				PopupComponent::Wave(popup) => { Option::Some(popup) },
+				_ => Option::None
+			}
+		}) else { return; };
 		let wave = &mut popup.waveform.waves[popup.selected];
 		if wave.amplitude != amplitude {
 			popup.changed = true;
@@ -230,7 +238,13 @@ impl InputPopup {
 
 	fn send_wave_phase(&self) {
 		let Ok(phase) = self.input.value().parse::<f32>() else { return; };
-		let Some(popup) = wave::get_wave_popup() else { return; };
+		let mut popups = popups();
+		let Some(popup) = popups.iter_mut().find_map(|popup| {
+			match popup {
+				PopupComponent::Wave(popup) => { Option::Some(popup) },
+				_ => Option::None
+			}
+		}) else { return; };
 		let wave = &mut popup.waveform.waves[popup.selected];
 		if wave.phase != phase {
 			popup.changed = true;

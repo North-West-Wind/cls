@@ -1,31 +1,31 @@
-use std::cmp::{max, min};
+use std::{cmp::{max, min}, sync::{LazyLock, Mutex, MutexGuard}};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 
-use crate::{component::block::{borders, tabs::TabsBlock, BlockNavigation}, config::FileEntry, state::{config, config_mut, get_app, get_mut_app}, util::{pulseaudio::set_volume_percentage, selected_file_path}};
+use crate::{component::block::{tabs::TabsBlock, waves::WavesBlock, BlockNavigation, BlockSingleton}, config::FileEntry, state::acquire, util::{pulseaudio::set_volume_percentage, selected_file_path}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
 pub struct VolumeBlock {
-	pub(super) selected: usize,
+	selected: usize,
 	options: u8,
 }
 
-
-impl Default for VolumeBlock {
-	fn default() -> Self {
-		Self {
+impl BlockSingleton for VolumeBlock {
+	fn instance() -> MutexGuard<'static, Self> {
+		static BLOCK: LazyLock<Mutex<VolumeBlock>> = LazyLock::new(|| { Mutex::new(VolumeBlock {
 			selected: 0,
-			options: 2,
-		}
+			options: 2
+		}) });
+		BLOCK.lock().unwrap()
 	}
 }
 
 impl BlockRenderArea for VolumeBlock {
 	fn render_area(&mut self, f: &mut Frame, area: Rect) {
-		let config = config();
-		let (border_type, border_style) = borders(Self::ID);
+		let app = acquire();
+		let (border_type, border_style) = app.borders(Self::ID);
 		let block = Block::default()
 			.title("Volume")
 			.borders(Borders::ALL)
@@ -33,11 +33,10 @@ impl BlockRenderArea for VolumeBlock {
 			.border_style(border_style)
 			.padding(Padding::horizontal(1));
 		let mut lines = vec![
-			volume_line("Sink Volume".to_string(), config.volume, area.width, self.selected == 0)
+			volume_line("Sink Volume".to_string(), app.config.volume, area.width, self.selected == 0)
 		];
-		let app = get_app();
 		if app.waves_opened {
-			let index = app.wave_selected();
+			let index = { WavesBlock::instance().selected };
 			if index < app.waves.len() {
 				let wave = &app.waves[index];
 				lines.push(Line::from(""));
@@ -48,14 +47,14 @@ impl BlockRenderArea for VolumeBlock {
 				lines.push(volume_line("Wave Volume".to_string(), wave.volume, area.width, self.selected == 1));
 			}
 		} else {
-			let path = selected_file_path();
+			let path = selected_file_path(&app.config.tabs, &app.files);
 			if !path.is_empty() {
 				lines.push(Line::from(""));
 				lines.push(Line::from(vec![
 					Span::from("Selected "),
 					Span::from(path.clone()).style(Style::default().fg(Color::LightGreen))
 				]));
-				let volume = match config.get_file_entry(path) {
+				let volume = match app.config.get_file_entry(path) {
 					Some(entry) => entry.volume,
 					None => 100
 				};
@@ -96,7 +95,8 @@ impl VolumeBlock {
 		let new_selected = loop_index(self.selected, dy, self.options as usize);
 		if new_selected != self.selected {
 			if new_selected == 1 {
-				let selected_file = selected_file_path();
+				let app = acquire();
+				let selected_file = selected_file_path(&app.config.tabs, &app.files);
 				if selected_file.is_empty() {
 					return false;
 				}
@@ -108,19 +108,19 @@ impl VolumeBlock {
 	}
 
 	fn change_volume(&self, delta: i16) -> bool {
+		let mut app = acquire();
 		if self.selected == 1 {
-			if get_app().waves_opened {
+			if app.waves_opened {
 				return change_wave_volume(delta);
 			} else {
 				return change_file_volume(delta);
 			}
 		}
-		let config = config_mut();
-		let old_volume = config.volume as i16;
+		let old_volume = app.config.volume as i16;
 		let new_volume = min(200, max(0, old_volume + delta));
 		if new_volume != old_volume {
 			set_volume_percentage(new_volume as u32);
-			config.volume = new_volume as u32;
+			app.config.volume = new_volume as u32;
 			return true
 		}
 		false
@@ -157,19 +157,19 @@ fn volume_line(title: String, volume: u32, width: u16, highlight: bool) -> Line<
 }
 
 fn change_file_volume(delta: i16) -> bool {
-	let path = selected_file_path();
+	let mut app = acquire();
+	let path = selected_file_path(&app.config.tabs, &app.files);
 	if path.is_empty() {
 		return false;
 	}
-	let config = config_mut();
-	match config.get_file_entry_mut(path.clone()) {
+	match app.config.get_file_entry_mut(path.clone()) {
 		Some(entry) => {
 			let old_volume = entry.volume;
 			let new_volume = min(100, max(0, old_volume as i16 + delta)) as u32;
 			if new_volume != old_volume {
 				entry.volume = new_volume;
 				if entry.is_default() {
-					config.remove_file_entry(path);
+					app.config.remove_file_entry(path);
 				}
 				return true;
 			}
@@ -177,7 +177,7 @@ fn change_file_volume(delta: i16) -> bool {
 		None => {
 			let mut entry = FileEntry::default();
 			entry.volume = (100 + delta) as u32;
-			config.insert_file_entry(path, entry);
+			app.config.insert_file_entry(path, entry);
 			return true;
 		}
 	};
@@ -185,8 +185,8 @@ fn change_file_volume(delta: i16) -> bool {
 }
 
 fn change_wave_volume(delta: i16) -> bool {
-	let app = get_mut_app();
-	let index = app.wave_selected();
+	let mut app = acquire();
+	let index = { WavesBlock::instance().selected };
 	if index >= app.waves.len() {
 		return false;
 	}
@@ -194,7 +194,7 @@ fn change_wave_volume(delta: i16) -> bool {
 	let new_volume = min(100, max(0, wave.volume as i16 + delta)) as u32;
 	if new_volume != wave.volume {
 		wave.volume = new_volume;
-		config_mut().waves[index].volume = new_volume;
+		app.config.waves[index].volume = new_volume;
 		return true;
 	}
 	false

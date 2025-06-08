@@ -4,7 +4,7 @@ use clap::ArgMatches;
 use code::SocketCode;
 use normpath::PathExt;
 
-use crate::{config::FileEntry, constant::APP_NAME, state::{config_mut, get_app, get_mut_app, load_app_config, Scanning}, util::{fs::separate_parent_file, notify_redraw, pulseaudio::{play_file, set_volume_percentage, stop_all}, threads::spawn_scan_thread, waveform::{play_wave, stop_all_waves}}};
+use crate::{component::block::{tabs::TabsBlock, BlockSingleton}, config::FileEntry, constant::APP_NAME, state::{acquire, acquire_running, load_app_config, notify_redraw, Scanning}, util::{fs::separate_parent_file, pulseaudio::{play_file, set_volume_percentage, stop_all}, threads::spawn_scan_thread, waveform::{play_wave, stop_all_waves}}};
 
 pub mod code;
 
@@ -12,26 +12,28 @@ pub fn socket_path() -> PathBuf {
 	std::env::temp_dir().join(APP_NAME).join(format!("{APP_NAME}.sock"))
 }
 
-pub fn ensure_socket() {
+pub fn ensure_socket() -> bool {
 	if !socket_path().exists() {
 		let _ = std::fs::create_dir_all(socket_path().parent().expect("Failed to get socket path parent"));
-		get_mut_app().socket_holder = true;
+		return true;
 	}
+	false
 }
 
 pub fn listen_socket() -> std::io::Result<()> {
-	let app = get_mut_app();
 	let listener = UnixListener::bind(std::env::temp_dir().join(APP_NAME).join(format!("{APP_NAME}.sock")))?;
 	for stream in listener.incoming() {
-		if !app.running {
-			break;
-		}
 		let Ok(stream) = stream else { continue; };
-		let Err(err) = handle_stream(stream) else { continue; };
-		if app.hidden {
-			println!("Socket error: {:?}", err);
-		} else {
-			app.error = format!("Socket error: {:?}", err);
+		if let Err(err) = handle_stream(stream) {
+			let mut app = acquire();
+			if app.hidden {
+				println!("Socket error: {:?}", err);
+			} else {
+				app.error = format!("Socket error: {:?}", err);
+			}
+		}
+		if !*acquire_running() {
+			break;
 		}
 	}
 	std::fs::remove_file(socket_path())?;
@@ -69,13 +71,13 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 		return Ok(false);
 	}
 	let code = code.unwrap();
+	let mut app = acquire();
 	match code {
 		Exit => {
-			get_mut_app().running = false;
+			*acquire_running() = false;
 			return Ok(true);
 		},
 		ReloadConfig => {
-			let app = get_mut_app();
 			let (config, stopkey, hotkey, rev_file_id, waves) = load_app_config();
 			app.config = config;
 			app.stopkey = stopkey;
@@ -87,17 +89,14 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 			let mut path = String::new();
 			stream.read_to_string(&mut path)?;
 			if !path.is_empty() {
-				let app = get_mut_app();
 				let Ok(norm) = Path::new(&path).normalize() else { return Ok(false); };
-				let config = config_mut();
-				config.tabs.push(norm.into_os_string().into_string().unwrap());
-				app.set_tab_selected(config.tabs.len() - 1);
-				spawn_scan_thread(Scanning::One(app.tab_selected()));
+				let len = app.config.tabs.len();
+				app.config.tabs.push(norm.into_os_string().into_string().unwrap());
+				{ TabsBlock::instance().selected = len; }
+				spawn_scan_thread(Scanning::One(len));
 			}
 		},
 		DeleteTab|ReloadTab => {
-			let app = get_mut_app();
-			let config = config_mut();
 			let mut mode = [0];
 			stream.read_exact(&mut mode)?;
 			let mode = mode[0];
@@ -116,7 +115,7 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 						return Ok(false);
 					}
 					let path = path.unwrap().into_os_string().into_string().unwrap();
-					let index = config.tabs.iter().position(|tab| *tab == path);
+					let index = app.config.tabs.iter().position(|tab| *tab == path);
 					if index.is_none() {
 						return Ok(false);
 					}
@@ -125,24 +124,27 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 				3 => {
 					let mut name = String::new();
 					stream.read_to_string(&mut name)?;
-					let index = config.tabs.iter().position(|tab| Path::new(tab).file_name().unwrap().to_os_string().into_string().unwrap() == name);
+					let index = app.config.tabs.iter().position(|tab| Path::new(tab).file_name().unwrap().to_os_string().into_string().unwrap() == name);
 					if index.is_none() {
 						return Ok(false);
 					}
 					chosen_index = index.unwrap();
 				},
-				_ => chosen_index = app.tab_selected()
+				_ => chosen_index = TabsBlock::instance().selected
 			}
 			if code == DeleteTab {
+				let key = app.config.tabs[chosen_index].clone();
+				let len = app.config.tabs.len();
 				let files = &mut app.files;
-				files.remove(&config.tabs[chosen_index]);
-				config.tabs.remove(chosen_index);
-				if app.tab_selected() >= config.tabs.len() && config.tabs.len() != 0 {
-					app.set_tab_selected(config.tabs.len() - 1);
+				files.remove(&key);
+				app.config.tabs.remove(chosen_index);
+				let mut tab_block = TabsBlock::instance();
+				if tab_block.selected >= app.config.tabs.len() && app.config.tabs.len() != 0 {
+					tab_block.selected = len - 2;
 				}
 				notify_redraw();
 			} else {
-				if chosen_index < config.tabs.len() {
+				if chosen_index < app.config.tabs.len() {
 					spawn_scan_thread(Scanning::One(chosen_index));
 				}
 			}
@@ -158,7 +160,6 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 			let mut bytes = [0; 4];
 			stream.read_exact(&mut bytes)?;
 			let id = u32::from_le_bytes(bytes);
-			let app = get_app();
 			let path = app.rev_file_id.get(&id);
 			if path.is_some() {
 				let path = path.unwrap();
@@ -171,7 +172,6 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 			let mut bytes = [0; 4];
 			stream.read_exact(&mut bytes)?;
 			let id = u32::from_le_bytes(bytes);
-			let app = get_app();
 			app.waves.iter()
 				.find(|wave| { wave.id.is_some_and(|wave_id| wave_id == id) })
 				.inspect(|wave| {
@@ -182,7 +182,6 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 			let mut bytes = [0; 4];
 			stream.read_exact(&mut bytes)?;
 			let id = u32::from_le_bytes(bytes);
-			let app = get_app();
 			app.waves.iter()
 				.find(|wave| { wave.id.is_some_and(|wave_id| wave_id == id) })
 				.inspect(|wave| {
@@ -204,12 +203,11 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 			let has_file = args[3] == 1;
 
 			if !has_file {
-				let config = config_mut();
-				let old_volume = config.volume as i16;
+				let old_volume = app.config.volume as i16;
 				let new_volume = min(200, max(0, if increment { old_volume + volume } else { volume }));
 				if new_volume != old_volume {
 					set_volume_percentage(new_volume as u32);
-					config.volume = new_volume as u32;
+					app.config.volume = new_volume as u32;
 				}
 			} else {
 				let mut file = String::new();
@@ -217,9 +215,8 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 				if file.is_empty() {
 					return Ok(false);
 				}
-				let config = config_mut();
 				let (parent, name) = separate_parent_file(file);
-				let old_volume = match config.files.get(&parent) {
+				let old_volume = match app.config.files.get(&parent) {
 					Some(map) => match map.get(&name) {
 						Some(entry) => entry.volume,
 						None => 100
@@ -228,7 +225,7 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 				};
 				let new_volume = min(200, max(0, if increment { old_volume as i16 + volume } else { volume })) as u32;
 				if new_volume != old_volume {
-					match config.files.get_mut(&parent) {
+					match app.config.files.get_mut(&parent) {
 						Some(map) => match map.get_mut(&name) {
 							Some(entry) => {
 								entry.volume = new_volume;
