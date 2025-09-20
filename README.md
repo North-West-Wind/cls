@@ -1,3 +1,4 @@
+# [Moved to Codeberg!](https://codeberg.org/NorthWestWind/cls)
 # cls - Command-Line Soundboard
 It's just a file manager and command runner.
 
