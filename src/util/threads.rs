@@ -4,7 +4,7 @@ use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, termi
 use ratatui::{prelude::CrosstermBackend, Terminal};
 use signal_hook::iterator::Signals;
 
-use crate::{component::popup::{exit_popup, save::SavePopup, set_popup, PopupComponent}, config, constant::{APP_NAME, MIN_HEIGHT, MIN_WIDTH}, listener::{listen_events, listen_global, unlisten_global}, renderer, socket::listen_socket, state::{acquire, acquire_running, notify_redraw, wait_redraw, Scanning}, util::{self, waveform::{acquire_playing_waves, WaveType}}};
+use crate::{component::popup::{exit_popup, save::SavePopup, set_popup, PopupComponent}, config, constant::{APP_NAME, MIN_HEIGHT, MIN_WIDTH}, listener::{listen_events, listen_global, unlisten_global}, renderer, socket::{listen_socket, try_socket}, state::{acquire, acquire_running, notify_redraw, wait_redraw, Scanning}, util::{self, waveform::{acquire_playing_waves, WaveType}}};
 
 pub fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
 	return thread::spawn(move || -> Result<(), io::Error> {
@@ -71,10 +71,13 @@ pub fn spawn_signal_thread() -> Result<JoinHandle<()>, io::Error> {
 }
 
 // A thread for listening for socket (IPC)
-pub fn spawn_socket_thread() -> JoinHandle<()> {
-	return thread::spawn(move || {
-		listen_socket().ok();
-	});
+pub fn spawn_socket_thread() -> Result<JoinHandle<()>, io::Error> {
+	let listener = try_socket()?;
+
+	Ok(thread::spawn(move || {
+		{ acquire().socket_holder = true; }
+		listen_socket(listener);
+	}))
 }
 
 pub fn spawn_scan_thread(mode: Scanning) {

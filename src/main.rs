@@ -1,5 +1,4 @@
-use std::{thread::{self}, time::Duration};
-use socket::{ensure_socket, send_exit, send_socket, socket_path};
+use socket::{send_exit, send_socket};
 use util::pulseaudio::{load_null_sink, loopback, set_volume_percentage};
 use state::Scanning;
 use util::threads::spawn_scan_thread;
@@ -62,8 +61,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// All subcommands are currently used for IPC
 	let subcommand = matches.subcommand();
 	if subcommand.is_some() {
-		send_socket(subcommand.unwrap())?;
-		return Ok(());
+		let response = send_socket(subcommand.unwrap())?;
+		if response.starts_with("Success") {
+			println!("{}", response);
+			return Ok(());
+		} else {
+			panic!("{}", response);
+		}
 	}
 	// Initialize global app object
 	let mut app = state::init_app(matches.get_flag("hidden"), matches.get_flag("edit"));
@@ -73,16 +77,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		println!("`hidden` is read-only, but `edit` is write-only.");
 		println!("You probably don't want this");
 		return Ok(());
-	}
-	if !app.edit {
-		// If not write-only, ensure we can use the socket
-		app.socket_holder = ensure_socket();
-		if !app.socket_holder {
-			println!("Found existing socket! That probably means another instance is running. Forcing edit mode...");
-			println!("If there isn't another instance running, delete {}", socket_path().to_str().unwrap());
-			app.edit = true;
-			thread::sleep(Duration::from_secs(3));
-		}
 	}
 
 	// PulseAudio setup
@@ -100,17 +94,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	}
 	set_volume_percentage(app.config.volume);
 
-	let (has_socket, is_edit, is_hidden) = (app.socket_holder, app.edit, app.hidden);
+	let (is_edit, is_hidden) = (app.edit, app.hidden);
 	drop(app);
 
 	// Create threads for all background listeners
 	spawn_signal_thread()?;
 	spawn_scan_thread(Scanning::All);
 	let listen_thread = spawn_listening_thread();
-	let mut socket_thread = Option::None;
-	if has_socket {
-		socket_thread = Option::Some(spawn_socket_thread());
-	}
+	let socket_thread = spawn_socket_thread();
 	// Wave playing thread
 	if !is_edit {
 		spawn_pacat_wave_thread();
@@ -122,7 +113,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	}
 	// Wait for all threads to end before closing
 	listen_thread.join().ok();
-	if socket_thread.is_some() {
+	if socket_thread.is_ok() {
 		send_exit().ok();
 		socket_thread.unwrap().join().ok();
 	}

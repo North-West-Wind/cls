@@ -1,30 +1,31 @@
-use std::{cmp::{max, min}, collections::HashMap, io::{Error, Read, Write}, os::unix::net::{UnixListener, UnixStream}, path::{Path, PathBuf}};
+use std::{cmp::{max, min}, collections::HashMap, io::{BufReader, Error, Read, Write}, os::unix::ffi::OsStrExt, path::Path};
 
 use clap::ArgMatches;
 use code::SocketCode;
+use interprocess::local_socket::{traits::{ListenerExt, Stream as _}, GenericFilePath, GenericNamespaced, Listener, ListenerOptions, Name, NameType, Stream, ToFsName, ToNsName};
 use normpath::PathExt;
 
 use crate::{component::block::{tabs::TabsBlock, BlockSingleton}, config::FileEntry, constant::APP_NAME, state::{acquire, acquire_running, load_app_config, notify_redraw, Scanning}, util::{fs::separate_parent_file, pulseaudio::{play_file, set_volume_percentage, stop_all}, threads::spawn_scan_thread, waveform::{play_wave, stop_all_waves}}};
 
 pub mod code;
 
-pub fn socket_path() -> PathBuf {
-	std::env::temp_dir().join(APP_NAME).join(format!("{APP_NAME}.sock"))
-}
-
-pub fn ensure_socket() -> bool {
-	if !socket_path().exists() {
-		let _ = std::fs::create_dir_all(socket_path().parent().expect("Failed to get socket path parent"));
-		return true;
+pub fn socket_name() -> std::io::Result<Name<'static>> {
+	if GenericNamespaced::is_supported() {
+		format!("{APP_NAME}.sock").to_ns_name::<GenericNamespaced>()
+	} else {
+		format!("/tmp/{APP_NAME}.sock").to_fs_name::<GenericFilePath>()
 	}
-	false
 }
 
-pub fn listen_socket() -> std::io::Result<()> {
-	let listener = UnixListener::bind(std::env::temp_dir().join(APP_NAME).join(format!("{APP_NAME}.sock")))?;
-	for stream in listener.incoming() {
-		let Ok(stream) = stream else { continue; };
-		if let Err(err) = handle_stream(stream) {
+pub fn try_socket() -> std::io::Result<Listener> {
+	let opts = ListenerOptions::new().name(socket_name()?);
+	opts.create_sync()
+}
+
+pub fn listen_socket(listener: Listener) {
+	for conn in listener.incoming() {
+		let Ok(stream) = conn else { continue; };
+		if let Err(err) = handle_stream(BufReader::new(stream)) {
 			let mut app = acquire();
 			if app.hidden {
 				println!("Socket error: {:?}", err);
@@ -36,36 +37,31 @@ pub fn listen_socket() -> std::io::Result<()> {
 			break;
 		}
 	}
-	std::fs::remove_file(socket_path())?;
-	Ok(())
 }
 
 pub fn send_exit() -> std::io::Result<()> {
-	if !socket_path().exists() {
-		return Ok(());
-	}
-	let mut stream = UnixStream::connect(socket_path())?;
+	let mut stream = Stream::connect(socket_name()?)?;
 	stream.write(&[SocketCode::Exit.to_u8()])?;
 	Ok(())
 }
 
-pub fn send_socket(subcommand: (&str, &ArgMatches)) -> std::io::Result<()> {
-	if !socket_path().exists() {
-		return Err(Error::new(std::io::ErrorKind::NotFound, "Socket doens't exist. Isn't there another instance running?"));
-	}
+pub fn send_socket(subcommand: (&str, &ArgMatches)) -> std::io::Result<String> {
 	let code = SocketCode::from_str(subcommand.0);
 	if code.is_none() {
 		return Err(Error::new(std::io::ErrorKind::NotFound, "Invalid command"));
 	}
-	let stream = UnixStream::connect(socket_path())?;
-	code.unwrap().write_to_stream(stream, subcommand.1)?;
-	Ok(())
+	let stream = Stream::connect(socket_name()?)?;
+	code.unwrap().write_to_stream(stream, subcommand.1)
 }
 
-fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
+fn send_response(stream: &mut Stream, bytes: &[u8], status: bool) -> std::io::Result<bool> {
+	Ok(stream.write_all(bytes).is_ok() && status)
+}
+
+fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 	use SocketCode::*;
 	let mut code = [0];
-	stream.read_exact(&mut code)?;
+	reader.read_exact(&mut code)?;
 	let code = SocketCode::from_u8(code[0]);
 	if code.is_none() {
 		return Ok(false);
@@ -75,7 +71,7 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 	match code {
 		Exit => {
 			*acquire_running() = false;
-			return Ok(true);
+			return send_response(reader.get_mut(), &[0], true);
 		},
 		ReloadConfig => {
 			let (config, stopkey, hotkey, rev_file_id, waves) = load_app_config();
@@ -84,49 +80,56 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 			app.hotkey = hotkey;
 			app.rev_file_id = rev_file_id;
 			app.waves = waves;
+			notify_redraw();
+			return send_response(reader.get_mut(), &[0], true);
 		},
 		AddTab => {
 			let mut path = String::new();
-			stream.read_to_string(&mut path)?;
+			reader.read_to_string(&mut path)?;
 			if !path.is_empty() {
-				let Ok(norm) = Path::new(&path).normalize() else { return Ok(false); };
+				let Ok(norm) = Path::new(&path).normalize() else { return send_response(reader.get_mut(), &[2], false); };
 				let len = app.config.tabs.len();
-				app.config.tabs.push(norm.into_os_string().into_string().unwrap());
+				app.config.tabs.push(norm.clone().into_os_string().into_string().unwrap());
 				{ TabsBlock::instance().selected = len; }
 				spawn_scan_thread(Scanning::One(len));
+				notify_redraw();
+				let mut bytes = norm.as_os_str().as_bytes().to_vec();
+				bytes.insert(0, 0);
+				return send_response(reader.get_mut(), &bytes, true);
 			}
+			return send_response(reader.get_mut(), &[1], false);
 		},
 		DeleteTab|ReloadTab => {
 			let mut mode = [0];
-			stream.read_exact(&mut mode)?;
+			reader.read_exact(&mut mode)?;
 			let mode = mode[0];
 			let chosen_index: usize;
 			match mode {
 				1 => {
 					let mut index = [0];
-					stream.read_exact(&mut index)?;
+					reader.read_exact(&mut index)?;
 					chosen_index = index[0] as usize;
 				},
 				2 => {
 					let mut path = String::new();
-					stream.read_to_string(&mut path)?;
+					reader.read_to_string(&mut path)?;
 					let path = Path::new(&path).normalize();
 					if path.is_err() {
-						return Ok(false);
+						return send_response(reader.get_mut(), &[1], false);
 					}
 					let path = path.unwrap().into_os_string().into_string().unwrap();
 					let index = app.config.tabs.iter().position(|tab| *tab == path);
 					if index.is_none() {
-						return Ok(false);
+						return send_response(reader.get_mut(), &[2], false);
 					}
 					chosen_index = index.unwrap();
 				},
 				3 => {
 					let mut name = String::new();
-					stream.read_to_string(&mut name)?;
+					reader.read_to_string(&mut name)?;
 					let index = app.config.tabs.iter().position(|tab| Path::new(tab).file_name().unwrap().to_os_string().into_string().unwrap() == name);
 					if index.is_none() {
-						return Ok(false);
+						return send_response(reader.get_mut(), &[3], false);
 					}
 					chosen_index = index.unwrap();
 				},
@@ -143,61 +146,92 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 					tab_block.selected = len - 2;
 				}
 				notify_redraw();
+				let mut bytes = key.as_bytes().to_vec();
+				bytes.insert(0, 0);
+				return send_response(reader.get_mut(), &bytes, true);
 			} else {
 				if chosen_index < app.config.tabs.len() {
 					spawn_scan_thread(Scanning::One(chosen_index));
+					notify_redraw();
+					let path = app.config.tabs[chosen_index].clone();
+					let mut bytes = path.as_bytes().to_vec();
+					bytes.insert(0, 10);
+					return send_response(reader.get_mut(), &bytes, true);
 				}
+				return send_response(reader.get_mut(), &[4], true);
 			}
 		},
 		Play => {
 			let mut path = String::new();
-			stream.read_to_string(&mut path)?;
+			reader.read_to_string(&mut path)?;
 			if !path.is_empty() {
 				play_file(&path);
+				notify_redraw();
+				let mut bytes = path.as_bytes().to_vec();
+				bytes.insert(0, 0);
+				return send_response(reader.get_mut(), &bytes, true);
 			}
+			return send_response(reader.get_mut(), &[1], false);
 		},
 		PlayId => {
 			let mut bytes = [0; 4];
-			stream.read_exact(&mut bytes)?;
+			reader.read_exact(&mut bytes)?;
 			let id = u32::from_le_bytes(bytes);
 			let path = app.rev_file_id.get(&id);
 			if path.is_some() {
 				let path = path.unwrap();
 				if !path.is_empty() {
 					play_file(&path);
+					notify_redraw();
+					let mut bytes = path.as_bytes().to_vec();
+					bytes.insert(0, 0);
+					return send_response(reader.get_mut(), &bytes, true);
 				}
 			}
+			return send_response(reader.get_mut(), &[1], false);
 		},
 		PlayWaveId => {
 			let mut bytes = [0; 4];
-			stream.read_exact(&mut bytes)?;
+			reader.read_exact(&mut bytes)?;
 			let id = u32::from_le_bytes(bytes);
-			app.waves.iter()
-				.find(|wave| { wave.id.is_some_and(|wave_id| wave_id == id) })
-				.inspect(|wave| {
-					{ wave.playing.lock().unwrap().1 = true; }
-					play_wave((*wave).clone(), false);
-				});
+			let wave = app.waves.iter().find(|wave| { wave.id.is_some_and(|wave_id| wave_id == id) });
+			if wave.is_some() {
+				let wave = wave.unwrap();
+				{ wave.playing.lock().unwrap().1 = true; }
+				play_wave((*wave).clone(), false);
+				notify_redraw();
+				let mut bytes = wave.label.as_bytes().to_vec();
+				bytes.insert(0, 0);
+				return send_response(reader.get_mut(), &bytes, true);
+			}
+			return send_response(reader.get_mut(), &[1], false);
 		},
 		StopWaveId => {
 			let mut bytes = [0; 4];
-			stream.read_exact(&mut bytes)?;
+			reader.read_exact(&mut bytes)?;
 			let id = u32::from_le_bytes(bytes);
-			app.waves.iter()
-				.find(|wave| { wave.id.is_some_and(|wave_id| wave_id == id) })
-				.inspect(|wave| {
-					let mut playing = wave.playing.lock().expect("Failed to lock mutex");
-					playing.0 = false;
-					playing.1 = false;
-				});
+			let wave = app.waves.iter().find(|wave| { wave.id.is_some_and(|wave_id| wave_id == id) });
+			if wave.is_some() {
+				let wave = wave.unwrap();
+				let mut playing = wave.playing.lock().expect("Failed to lock mutex");
+				playing.0 = false;
+				playing.1 = false;
+				notify_redraw();
+				let mut bytes = wave.label.as_bytes().to_vec();
+				bytes.insert(0, 10);
+				return send_response(reader.get_mut(), &bytes, true);
+			}
+			return send_response(reader.get_mut(), &[1], false);
 		},
 		Stop => {
 			stop_all();
 			stop_all_waves();
+			notify_redraw();
+			return send_response(reader.get_mut(), &[0], true);
 		},
 		SetVolume => {
 			let mut args = [0; 4];
-			stream.read_exact(&mut args)?;
+			reader.read_exact(&mut args)?;
 			let first_two = args[0..2].try_into().expect("Failed to read volume bytes");
 			// this should never fail, right?
 			let volume = i16::from_le_bytes(first_two);
@@ -211,11 +245,14 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 					set_volume_percentage(new_volume as u32);
 					app.config.volume = new_volume as u32;
 				}
+				notify_redraw();
+				let [a, b, c, d] = (new_volume as u32).to_le_bytes();
+				return send_response(reader.get_mut(), &[0, a, b, c, d], true);
 			} else {
 				let mut file = String::new();
-				stream.read_to_string(&mut file)?;
+				reader.read_to_string(&mut file)?;
 				if file.is_empty() {
-					return Ok(false);
+					return send_response(reader.get_mut(), &[1], false);
 				}
 				let (parent, name) = separate_parent_file(file);
 				let old_volume = match app.config.files.get(&parent) {
@@ -246,9 +283,10 @@ fn handle_stream(mut stream: UnixStream) -> std::io::Result<bool> {
 						}
 					};
 				}
+				notify_redraw();
+				let [a, b, c, d] = new_volume.to_le_bytes();
+				return send_response(reader.get_mut(), &[0, a, b, c, d], true);
 			}
-			notify_redraw();
 		},
 	}
-	Ok(false)
 }

@@ -1,6 +1,7 @@
-use std::{io::Write, os::unix::net::UnixStream, path::Path};
+use std::{io::{Read, Write}, path::Path};
 
 use clap::ArgMatches;
+use interprocess::local_socket::Stream;
 
 #[derive(PartialEq, Eq)]
 pub enum SocketCode {
@@ -75,13 +76,27 @@ impl SocketCode {
 		}
 	}
 
-	pub fn write_to_stream(&self, mut stream: UnixStream, matches: &ArgMatches) -> std::io::Result<()> {
+	pub fn write_to_stream(&self, mut stream: Stream, matches: &ArgMatches) -> std::io::Result<String> {
 		use SocketCode::*;
 		let mut buf = vec![self.to_u8()];
 		match self {
 			AddTab => {
 				let path = matches.get_one::<String>("dir");
 				buf.extend(path.expect("Missing `dir` argument").as_bytes());
+				stream.write_all(&buf)?;
+				let mut res = [0u8; 256];
+				stream.read(&mut res)?;
+				return match res[0] {
+					0 => {
+						let path = String::from_utf8(res[1..256].to_vec());
+						Ok(format!("Success\n{}", path.map_or("Path unknown".to_string(), |path| {
+							format!("Added {}", path)
+						})))
+					},
+					1 => Ok("Failed\nPath is empty".to_string()),
+					2 => Ok("Failed\nPath does not exist or cannot be accessed".to_string()),
+					_ => Ok("Failed\nResponse code is unknown".to_string())
+				}
 			},
 			DeleteTab|ReloadTab => {
 				let index = matches.get_one::<String>("index");
@@ -108,14 +123,56 @@ impl SocketCode {
 				} else {
 					buf.push(0);
 				}
+				stream.write_all(&buf)?;
+				let mut res = [0u8; 256];
+				stream.read(&mut res)?;
+				return match res[0] {
+					0|10 => {
+						let path = String::from_utf8(res[1..256].to_vec());
+						Ok(format!("Success\n{}", path.map_or("Path unknown".to_string(), |path| {
+							format!("{} {}", if res[0] == 0 { "Deleted " } else { "Reloaded " }, path)
+						})))
+					},
+					1 => Ok("Failed\nPath does not exist or cannot be accessed".to_string()),
+					2 => Ok("Failed\nPath is a tab".to_string()),
+					3 => Ok("Failed\nCould not find by name".to_string()),
+					4 => Ok("Failed\nIndex out of range".to_string()),
+					_ => Ok("Failed\nResponse code is unknown".to_string())
+				}
 			},
 			Play => {
 				let path = matches.get_one::<String>("path");
 				buf.extend(path.expect("Missing `path` argument").as_bytes());
+				stream.write_all(&buf)?;
+				let mut res = [0u8; 256];
+				stream.read(&mut res)?;
+				return match res[0] {
+					0 => {
+						let path = String::from_utf8(res[1..256].to_vec());
+						Ok(format!("Success\n{}", path.map_or("Path unknown".to_string(), |path| {
+							format!("Playing {}", path)
+						})))
+					},
+					1 => Ok("Failed\nPath is empty".to_string()),
+					_ => Ok("Failed\nResponse code is unknown".to_string())
+				}
 			},
 			PlayId|PlayWaveId|StopWaveId => {
-				let id = matches.get_one::<String>("id").expect("Missing `id` argument").parse::<u32>();
-				buf.extend(id.expect("Failed to parse ID").to_le_bytes());
+				let id = matches.get_one::<String>("id").expect("Missing `id` argument").parse::<u32>().expect("Failed to parse ID");
+				buf.extend(id.to_le_bytes());
+				stream.write_all(&buf)?;
+				let mut res = [0u8; 256];
+				stream.read(&mut res)?;
+				return match res[0] {
+					0|10 => {
+						let label = String::from_utf8(res[1..256].to_vec());
+						Ok(format!("Success\n{}", label.map_or("Path unknown".to_string(), |path| {
+							format!("{} {}", if res[0] == 0 { "Playing" } else { "Stopping" }, path)
+						})))
+					},
+					1 => Ok(format!("Failed\nID {} does not exist", id)),
+					_ => Ok("Failed\nResponse code is unknown".to_string())
+				}
 			},
 			SetVolume => {
 				let volume = matches.get_one::<String>("volume")
@@ -143,10 +200,27 @@ impl SocketCode {
 					buf.push(1);
 					buf.extend(path.as_bytes());
 				}
+				stream.write_all(&buf)?;
+				let mut res = [0u8; 5];
+				stream.read(&mut res)?;
+				return match res[0] {
+					0 => {
+						let new_volume = u32::from_le_bytes([res[1], res[2], res[3], res[4]]);
+						Ok(format!("Success\nNew volume: {}", new_volume))
+					},
+					1 => Ok("Failed\nFile does not exist".to_string()),
+					_ => Ok("Failed\nResponse code is unknown".to_string())
+				}
 			},
-			_ => (),
+			_ => {
+				stream.write_all(&buf)?;
+				let mut res = [0u8; 256];
+				stream.read(&mut res)?;
+				return match res[0] {
+					0|10 => Ok("Success".to_string()),
+					_ => Ok("Failed\nResponse code is unknown".to_string())
+				}
+			},
 		};
-		stream.write_all(&buf)?;
-		Ok(())
 	}
 }
