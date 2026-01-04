@@ -2,6 +2,8 @@
 It's just a file manager and command runner.  
 ![CLS Icon - Command-line with a speaker](icon.svg)
 
+***(Hey GitHub people! This repository has been moved to Codeberg and what you are reading is simply a mirror repository. I'm not publishing releases on GitHub anymore because it's annoying to do it on 2 places, so if you are looking for releases, please visit the [Coderberg repository](https://codeberg.org/NorthWestWind/cls))***
+
 ### Fun fact
 "cls" is also a abbreviation of a Cantonese swear, 痴撚線 (meaning "f*cking crazy"). It was the mental state of a Javascript dev trying to make a soundboard in Rust without prior Rust programming experience.
 
