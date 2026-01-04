@@ -1,9 +1,9 @@
 use std::{path::Path, thread};
 
-use crossterm::event::{Event, KeyCode, KeyEvent};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use normpath::PathExt;
 use ratatui::{style::{Color, Style}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
-use tui_input::{backend::crossterm::EventHandler, Input};
+use tui_input::{Input, InputRequest, backend::crossterm::EventHandler};
 
 use crate::{component::{block::{tabs::TabsBlock, waves::{set_wave_name, WavesBlock}, BlockSingleton}, popup::{defer_exit_popup, popups, PopupComponent}}, config::FileEntry, state::{acquire, Scanning}, util::{pulseaudio::{loopback, unload_module}, selected_file_path, threads::spawn_scan_thread}};
 
@@ -57,7 +57,7 @@ impl PopupRender for InputPopup {
 		let scroll = input.visual_scroll(width as usize - 5);
 		let input_para = Paragraph::new(input.value())
 			.scroll((0, scroll as u16))
-			.block(Block::bordered().border_type(BorderType::Rounded).title(match self.await_input {
+			.block(Block::bordered().border_type(BorderType::Rounded).border_style(Style::default().fg(Color::Green)).title(match self.await_input {
 				AddTab => "Add directory as tab",
 				Loopback1 => "Loopback 1",
 				Loopback2 => "Loopback 2",
@@ -68,7 +68,7 @@ impl PopupRender for InputPopup {
 				WavePhase => "Phase",
 				WaveName => "Waveform Label",
 				_ => "Input"
-			}).padding(Padding::horizontal(1)).style(Style::default().fg(Color::Green)));
+			}).padding(Padding::horizontal(1)).style(Style::default().fg(Color::Cyan)));
 		let input_area = safe_centered_rect(width, height, area);
 		Clear.render(input_area, f.buffer_mut());
 		f.render_widget(input_para, input_area);
@@ -86,7 +86,11 @@ impl PopupHandleKey for InputPopup {
 			KeyCode::Enter => self.complete(true),
 			KeyCode::Esc => self.complete(false),
 			KeyCode::Char(c) => {
-				if match self.await_input {
+				if c == 'h' && event.modifiers == KeyModifiers::CONTROL {
+					// ctrl+backspace is parsed as ctrl+h
+					self.input.handle(InputRequest::DeletePrevWord);
+					true
+				} else if match self.await_input {
 					SetFileId|SetWaveId => c.is_digit(10),
 					_ => true
 				} {
@@ -96,7 +100,16 @@ impl PopupHandleKey for InputPopup {
 					false
 				}
 			},
+			KeyCode::Delete => {
+				if event.modifiers == KeyModifiers::CONTROL {
+					self.input.handle(InputRequest::DeleteNextWord);
+				} else {
+					self.input.handle_event(&Event::Key(event));
+				}
+				true
+			},
 			_ => {
+				println!("{}", event.code);
 				self.input.handle_event(&Event::Key(event));
 				true
 			}
