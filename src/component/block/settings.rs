@@ -18,7 +18,7 @@ impl BlockSingleton for SettingsBlock {
 		BLOCK.get_or_init(|| {
 			Mutex::new(SettingsBlock {
 				selected: 0,
-				options: 5
+				options: 6
 			})
 		}).lock().unwrap()
 	}
@@ -53,6 +53,7 @@ impl BlockRenderArea for SettingsBlock {
 		self.left_right_line("Loopback 1".to_string(), app.config.loopback_1.clone(), width as usize, &mut lines);
 		self.left_right_line("Loopback 2".to_string(), app.config.loopback_2.clone(), width as usize, &mut lines);
 		self.left_right_line("Playlist Mode".to_string(), app.config.playlist_mode.to_string(), width as usize, &mut lines);
+		self.left_right_line("Fast Scan".to_string(), app.config.fast_scan.to_string(), width as usize, &mut lines);
 		f.render_widget(Paragraph::new(lines).block(block), area);
 	}
 }
@@ -149,6 +150,12 @@ impl SettingsBlock {
 			4 => {
 				let mut app = acquire();
 				app.config.playlist_mode = !app.config.playlist_mode;
+				return true;
+			},
+			// Fast scan toggle
+			5 => {
+				let mut app = acquire();
+				app.config.fast_scan = !app.config.fast_scan;
 				return true;
 			},
 			_ => false

@@ -46,17 +46,25 @@ impl BlockRenderArea for FilesBlock {
 			self.height = area.height;
 		}
 		let paragraph: Paragraph;
-		if app.scanning == Scanning::All {
-			paragraph = Paragraph::new("Performing initial scan...").wrap(Wrap { trim: false });
-		} else if app.config.tabs.len() == 0 {
+		if app.config.tabs.len() == 0 {
 			paragraph = Paragraph::new("Add a tab to get started :>").wrap(Wrap { trim: false });
-		} else if app.scanning == Scanning::One(tab_selected) {
-			paragraph = Paragraph::new("Scanning this directory...\nComeback later :>").wrap(Wrap { trim: false });
 		} else {
 			let tab = app.config.tabs[tab_selected].clone();
 			let files = app.files.get(&tab);
-			paragraph = files.map_or(Paragraph::new("Failed to read this directory :<\nDoes it exist? Is it readable?").wrap(Wrap { trim: false }), |files| {
+			paragraph = files.map_or_else(|| {
+				if app.scanning == Scanning::All {
+					return Paragraph::new("Performing initial scan...").wrap(Wrap { trim: false });
+				} else if app.scanning == Scanning::One(tab_selected) {
+					return Paragraph::new("Scanning this directory...\nComeback later :>").wrap(Wrap { trim: false });
+				}
+				return Paragraph::new("Failed to read this directory :<\nDoes it exist? Is it readable?").wrap(Wrap { trim: false });
+			}, |files| {
 				if files.len() == 0 {
+					if app.scanning == Scanning::All {
+						return Paragraph::new("Performing initial scan...").wrap(Wrap { trim: false });
+					} else if app.scanning == Scanning::One(tab_selected) {
+						return Paragraph::new("Scanning this directory...\nComeback later :>").wrap(Wrap { trim: false });
+					}
 					return Paragraph::new("There are no playable files in this directory :<").wrap(Wrap { trim: false });
 				}
 				let mut lines = vec![];

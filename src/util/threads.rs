@@ -86,10 +86,10 @@ pub fn spawn_scan_thread(mode: Scanning) {
 	}
 	thread::spawn(move || {
 		{ acquire().scanning = mode; }
-		let _ = match mode {
-				Scanning::All => util::scan_tabs(),
-				Scanning::One(index) => util::scan_tab(index),
-				_ => Ok(())
+		match mode {
+			Scanning::All => { let _ = util::scan_tabs(); },
+			Scanning::One(index) => { util::scan_tab(index); },
+			_ => ()
 		};
 
 		let mut app = acquire();

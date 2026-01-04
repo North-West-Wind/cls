@@ -1,7 +1,8 @@
-use std::{collections::HashMap, path::Path, thread};
+use std::{collections::HashMap, path::Path, thread::{self, JoinHandle}};
 
 use ffprobe::FfProbe;
 use file_format::{FileFormat, Kind};
+use mime_guess::mime;
 
 use crate::{component::block::{files::FilesBlock, tabs::TabsBlock, BlockSingleton}, state::{acquire, notify_redraw}};
 
@@ -79,40 +80,55 @@ fn add_duration(tab: String) {
 	});
 }
 
-pub fn scan_tab(index: usize) -> Result<(), std::io::Error> {
-	let app = acquire();
-	let tabs = &app.config.tabs;
-	if index >= tabs.len() {
-		return Ok(());
-	}
-	let tab = tabs[index].clone();
-	drop(app);
-	let mut files = vec![];
-	let path = Path::new(tab.as_str());
-	if path.is_dir() {
-		for entry in std::fs::read_dir(path)? {
-			let file = entry?;
-			let longpath = file.path();
-			let Ok(fmt) = FileFormat::from_file(longpath.clone()) else { continue; };
-			match fmt.kind() {
-				Kind::Audio|Kind::Video => {
+pub fn scan_tab(index: usize) -> JoinHandle<Result<(), std::io::Error>> {
+	thread::spawn(move || {
+		let app = acquire();
+		let tabs = &app.config.tabs;
+		if index >= tabs.len() {
+			return Ok(());
+		}
+		let tab = tabs[index].clone();
+		let fast_scan = app.config.fast_scan;
+		drop(app);
+		let mut files = vec![];
+		let path = Path::new(tab.as_str());
+		if path.is_dir() {
+			for entry in std::fs::read_dir(path)? {
+				let file = entry?;
+				let longpath = file.path();
+				let matched;
+				if fast_scan {
+					let guess = mime_guess::from_path(longpath.clone());
+					let Some(guess) = guess.first() else { continue };
+					let mimetype = guess.type_();
+					matched = mimetype == mime::AUDIO || mimetype == mime::VIDEO;
+				} else {
+					let Ok(fmt) = FileFormat::from_file(longpath.clone()) else { continue; };
+					let kind = fmt.kind();
+					matched = kind == Kind::Audio || kind == Kind::Video;
+				}
+				if matched {
 					let filename = longpath.file_name().unwrap().to_os_string().into_string().unwrap();
 					files.push((filename, String::new()));
-				},
-				_ => (),
+				}
 			}
+	    files.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+			{ acquire().files.insert(tab.clone(), files); }
+			add_duration(tab);
 		}
-    files.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
-		{ acquire().files.insert(tab.clone(), files); }
-		add_duration(tab);
-	}
-	Ok(())
+		Ok(())
+	})
 }
 
 pub fn scan_tabs() -> Result<(), std::io::Error> {
 	let len = { acquire().config.tabs.len() };
+	let mut handles = vec![];
 	for ii in 0..len {
-		scan_tab(ii)?;
+		let handle = scan_tab(ii);
+		handles.push(handle);
+	}
+	for handle in handles {
+		handle.join().expect("Failed to join threads")?;
 	}
 	Ok(())
 }

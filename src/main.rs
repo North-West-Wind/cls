@@ -25,6 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		.arg(Arg::new("edit").short('e').long("edit").help("run the soundboard in edit mode, meaning you can only modify config and not play anything").action(ArgAction::SetTrue))
 		.arg(Arg::new("hidden").long("hidden").help("run the soundboard in the background, basically read-only").action(ArgAction::SetTrue))
 		.arg(Arg::new("no-save").long("no-save").help("disable auto-save of config when the program exits").action(ArgAction::SetTrue))
+		.arg(Arg::new("fast-scan").long("fast-scan").help("scan files by extensions instead of header").action(ArgAction::SetTrue))
 		.subcommand(Command::new("exit").about("exit another instance"))
 		.subcommand(Command::new("reload-config").about("reload config for another instance"))
 		.subcommand(Command::new("add-tab").about("add a directory tab").arg(Arg::new("dir").required(true)))

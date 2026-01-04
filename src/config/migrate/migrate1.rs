@@ -44,6 +44,7 @@ pub struct ConfigV1 {
 	pub loopback_1: String,
 	pub loopback_2: String,
 	pub playlist_mode: bool,
+	pub fast_scan: bool,
 	pub files: HashMap<String, HashMap<String, FileEntry>>,
 	pub waves: Vec<WaveformEntry>,
 }
@@ -59,6 +60,7 @@ impl Default for ConfigV1 {
 			loopback_1: String::new(),
 			loopback_2: String::new(),
 			playlist_mode: false,
+			fast_scan: true,
 			files: HashMap::new(),
 			waves: vec![]
 		}
