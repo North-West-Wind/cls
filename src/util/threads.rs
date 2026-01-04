@@ -1,4 +1,4 @@
-use std::{f32::consts::PI, io::{self, Write}, process::{Child, Command, Stdio}, sync::{LazyLock, Mutex, MutexGuard}, thread::{self, JoinHandle}, time::{Duration, SystemTime}};
+use std::{f32::consts::PI, io::{self, BufWriter, Write}, process::{Child, ChildStdin, Command, Stdio}, sync::{LazyLock, Mutex, MutexGuard}, thread::{self, JoinHandle}, time::{Duration, SystemTime}};
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}};
 use ratatui::{prelude::CrosstermBackend, Terminal};
@@ -111,22 +111,26 @@ pub fn spawn_save_thread() {
 
 struct WavePacat {
 	last_used: SystemTime,
-	child: Child
+	child: Child,
+	writer: BufWriter<ChildStdin>
 }
 
 static PACAT: LazyLock<Mutex<WavePacat>> = LazyLock::new(|| {
+	let mut child = Command::new("pacat").args([
+		"-d",
+		APP_NAME,
+		"--channels=1",
+		"--rate=48000",
+		"--format=float32le",
+		format!("--latency={}", WAVE_CHUNK).as_str()
+	])
+		.stdin(Stdio::piped())
+		.stdout(Stdio::piped()).spawn().expect("Failed to spawn pacat process");
+	let stdin = child.stdin.take().unwrap();
 	let pacat = WavePacat {
 		last_used: SystemTime::now(),
-		child: Command::new("pacat").args([
-			"-d",
-			APP_NAME,
-			"--channels=1",
-			"--rate=48000",
-			"--format=float32le",
-			format!("--latency={}", WAVE_CHUNK).as_str()
-		])
-			.stdin(Stdio::piped())
-			.stdout(Stdio::piped()).spawn().expect("Failed to spawn pacat process")
+		child: child,
+		writer: BufWriter::with_capacity(1024, stdin)
 	};
 	Mutex::new(pacat)
 });
@@ -136,7 +140,7 @@ fn acquire_pacat() -> MutexGuard<'static, WavePacat> {
 	pacat
 }
 
-const WAVE_CHUNK: usize = 1600;
+const WAVE_CHUNK: usize = 512;
 
 pub fn spawn_pacat_wave_thread() {
 	thread::spawn(move || {
@@ -206,13 +210,19 @@ pub fn spawn_pacat_wave_thread() {
 					])
 						.stdin(Stdio::piped())
 						.stdout(Stdio::piped()).spawn().expect("Failed to respawn pacat process");
+					pacat.writer = BufWriter::with_capacity(1024, pacat.child.stdin.take().unwrap());
 				}
 
 				pacat_running = true;
 				pacat.last_used = SystemTime::now();
-				let stdin = pacat.child.stdin.as_mut().expect("Failed to get pacat stdin");
-				stdin.write_all(&bytes).expect("Failed to write to pacat stdin");
-				stdin.flush().expect("Failed to flush pacat stdin");
+				pacat.writer.write_all(&bytes).expect("Failed to write to pacat stdin");
+				// If blocked, we wait
+				while let Err(err) = pacat.writer.flush() {
+					if err.kind() != io::ErrorKind::WouldBlock {
+						break;
+					}
+					thread::sleep(Duration::from_millis(10));
+				}
 			} else if pacat_running {
 				let mut pacat = acquire_pacat();
 				if SystemTime::now().duration_since(pacat.last_used).expect("Failed to get pacat duration").as_secs() > 5 {
@@ -221,7 +231,7 @@ pub fn spawn_pacat_wave_thread() {
 				}
 			}
 			drop(playing_waves);
-			thread::sleep(Duration::from_secs_f32(WAVE_CHUNK as f32 / 48000.0));
+			thread::sleep(Duration::from_millis(10));
 		}
 		if pacat_running {
 			let mut pacat = acquire_pacat();
