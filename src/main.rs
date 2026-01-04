@@ -4,7 +4,7 @@ use state::Scanning;
 use util::threads::spawn_scan_thread;
 use clap::{command, Arg, ArgAction, Command};
 
-use crate::{state::acquire, util::threads::{spawn_drawing_thread, spawn_listening_thread, spawn_pacat_wave_thread, spawn_signal_thread, spawn_socket_thread}};
+use crate::{state::acquire, util::threads::{spawn_drawing_thread, spawn_listening_thread, spawn_pacat_file_thread, spawn_pacat_wave_thread, spawn_signal_thread, spawn_socket_thread}};
 mod component;
 mod config;
 mod constant;
@@ -105,6 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let socket_thread = spawn_socket_thread();
 	// Wave playing thread
 	if !is_edit {
+		spawn_pacat_file_thread();
 		spawn_pacat_wave_thread();
 	}
 	if !is_hidden {

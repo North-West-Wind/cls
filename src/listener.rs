@@ -2,7 +2,7 @@ use std::{io, time::Duration};
 use crossterm::event::{poll, read, Event, KeyEvent};
 use mki::Action;
 
-use crate::{component::{block, layer, popup::{popups, PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{acquire, acquire_running, notify_redraw, SelectionLayer}, util::{pulseaudio::{play_file, stop_all}, waveform::play_wave}};
+use crate::{component::{block, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste, popups}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{SelectionLayer, acquire, acquire_running, notify_redraw}, util::{file::{play_file, stop_all}, waveform::play_wave}};
 
 pub fn listen_events() -> io::Result<()> {
 	let hidden = { acquire().hidden };

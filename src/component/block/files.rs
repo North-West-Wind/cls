@@ -1,6 +1,6 @@
 use std::{cmp::{max, min}, collections::HashSet, i32, path::Path, sync::{Mutex, MutexGuard, OnceLock}};
 
-use crate::{component::{block::{settings::SettingsBlock, tabs::TabsBlock, BlockNavigation, BlockSingleton}, popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}}, state::{acquire, Scanning}, util::{self, global_input::sort_keys, selected_file_path, threads::spawn_scan_thread}};
+use crate::{component::{block::{BlockNavigation, BlockSingleton, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, state::{Scanning, acquire}, util::{file::play_file, global_input::sort_keys, selected_file_path, threads::spawn_scan_thread}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -172,7 +172,7 @@ impl FilesBlock {
 				}
 				index = self.selected;
 			}
-			util::pulseaudio::play_file(&Path::new(&tab).join(&files[index].0).into_os_string().into_string().unwrap());
+			play_file(&Path::new(&tab).join(&files[index].0).into_os_string().into_string().unwrap());
 			true
 		});
 	}

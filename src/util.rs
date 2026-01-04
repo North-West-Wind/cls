@@ -6,6 +6,7 @@ use mime_guess::mime;
 
 use crate::{component::block::{files::FilesBlock, tabs::TabsBlock, BlockSingleton}, state::{acquire, notify_redraw}};
 
+pub mod file;
 pub mod fs;
 pub mod global_input;
 pub mod pulseaudio;

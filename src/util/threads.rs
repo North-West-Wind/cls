@@ -1,10 +1,10 @@
-use std::{f32::consts::PI, io::{self, BufWriter, Write}, process::{Child, ChildStdin, Command, Stdio}, sync::{LazyLock, Mutex, MutexGuard}, thread::{self, JoinHandle}, time::{Duration, SystemTime}};
+use std::{f32::consts::PI, io::{self, BufWriter, Read, Write}, process::{Child, ChildStdin, Command, Stdio}, sync::{LazyLock, Mutex, MutexGuard}, thread::{self, JoinHandle}, time::{Duration, SystemTime}};
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}};
 use ratatui::{prelude::CrosstermBackend, Terminal};
 use signal_hook::iterator::Signals;
 
-use crate::{component::popup::{exit_popup, save::SavePopup, set_popup, PopupComponent}, config, constant::{APP_NAME, MIN_HEIGHT, MIN_WIDTH}, listener::{listen_events, listen_global, unlisten_global}, renderer, socket::{listen_socket, try_socket}, state::{acquire, acquire_running, notify_redraw, wait_redraw, Scanning}, util::{self, waveform::{acquire_playing_waves, WaveType}}};
+use crate::{component::popup::{PopupComponent, exit_popup, save::SavePopup, set_popup}, config, constant::{APP_NAME, MIN_HEIGHT, MIN_WIDTH}, listener::{listen_events, listen_global, unlisten_global}, renderer, socket::{listen_socket, try_socket}, state::{Scanning, acquire, acquire_running, notify_redraw, wait_redraw}, util::{self, file::acquire_playing_files, waveform::{WaveType, acquire_playing_waves}}};
 
 pub fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
 	return thread::spawn(move || -> Result<(), io::Error> {
@@ -109,13 +109,36 @@ pub fn spawn_save_thread() {
 	});
 }
 
-struct WavePacat {
+const FILE_CHUNK: usize = 1024;
+const WAVE_CHUNK: usize = 512;
+
+struct Pacat {
 	last_used: SystemTime,
 	child: Child,
 	writer: BufWriter<ChildStdin>
 }
 
-static PACAT: LazyLock<Mutex<WavePacat>> = LazyLock::new(|| {
+static FILES: LazyLock<Mutex<Pacat>> = LazyLock::new(|| {
+	let mut child = Command::new("pacat").args([
+		"-d",
+		APP_NAME,
+		"--channels=2",
+		"--rate=48000",
+		"--format=float32le",
+		format!("--latency={}", FILE_CHUNK).as_str()
+	])
+		.stdin(Stdio::piped())
+		.stdout(Stdio::piped()).spawn().expect("Failed to spawn pacat process");
+	let stdin = child.stdin.take().unwrap();
+	let pacat = Pacat {
+		last_used: SystemTime::now(),
+		child: child,
+		writer: BufWriter::with_capacity(1024, stdin)
+	};
+	Mutex::new(pacat)
+});
+
+static WAVES: LazyLock<Mutex<Pacat>> = LazyLock::new(|| {
 	let mut child = Command::new("pacat").args([
 		"-d",
 		APP_NAME,
@@ -127,7 +150,7 @@ static PACAT: LazyLock<Mutex<WavePacat>> = LazyLock::new(|| {
 		.stdin(Stdio::piped())
 		.stdout(Stdio::piped()).spawn().expect("Failed to spawn pacat process");
 	let stdin = child.stdin.take().unwrap();
-	let pacat = WavePacat {
+	let pacat = Pacat {
 		last_used: SystemTime::now(),
 		child: child,
 		writer: BufWriter::with_capacity(1024, stdin)
@@ -135,12 +158,109 @@ static PACAT: LazyLock<Mutex<WavePacat>> = LazyLock::new(|| {
 	Mutex::new(pacat)
 });
 
-fn acquire_pacat() -> MutexGuard<'static, WavePacat> {
-	let pacat = PACAT.lock().unwrap();
+fn acquire_files() -> MutexGuard<'static, Pacat> {
+	let pacat = FILES.lock().unwrap();
 	pacat
 }
 
-const WAVE_CHUNK: usize = 512;
+fn acquire_waves() -> MutexGuard<'static, Pacat> {
+	let pacat = WAVES.lock().unwrap();
+	pacat
+}
+
+pub fn spawn_pacat_file_thread() {
+	thread::spawn(move || {
+		let mut pacat_running = false;
+		let mut pacat_init = false;
+
+		while *acquire_running() {
+			let mut bytes = [0_u8; FILE_CHUNK * 4];
+			let mut playing_files = acquire_playing_files();
+			let mut eofs = vec![];
+			if playing_files.len() > 0 {
+				let mut sum_bytes = [0_f32; FILE_CHUNK];
+				for (uuid, playable) in playing_files.iter_mut() {
+					let Ok(read) = playable.reader.read(&mut bytes) else {
+						eofs.push(*uuid);
+						continue;
+					};
+					if read == 0 {
+						eofs.push(*uuid);
+						continue;
+					}
+					for (ii, byte) in bytes[0..read].chunks_exact(4).map(|chunk| {
+						f32::from_le_bytes(chunk.try_into().unwrap())
+					}).enumerate() {
+						sum_bytes[ii] += byte * playable.volume;
+					}
+				}
+				eofs.iter().for_each(|uuid| {
+					playing_files.remove(uuid);
+					acquire().playing_file.remove(uuid);
+					notify_redraw();
+				});
+
+				// Normalize when too loud
+				let max = sum_bytes.iter().fold(0.0, |acc, byte| { byte.abs().max(acc) });
+				if max > 2.0 {
+					for ii in 0..FILE_CHUNK {
+						sum_bytes[ii] /= max / 2.0;
+					}
+				}
+				for ii in 0..FILE_CHUNK {
+					[
+						bytes[ii * 4],
+						bytes[ii * 4 + 1],
+						bytes[ii * 4 + 2],
+						bytes[ii * 4 + 3]
+					] = sum_bytes[ii].to_le_bytes();
+				}
+
+				let mut pacat = acquire_files();
+				if !pacat_init {
+					// First acquisition of the lock spawns a pacat
+					pacat_init = true;
+				} else if !pacat_running {
+					// Pacat is killed. Needs respawn
+					pacat.child = Command::new("pacat").args([
+						"-d",
+						APP_NAME,
+						"--channels=2",
+						"--rate=48000",
+						"--format=float32le",
+						format!("--latency={}", FILE_CHUNK).as_str()
+					])
+						.stdin(Stdio::piped())
+						.stdout(Stdio::piped()).spawn().expect("Failed to respawn pacat process");
+					pacat.writer = BufWriter::with_capacity(1024, pacat.child.stdin.take().unwrap());
+				}
+
+				pacat_running = true;
+				pacat.writer.write_all(&bytes).expect("Failed to write to pacat stdin");
+				// If blocked, we wait
+				while let Err(err) = pacat.writer.flush() {
+					if err.kind() != io::ErrorKind::WouldBlock {
+						break;
+					}
+					thread::sleep(Duration::from_millis(10));
+				}
+				pacat.last_used = SystemTime::now();
+			} else if pacat_running {
+				let mut pacat = acquire_waves();
+				if SystemTime::now().duration_since(pacat.last_used).expect("Failed to get pacat duration").as_secs() > 5 {
+					pacat.child.kill().expect("Failed to kill pacat");
+					pacat_running = false;
+				}
+			}
+			drop(playing_files);
+			thread::sleep(Duration::from_millis(10));
+		}
+		if pacat_running {
+			let mut pacat = acquire_waves();
+			pacat.child.kill().expect("Failed to kill pacat");
+		}
+	});
+}
 
 pub fn spawn_pacat_wave_thread() {
 	thread::spawn(move || {
@@ -194,7 +314,7 @@ pub fn spawn_pacat_wave_thread() {
 					] = sum_bytes[ii].to_le_bytes();
 				}
 
-				let mut pacat = acquire_pacat();
+				let mut pacat = acquire_waves();
 				if !pacat_init {
 					// First acquisition of the lock spawns a pacat
 					pacat_init = true;
@@ -214,7 +334,6 @@ pub fn spawn_pacat_wave_thread() {
 				}
 
 				pacat_running = true;
-				pacat.last_used = SystemTime::now();
 				pacat.writer.write_all(&bytes).expect("Failed to write to pacat stdin");
 				// If blocked, we wait
 				while let Err(err) = pacat.writer.flush() {
@@ -223,8 +342,9 @@ pub fn spawn_pacat_wave_thread() {
 					}
 					thread::sleep(Duration::from_millis(10));
 				}
+				pacat.last_used = SystemTime::now();
 			} else if pacat_running {
-				let mut pacat = acquire_pacat();
+				let mut pacat = acquire_waves();
 				if SystemTime::now().duration_since(pacat.last_used).expect("Failed to get pacat duration").as_secs() > 5 {
 					pacat.child.kill().expect("Failed to kill pacat");
 					pacat_running = false;
@@ -234,7 +354,7 @@ pub fn spawn_pacat_wave_thread() {
 			thread::sleep(Duration::from_millis(10));
 		}
 		if pacat_running {
-			let mut pacat = acquire_pacat();
+			let mut pacat = acquire_waves();
 			pacat.child.kill().expect("Failed to kill pacat");
 		}
 	});
