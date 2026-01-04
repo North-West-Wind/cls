@@ -108,8 +108,75 @@ impl PopupHandleKey for InputPopup {
 				}
 				true
 			},
+			KeyCode::Tab => {
+				if self.await_input == AwaitInput::AddTab {
+					// Try to auto-fill path
+					let input = self.input.value();
+					let parent: &Path;
+					let file_name: String;
+					let path = Path::new(input);
+					if input.ends_with("/") {
+						parent = path;
+						file_name = String::new();
+					} else {
+						let Some(path_parent) = path.parent() else { return false };
+						parent = path_parent;
+						let path_file_name = path.file_name();
+						if let Some(os_str) = path_file_name {
+							if let Some(str) = os_str.to_str() {
+								file_name = str.to_string();
+							} else {
+								file_name = String::new();
+							}
+						} else {
+							file_name = String::new();
+						}
+					}
+					let Ok(files) = parent.read_dir() else { return false };
+					let mut file_names = vec![];
+					for file in files {
+						let Ok(file) = file else { continue };
+						let Ok(file_type) = file.file_type() else { continue };
+						if !file_type.is_dir() { continue; }
+						let os_str = file.file_name();
+						let Some(file) = os_str.to_str() else { continue };
+						file_names.push(file.to_string());
+					}
+					if file_name.is_empty() {
+						if file_names.len() == 1 {
+							let joined = parent.join(file_names[0].clone());
+							self.input = self.input.clone().with_value(joined.to_str().unwrap().to_string());
+						} else {
+							return false;
+						}
+					} else {
+						let mut prefix = String::new();
+						for file in file_names {
+							if file.starts_with(&file_name) {
+								if prefix.is_empty() {
+									prefix = file;
+								} else {
+									// Get common prefix
+									while !file_name.starts_with(&prefix) {
+										if prefix.is_empty() {
+											prefix = String::new();
+											break;
+										}
+										prefix.pop();
+									}
+								}
+							}
+						}
+						if prefix.is_empty() {
+							return false;
+						}
+						let joined = parent.join(prefix);
+						self.input = self.input.clone().with_value(joined.to_str().unwrap().to_string());
+					}
+				}
+				true
+			},
 			_ => {
-				println!("{}", event.code);
 				self.input.handle_event(&Event::Key(event));
 				true
 			}
