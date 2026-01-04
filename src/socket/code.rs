@@ -6,6 +6,10 @@ use interprocess::local_socket::Stream;
 #[derive(PartialEq, Eq)]
 pub enum SocketCode {
 	Exit,
+	Pid,
+	Attach,
+	Detach,
+
 	ReloadConfig,
 	AddTab,
 	DeleteTab,
@@ -26,6 +30,9 @@ impl SocketCode {
 		use Option::*;
 		match str {
 			"exit" => Some(Exit),
+			"pid" => Some(Pid),
+			"attach" => Some(Attach),
+			"detach" => Some(Detach),
 			"reload-config" => Some(ReloadConfig),
 			"add-tab" => Some(AddTab),
 			"delete-tab" => Some(DeleteTab),
@@ -45,6 +52,9 @@ impl SocketCode {
 		use Option::*;
 		match code {
 			1 => Some(Exit),
+			12 => Some(Pid),
+			13 => Some(Attach),
+			14 => Some(Detach),
 			2 => Some(ReloadConfig),
 			3 => Some(AddTab),
 			4 => Some(DeleteTab),
@@ -63,6 +73,9 @@ impl SocketCode {
 		use SocketCode::*;
 		match self {
 			Exit => 1,
+			Pid => 12,
+			Attach => 13,
+			Detach => 14,
 			ReloadConfig => 2,
 			AddTab => 3,
 			DeleteTab => 4,
@@ -80,6 +93,28 @@ impl SocketCode {
 		use SocketCode::*;
 		let mut buf = vec![self.to_u8()];
 		match self {
+			Pid => {
+				stream.write_all(&buf)?;
+				let mut res = [0u8; 5];
+				stream.read(&mut res)?;
+				return match res[0] {
+					0 => {
+						let pid = u32::from_le_bytes([res[1], res[2], res[3], res[4]]);
+						Ok(format!("Success\n{}", pid))
+					},
+					_ => Ok("Failed\nResponse code is unknown".to_string())
+				}
+			},
+			Attach => {
+				stream.write_all(&buf)?;
+				let mut res = [0u8; 1];
+				stream.read(&mut res)?;
+				return match res[0] {
+					0 => Ok("Success".to_string()),
+					1 => Ok("Failed\nSome pipes are not connected to the terminal".to_string()),
+					_ => Ok("Failed\nResponse code is unknown".to_string())
+				}
+			},
 			AddTab => {
 				let path = matches.get_one::<String>("dir");
 				buf.extend(path.expect("Missing `dir` argument").as_bytes());

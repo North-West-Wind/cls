@@ -2,10 +2,11 @@ use std::{cmp::{max, min}, collections::HashMap, io::{BufReader, Error, Read, Wr
 
 use clap::ArgMatches;
 use code::SocketCode;
+use fork::{daemon, Fork};
 use interprocess::local_socket::{traits::{ListenerExt, Stream as _}, GenericFilePath, GenericNamespaced, Listener, ListenerOptions, Name, NameType, Stream, ToFsName, ToNsName};
 use normpath::PathExt;
 
-use crate::{component::block::{tabs::TabsBlock, BlockSingleton}, config::FileEntry, constant::APP_NAME, state::{acquire, acquire_running, load_app_config, notify_redraw, Scanning}, util::{fs::separate_parent_file, pulseaudio::{play_file, set_volume_percentage, stop_all}, threads::spawn_scan_thread, waveform::{play_wave, stop_all_waves}}};
+use crate::{component::block::{tabs::TabsBlock, BlockSingleton}, config::FileEntry, constant::APP_NAME, state::{acquire, acquire_running, load_app_config, notify_redraw, notify_respawn, Scanning}, util::{fs::separate_parent_file, pulseaudio::{play_file, set_volume_percentage, stop_all}, threads::spawn_scan_thread, waveform::{play_wave, stop_all_waves}}};
 
 pub mod code;
 
@@ -72,6 +73,36 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 		Exit => {
 			*acquire_running() = false;
 			return send_response(reader.get_mut(), &[0], true);
+		},
+		Pid => {
+			let mut bytes = std::process::id().to_le_bytes().to_vec();
+			bytes.insert(0, 0);
+			return send_response(reader.get_mut(), &bytes, true);
+		},
+		Attach => {
+			if atty::is(atty::Stream::Stdin) && atty::is(atty::Stream::Stdout) && atty::is(atty::Stream::Stderr) {
+				notify_respawn();
+				return send_response(reader.get_mut(), &[0], true);
+			} else {
+				return send_response(reader.get_mut(), &[1], false);
+			}
+		},
+		Detach => {
+			if let Ok(forked) = daemon(true, true) {
+				if let Fork::Parent(pid) = forked {
+					app.forked = pid;
+					*acquire_running() = false;
+					notify_redraw();
+					notify_respawn();
+					return Ok(true); // Parent is going to exit
+				} else {
+					app.attached = false;
+					notify_redraw();
+					return send_response(reader.get_mut(), &[0], true);
+				}
+			} else {
+				return send_response(reader.get_mut(), &[1], false);
+			}
 		},
 		ReloadConfig => {
 			let (config, stopkey, hotkey, rev_file_id, waves) = load_app_config();

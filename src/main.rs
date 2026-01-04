@@ -4,7 +4,7 @@ use state::Scanning;
 use util::threads::spawn_scan_thread;
 use clap::{command, Arg, ArgAction, Command};
 
-use crate::{state::acquire, util::threads::{spawn_drawing_thread, spawn_listening_thread, spawn_pacat_wave_thread, spawn_signal_thread, spawn_socket_thread}};
+use crate::{state::acquire, util::threads::{spawn_listening_thread, spawn_pacat_wave_thread, spawn_respawn_thread, spawn_signal_thread, spawn_socket_thread}};
 mod component;
 mod config;
 mod constant;
@@ -26,6 +26,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		.arg(Arg::new("hidden").long("hidden").help("run the soundboard in the background, basically read-only").action(ArgAction::SetTrue))
 		.arg(Arg::new("no-save").long("no-save").help("disable auto-save of config when the program exits").action(ArgAction::SetTrue))
 		.subcommand(Command::new("exit").about("exit another instance"))
+		.subcommand(Command::new("pid").about("obtain the process id of the main instance"))
+		.subcommand(Command::new("attach").about("attach the tui to the current terminal, bringing it out of hidden mode"))
+		.subcommand(Command::new("detach").about("detach the tui from the current terminal, effectively putting it in hidden mode"))
 		.subcommand(Command::new("reload-config").about("reload config for another instance"))
 		.subcommand(Command::new("add-tab").about("add a directory tab").arg(Arg::new("dir").required(true)))
 		.subcommand(Command::new("delete-tab").about("delete a tab, defaults to the selected one")
@@ -106,11 +109,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	if !is_edit {
 		spawn_pacat_wave_thread();
 	}
-	if !is_hidden {
-		// If not hidden, we need to render the UI
-		let draw_thread = spawn_drawing_thread();
-		draw_thread.join().ok();
-	}
+	let respawn_thread = spawn_respawn_thread();
+	respawn_thread.join().ok();
 	// Wait for all threads to end before closing
 	listen_thread.join().ok();
 	if socket_thread.is_ok() {

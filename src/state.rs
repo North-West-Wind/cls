@@ -31,6 +31,8 @@ pub struct App {
 	pub socket_holder: bool,
 	pub hidden: bool,
 	pub edit: bool,
+	pub attached: bool,
+	pub forked: i32,
 	// render states: root
 	pub block_selected: u8,
 	pub selection_layer: SelectionLayer,
@@ -155,6 +157,8 @@ fn static_app(hidden: bool, edit: bool) -> &'static Mutex<App> {
 			socket_holder: false,
 			hidden,
 			edit,
+			attached: true,
+			forked: 0,
 			// render states: root
 			block_selected: 0,
 			selection_layer: SelectionLayer::Block,
@@ -190,9 +194,17 @@ pub fn acquire() -> MutexGuard<'static, App> {
 }
 
 static REDRAW: LazyLock<(Mutex<bool>, Condvar)> = LazyLock::new(|| (Mutex::new(true), Condvar::new()));
+static RESPAWN: LazyLock<(Mutex<bool>, Condvar)> = LazyLock::new(|| (Mutex::new(false), Condvar::new()));
 
 pub fn notify_redraw() {
 	let (lock, cvar) = &*REDRAW;
+	let mut shared = lock.lock().expect("Failed to get shared mutex");
+	*shared = true;
+	cvar.notify_all();
+}
+
+pub fn notify_respawn() {
+	let (lock, cvar) = &*RESPAWN;
 	let mut shared = lock.lock().expect("Failed to get shared mutex");
 	*shared = true;
 	cvar.notify_all();
@@ -202,6 +214,16 @@ pub fn wait_redraw() {
 	let (lock, cvar) = &*REDRAW;
 	let mut shared = lock.lock().expect("Failed to get shared mutex");
 	// Wait for redraw notice
+	while !(*shared) {
+		shared = cvar.wait(shared).expect("Failed to get shared mutex");
+	}
+	*shared = false;
+}
+
+pub fn wait_respawn() {
+	let (lock, cvar) = &*RESPAWN;
+	let mut shared = lock.lock().expect("Failed to get shared mutex");
+	// Wait for respawn notice
 	while !(*shared) {
 		shared = cvar.wait(shared).expect("Failed to get shared mutex");
 	}

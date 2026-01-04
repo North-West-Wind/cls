@@ -4,7 +4,7 @@ use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, termi
 use ratatui::{prelude::CrosstermBackend, Terminal};
 use signal_hook::iterator::Signals;
 
-use crate::{component::popup::{exit_popup, save::SavePopup, set_popup, PopupComponent}, config, constant::{APP_NAME, MIN_HEIGHT, MIN_WIDTH}, listener::{listen_events, listen_global, unlisten_global}, renderer, socket::{listen_socket, try_socket}, state::{acquire, acquire_running, notify_redraw, wait_redraw, Scanning}, util::{self, waveform::{acquire_playing_waves, WaveType}}};
+use crate::{component::popup::{exit_popup, save::SavePopup, set_popup, PopupComponent}, config, constant::{APP_NAME, MIN_HEIGHT, MIN_WIDTH}, listener::{listen_events, listen_global, unlisten_global}, renderer, socket::{listen_socket, try_socket}, state::{acquire, acquire_running, notify_redraw, notify_respawn, wait_redraw, wait_respawn, Scanning}, util::{self, waveform::{acquire_playing_waves, WaveType}}};
 
 pub fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
 	return thread::spawn(move || -> Result<(), io::Error> {
@@ -30,6 +30,9 @@ pub fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
 			wait_redraw();
 			// Render again
 			terminal.draw(|f| { renderer::ui(f); })?;
+			if !acquire().attached {
+				break;
+			}
 		}
 
 		// Restore terminal
@@ -41,6 +44,26 @@ pub fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
 		)?;
 		terminal.show_cursor()?;
 		Ok(())
+	});
+}
+
+// A thread that respawns the drawing thread
+pub fn spawn_respawn_thread() -> JoinHandle<()> {
+	return thread::spawn(move || {
+		while *acquire_running() {
+			let hidden = { acquire().hidden };
+			if !hidden {
+				spawn_drawing_thread().join().ok();
+			}
+			wait_respawn();
+			println!("Respawn triggered");
+		}
+
+		let pid = { acquire().forked };
+		if pid != 0 {
+			println!("Detached child {pid}");
+			std::process::exit(0);
+		}
 	});
 }
 
@@ -62,6 +85,7 @@ pub fn spawn_signal_thread() -> Result<JoinHandle<()>, io::Error> {
 			match sig {
 				SIGINT|SIGTERM => {
 					*acquire_running() = false;
+					notify_respawn();
 					break;
 				},
 				_ => (),
