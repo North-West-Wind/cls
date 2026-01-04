@@ -8,7 +8,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 
 pub struct TabsBlock {
-	range: (i32, i32),
+	offset: usize,
 	pub selected: usize,
 }
 
@@ -17,7 +17,7 @@ impl BlockSingleton for TabsBlock {
 		static BLOCK: OnceLock<Mutex<TabsBlock>> = OnceLock::new();
 		BLOCK.get_or_init(|| {
 			Mutex::new(TabsBlock {
-				range: (-1, -1),
+				offset: 0,
 				selected: 0
 			})
 		}).lock().unwrap()
@@ -30,11 +30,14 @@ impl BlockRenderArea for TabsBlock {
 		let tabs = app.config.tabs.clone();
 	
 		let mut spans: Vec<Span> = vec![];
+		let mut cursor = 0;
 		for (ii, tab) in tabs.iter().enumerate() {
 			let path = Path::new(tab.as_str());
 			let basename = path.file_name();
-			spans.push(Span::from(basename.unwrap().to_str().unwrap().to_string())
+			let str = basename.unwrap().to_str().unwrap().to_string();
+			spans.push(Span::from(str)
 				.style(if ii == self.selected {
+					cursor = spans.len();
 					Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)
 				} else {
 					Style::default().fg(Color::Green)
@@ -42,50 +45,23 @@ impl BlockRenderArea for TabsBlock {
 			);
 			if ii < tabs.len() - 1 {
 				spans.push(Span::from(" | "));
+
 			}
 		}
 	
-		let mut width = area.width as i32 - 4;
-		let mut count = 0;
-		if self.range.0 == -1 {
-			for (ii, span) in spans.iter().enumerate() {
-				if ii % 2 == 1 {
-					// skip separator
-					continue;
-				}
-				width -= span.width() as i32;
-				count += 1;
-				if width < 0 {
-					break;
-				}
+		let width = area.width as usize - 4;
+		let mut wanted_range = (0, 0);
+		for (ii, span) in spans.iter().enumerate() {
+			wanted_range.0 = wanted_range.1;
+			wanted_range.1 += span.width();
+			if ii == cursor {
+				break;
 			}
-			self.range = (0, count - 1);
-		} else if self.selected < self.range.0 as usize {
-			for (ii, span) in spans.iter().enumerate() {
-				if ii % 2 == 1 || ii < self.selected * 2 {
-					// skip separator
-					continue;
-				}
-				width -= span.width() as i32;
-				count += 1;
-				if width < 0 {
-					break;
-				}
-			}
-			self.range = (self.selected as i32, self.selected as i32 + count - 1);
-		} else if self.selected >= self.range.1 as usize {
-			for (ii, span) in spans.iter().rev().enumerate() {
-				if ii % 2 == 1 || ii < spans.len() - self.selected * 2 - 1 {
-					// skip separator
-					continue;
-				}
-				width -= span.width() as i32;
-				count += 1;
-				if width < 0 {
-					break;
-				}
-			}
-			self.range = (self.selected as i32 - count + 1, self.selected as i32);
+		}
+		if self.offset > wanted_range.0 {
+			self.offset = wanted_range.0;	
+		} else if self.offset + width < wanted_range.1 {
+			self.offset = wanted_range.1 - width;
 		}
 		
 		let (border_type, border_style) = app.borders(Self::ID);
@@ -94,14 +70,7 @@ impl BlockRenderArea for TabsBlock {
 			.borders(Borders::ALL)
 			.border_type(border_type)
 			.border_style(border_style);
-		let mut length = 0;
-		for (ii, span) in spans.iter().enumerate() {
-			if ii >= self.range.0 as usize * 2 {
-				break;
-			}
-			length += span.width();
-		}
-		let paragraph = Paragraph::new(Line::from(spans)).block(block.padding(Padding::horizontal(1))).scroll((0, length as u16));
+		let paragraph = Paragraph::new(Line::from(spans)).block(block.padding(Padding::horizontal(1))).scroll((0, self.offset as u16));
 		f.render_widget(paragraph, area);
 	}
 }
