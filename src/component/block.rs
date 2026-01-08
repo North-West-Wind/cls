@@ -17,6 +17,7 @@ pub mod playing;
 pub mod settings;
 pub mod tabs;
 pub mod info;
+pub mod log;
 pub mod waves;
 
 pub trait BlockSingleton {

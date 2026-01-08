@@ -4,9 +4,10 @@ use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, termi
 use ratatui::{prelude::CrosstermBackend, Terminal};
 use signal_hook::iterator::Signals;
 
-use crate::{component::popup::{PopupComponent, exit_popup, save::SavePopup, set_popup}, config, constant::{APP_NAME, MIN_HEIGHT, MIN_WIDTH}, listener::{listen_events, listen_global, unlisten_global}, renderer, socket::{listen_socket, try_socket}, state::{Scanning, acquire, acquire_running, notify_redraw, wait_redraw}, util::{self, file::acquire_playing_files, waveform::{WaveType, acquire_playing_waves}}};
+use crate::{component::{block::log, popup::{PopupComponent, exit_popup, save::SavePopup, set_popup}}, config, constant::{APP_NAME, MIN_HEIGHT, MIN_WIDTH}, listener::{listen_events, listen_global, unlisten_global}, renderer, socket::{listen_socket, try_socket}, state::{Scanning, acquire, acquire_running, notify_redraw, wait_redraw}, util::{self, file::acquire_playing_files, waveform::{WaveType, acquire_playing_waves}}};
 
 pub fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
+	log::info("Spawning drawing thread...");
 	return thread::spawn(move || -> Result<(), io::Error> {
 		// Setup terminal
 		enable_raw_mode()?;
@@ -46,6 +47,7 @@ pub fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
 
 // A thread for listening for inputs
 pub fn spawn_listening_thread() -> JoinHandle<()> {
+	log::info("Spawning listening thread...");
 	return thread::spawn(move || {
 		listen_global();
 		listen_events().ok();
@@ -55,6 +57,7 @@ pub fn spawn_listening_thread() -> JoinHandle<()> {
 
 // A thread for listening for signals
 pub fn spawn_signal_thread() -> Result<JoinHandle<()>, io::Error> {
+	log::info("Spawning signal thread...");
 	use signal_hook::consts::*;
 	let mut signals = Signals::new([SIGINT, SIGTERM])?;
 	return Ok(thread::spawn(move || {
@@ -73,6 +76,7 @@ pub fn spawn_signal_thread() -> Result<JoinHandle<()>, io::Error> {
 // A thread for listening for socket (IPC)
 pub fn spawn_socket_thread() -> Result<JoinHandle<()>, io::Error> {
 	let listener = try_socket()?;
+	log::info("Spawning socket thread...");
 
 	Ok(thread::spawn(move || {
 		{ acquire().socket_holder = true; }
@@ -87,8 +91,16 @@ pub fn spawn_scan_thread(mode: Scanning) {
 	thread::spawn(move || {
 		{ acquire().scanning = mode; }
 		match mode {
-			Scanning::All => { let _ = util::scan_tabs(); },
-			Scanning::One(index) => { util::scan_tab(index); },
+			Scanning::All => {
+				log::info("Scanning all tabs...");
+				let _ = util::scan_tabs();
+				log::info("Scanned all tabs");
+			},
+			Scanning::One(index) => {
+				log::info(format!("Scanning tab {}...", index).as_str());
+				util::scan_tab(index);
+				log::info(format!("Scanned tab {}", index).as_str());
+			},
 			_ => ()
 		};
 
@@ -246,7 +258,7 @@ pub fn spawn_pacat_file_thread() {
 				}
 				pacat.last_used = SystemTime::now();
 			} else if pacat_running {
-				let mut pacat = acquire_waves();
+				let mut pacat = acquire_files();
 				if SystemTime::now().duration_since(pacat.last_used).expect("Failed to get pacat duration").as_secs() > 5 {
 					pacat.child.kill().expect("Failed to kill pacat");
 					pacat_running = false;
@@ -256,7 +268,7 @@ pub fn spawn_pacat_file_thread() {
 			thread::sleep(Duration::from_millis(10));
 		}
 		if pacat_running {
-			let mut pacat = acquire_waves();
+			let mut pacat = acquire_files();
 			pacat.child.kill().expect("Failed to kill pacat");
 		}
 	});
@@ -344,6 +356,7 @@ pub fn spawn_pacat_wave_thread() {
 				}
 				pacat.last_used = SystemTime::now();
 			} else if pacat_running {
+				log::info("pacat is running");
 				let mut pacat = acquire_waves();
 				if SystemTime::now().duration_since(pacat.last_used).expect("Failed to get pacat duration").as_secs() > 5 {
 					pacat.child.kill().expect("Failed to kill pacat");

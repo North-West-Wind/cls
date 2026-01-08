@@ -36,6 +36,7 @@ pub struct App {
 	pub selection_layer: SelectionLayer,
 	pub settings_opened: bool,
 	pub waves_opened: bool,
+	pub logs_opened: bool,
 	// pulseaudio
 	pub module_null_sink: String,
 	pub module_loopback_default: String,
@@ -160,6 +161,7 @@ fn static_app(hidden: bool, edit: bool) -> &'static Mutex<App> {
 			selection_layer: SelectionLayer::Block,
 			settings_opened: false,
 			waves_opened: false,
+			logs_opened: false,
 			// pulseaudio
 			module_null_sink: String::new(),
 			module_loopback_default: String::new(),

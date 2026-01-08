@@ -38,6 +38,11 @@ pub fn handle_key(event: KeyEvent) -> bool {
 			}
 			return true;
 		},
+		KeyCode::Char('\\') => {
+			let mut app = acquire();
+			app.logs_opened = !app.logs_opened;
+			return true;
+		},
 		_ => {
 			let selected = { acquire().block_selected };
 			block::handle_key(selected, event)

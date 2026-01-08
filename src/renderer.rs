@@ -2,7 +2,7 @@ use ratatui::{
 	layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, widgets::{Block, BorderType, Borders, Paragraph}, Frame
 };
 
-use crate::{component::{block::{files::FilesBlock, help::HelpBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, info::InfoBlock, waves::WavesBlock, BlockRender, BlockRenderArea, BlockSingleton}, popup::{popups, PopupRender}}, state::acquire};
+use crate::{component::{block::{BlockRender, BlockRenderArea, BlockSingleton, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::LogBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupRender, popups}}, state::acquire};
 
 pub fn ui(f: &mut Frame) {
 	let app = acquire();
@@ -25,7 +25,12 @@ pub fn ui(f: &mut Frame) {
 
 	let settings = app.settings_opened;
 	let waves = app.waves_opened;
+	let logs = app.logs_opened;
 	drop(app);
+	if logs {
+		LogBlock::instance().render_area(f, f.area());
+		return;
+	}
 	{ InfoBlock::instance().render_area(f, chunks[0]); }
 	{ TabsBlock::instance().render_area(f, chunks[1]); }
 	let files_area: Rect;
