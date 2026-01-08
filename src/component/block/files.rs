@@ -1,6 +1,6 @@
 use std::{cmp::{max, min}, collections::HashSet, i32, path::Path, sync::{Mutex, MutexGuard, OnceLock}};
 
-use crate::{component::{block::{BlockNavigation, BlockSingleton, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, state::{Scanning, acquire}, util::{file::play_file, global_input::sort_keys, selected_file_path, threads::spawn_scan_thread}};
+use crate::{component::{block::{BlockNavigation, BlockSingleton, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, state::{Scanning, acquire}, util::{file::play_file, selected_file_path, threads::spawn_scan_thread}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -72,18 +72,18 @@ impl BlockRenderArea for FilesBlock {
 					let mut spans = vec![];
 					let full_path = &Path::new(&app.config.tabs[tab_selected]).join(file).into_os_string().into_string().unwrap();
 					let entry = app.config.get_file_entry(full_path.clone());
-					entry.inspect(|entry| {
-						entry.id.inspect(|id| {
-							spans.push(Span::from(format!("({})", id)).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)));
+					if entry.is_some() {
+						let entry = entry.unwrap();
+						spans.push(entry.id.map_or(Span::from(" "), |_| { Span::from("I").style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)) }));
+						if entry.keys.is_empty() {
 							spans.push(Span::from(" "));
-						});
-						if entry.keys.len() > 0 {
-							let mut keys = entry.keys.clone().into_iter().collect::<Vec<String>>();
-							let keys = sort_keys(&mut keys);
-							spans.push(Span::from(format!("{{{}}}", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
-							spans.push(Span::from(" "));
+						} else {
+							spans.push(Span::from("K").style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
 						}
-					});
+					} else {
+						spans.push(Span::from("  "));
+					}
+					spans.push(Span::from(" "));
 					let style = if self.selected == ii {
 						Style::default().fg(Color::LightBlue).add_modifier(Modifier::REVERSED)
 					} else {

@@ -3,18 +3,18 @@ use std::{cmp::{max, min}, sync::{LazyLock, Mutex, MutexGuard}};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 
-use crate::{component::block::{tabs::TabsBlock, waves::WavesBlock, BlockNavigation, BlockSingleton}, config::FileEntry, state::acquire, util::{pulseaudio::set_volume_percentage, selected_file_path}};
+use crate::{component::block::{BlockNavigation, BlockSingleton, tabs::TabsBlock, waves::WavesBlock}, config::FileEntry, state::acquire, util::{global_input::sort_keys, pulseaudio::set_volume_percentage, selected_file_path}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
-pub struct VolumeBlock {
+pub struct InfoBlock {
 	selected: usize,
 	options: u8,
 }
 
-impl BlockSingleton for VolumeBlock {
+impl BlockSingleton for InfoBlock {
 	fn instance() -> MutexGuard<'static, Self> {
-		static BLOCK: LazyLock<Mutex<VolumeBlock>> = LazyLock::new(|| { Mutex::new(VolumeBlock {
+		static BLOCK: LazyLock<Mutex<InfoBlock>> = LazyLock::new(|| { Mutex::new(InfoBlock {
 			selected: 0,
 			options: 2
 		}) });
@@ -22,7 +22,7 @@ impl BlockSingleton for VolumeBlock {
 	}
 }
 
-impl BlockRenderArea for VolumeBlock {
+impl BlockRenderArea for InfoBlock {
 	fn render_area(&mut self, f: &mut Frame, area: Rect) {
 		let app = acquire();
 		let (border_type, border_style) = app.borders(Self::ID);
@@ -54,11 +54,21 @@ impl BlockRenderArea for VolumeBlock {
 					Span::from("Selected "),
 					Span::from(path.clone()).style(Style::default().fg(Color::LightGreen))
 				]));
-				let volume = match app.config.get_file_entry(path) {
-					Some(entry) => entry.volume,
-					None => 100
+				let (volume, hotkey, file_id) = match app.config.get_file_entry(path) {
+					Some(entry) => (entry.volume, if entry.keys.is_empty() { None } else {
+						let mut keys = entry.keys.clone().into_iter().collect::<Vec<String>>();
+						let keys = sort_keys(&mut keys);
+						Some(format!("{{{}}}", keys.join(" ")))
+					}, entry.id),
+					None => (100, None, None)
 				};
 				lines.push(volume_line("File Volume".to_string(), volume, area.width, self.selected == 1));
+				let mut spans = vec![];
+				spans.push(Span::from("ID "));
+				spans.push(file_id.map_or( Span::from("None").style(Style::default().fg(Color::Red)), |id| { Span::from(format!(" {} ", id)).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)) }));
+				spans.push(Span::from(" | Keys "));
+				spans.push(hotkey.map_or(Span::from("None").style(Style::default().fg(Color::Red)), |keys| { Span::from(format!(" {} ", keys)).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)) }));
+				lines.push(Line::from(spans));
 			}
 		}
 		let paragraph = Paragraph::new(Text::from(lines))
@@ -67,7 +77,7 @@ impl BlockRenderArea for VolumeBlock {
 	}
 }
 
-impl BlockHandleKey for VolumeBlock {
+impl BlockHandleKey for InfoBlock {
 	fn handle_key(&mut self, event: KeyEvent) -> bool {
 		match event.code {
 			KeyCode::Right => self.change_volume(if event.modifiers.contains(KeyModifiers::CONTROL) { 5 } else { 1 }),
@@ -79,7 +89,7 @@ impl BlockHandleKey for VolumeBlock {
 	}
 }
 
-impl BlockNavigation for VolumeBlock {
+impl BlockNavigation for InfoBlock {
 	const ID: u8 = 0;
 
 	fn navigate_block(&self, _dx: i16, dy: i16) -> u8 {
@@ -90,7 +100,7 @@ impl BlockNavigation for VolumeBlock {
 	}
 }
 
-impl VolumeBlock {
+impl InfoBlock {
 	fn navigate_volume(&mut self, dy: i32) -> bool {
 		let new_selected = loop_index(self.selected, dy, self.options as usize);
 		if new_selected != self.selected {

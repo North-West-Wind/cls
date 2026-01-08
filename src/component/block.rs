@@ -5,7 +5,7 @@ use files::FilesBlock;
 use ratatui::{layout::Rect, Frame};
 use settings::SettingsBlock;
 use tabs::TabsBlock;
-use volume::VolumeBlock;
+use info::InfoBlock;
 
 use crate::{component::block::waves::WavesBlock};
 
@@ -16,7 +16,7 @@ pub mod help;
 pub mod playing;
 pub mod settings;
 pub mod tabs;
-pub mod volume;
+pub mod info;
 pub mod waves;
 
 pub trait BlockSingleton {
@@ -49,7 +49,7 @@ pub fn handle_key(block_id: u8, event: KeyEvent) -> bool {
 			return true;
 		},
 		_ => match block_id {
-			VolumeBlock::ID => VolumeBlock::instance().handle_key(event),
+			InfoBlock::ID => InfoBlock::instance().handle_key(event),
 			TabsBlock::ID => TabsBlock::instance().handle_key(event),
 			FilesBlock::ID => FilesBlock::instance().handle_key(event),
 			SettingsBlock::ID => SettingsBlock::instance().handle_key(event),
@@ -61,7 +61,7 @@ pub fn handle_key(block_id: u8, event: KeyEvent) -> bool {
 
 pub fn navigate_block(block_id: u8, dx: i16, dy: i16) -> u8 {
 	match block_id {
-		VolumeBlock::ID => VolumeBlock::instance().navigate_block(dx, dy),
+		InfoBlock::ID => InfoBlock::instance().navigate_block(dx, dy),
 		TabsBlock::ID => TabsBlock::instance().navigate_block(dx, dy),
 		FilesBlock::ID => FilesBlock::instance().navigate_block(dx, dy),
 		SettingsBlock::ID => SettingsBlock::instance().navigate_block(dx, dy),
