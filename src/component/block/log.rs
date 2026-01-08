@@ -4,6 +4,7 @@ use ratatui::{style::{Color, Style}, text::Line, widgets::{Block, BorderType, Pa
 
 use crate::{component::block::{BlockRenderArea, BlockSingleton}, state::notify_redraw};
 
+#[allow(dead_code)]
 pub enum LogLevel {
 	Info,
 	Warn,
@@ -62,6 +63,7 @@ pub fn info(body: &str) {
 	notify_redraw();
 }
 
+#[allow(dead_code)]
 pub fn warn(body: &str) {
 	LogBlock::instance().append_message(body.to_string(), LogLevel::Warn);
 	notify_redraw();

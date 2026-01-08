@@ -41,6 +41,7 @@ impl PopupRender for HelpPopup {
 					Line::from("enter - Select block"),
 					Line::from("c - Toggle settings menu"),
 					Line::from("w - Toggle wave menu"),
+					Line::from("\\ - Toggle logs"),
 					Line::from("s - Save configuration"),
 
 					Line::from(""),
