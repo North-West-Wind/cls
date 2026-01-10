@@ -212,13 +212,6 @@ pub fn spawn_pacat_file_thread() {
 					notify_redraw();
 				});
 
-				// Normalize when too loud
-				let max = sum_bytes.iter().fold(0.0, |acc, byte| { byte.abs().max(acc) });
-				if max > 2.0 {
-					for ii in 0..FILE_CHUNK {
-						sum_bytes[ii] /= max / 2.0;
-					}
-				}
 				for ii in 0..FILE_CHUNK {
 					[
 						bytes[ii * 4],
@@ -309,14 +302,7 @@ pub fn spawn_pacat_wave_thread() {
 						sum_bytes[ii] += playable_bytes[ii] / len;
 					}
 				}
-
-				// Normalize wave when too loud
-				let max = sum_bytes.iter().fold(0.0, |acc, byte| { byte.abs().max(acc) });
-				if max > 2.0 {
-					for ii in 0..WAVE_CHUNK {
-						sum_bytes[ii] /= max / 2.0;
-					}
-				}
+				
 				for ii in 0..WAVE_CHUNK {
 					[
 						bytes[ii * 4],
