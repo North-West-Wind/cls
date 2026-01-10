@@ -131,7 +131,7 @@ pub fn play_wave(wave: Waveform, auto_stop: bool) {
 				let (playing, force) = *wave.playing.lock().unwrap();
 				playing && force
 			} || wave.keys.iter().all(|key| { key.is_pressed() }) {
-				thread::sleep(Duration::from_secs_f32(1600.0 / 48000.0));
+				thread::sleep(Duration::from_millis(100));
 			}
 		}
 		wave.playing.lock().unwrap().0 = false;
