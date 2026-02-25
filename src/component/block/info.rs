@@ -3,7 +3,7 @@ use std::{cmp::{max, min}, sync::{LazyLock, Mutex, MutexGuard}};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 
-use crate::{component::block::{BlockNavigation, BlockSingleton, tabs::TabsBlock, waves::WavesBlock}, config::FileEntry, state::acquire, util::{global_input::sort_keys, pulseaudio::set_volume_percentage, selected_file_path}};
+use crate::{component::block::{BlockNavigation, BlockSingleton, tabs::TabsBlock, waves::WavesBlock}, config::FileEntry, state::acquire, util::{global_input::{keyboard_to_string, sort_keys}, pulseaudio::set_volume_percentage, selected_file_path}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -45,6 +45,18 @@ impl BlockRenderArea for InfoBlock {
 					Span::from(format!("{} ({})", wave.label, wave.details())).style(Style::default().fg(Color::LightBlue))
 				]));
 				lines.push(volume_line("Wave Volume".to_string(), wave.volume, area.width, self.selected == 1));
+				let mut spans = vec![];
+				spans.push(Span::from("ID "));
+				spans.push(wave.id.map_or( Span::from("None").style(Style::default().fg(Color::Red)), |id| { Span::from(format!(" {} ", id)).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)) }));
+				spans.push(Span::from(" | Keys "));
+				if wave.keys.is_empty() {
+					spans.push(Span::from("None").style(Style::default().fg(Color::Red)));
+				} else {
+					let mut keys = wave.keys.iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
+					let keys = sort_keys(&mut keys);
+					spans.push(Span::from(format!(" {{{}}} ", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
+				}
+				lines.push(Line::from(spans));
 			}
 		} else {
 			let path = selected_file_path(&app.config.tabs, &app.files, None);

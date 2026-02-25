@@ -6,10 +6,10 @@ use rand::Rng;
 use ratatui::{style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}};
 use substring::Substring;
 
-use crate::{component::{block::{loop_index, BlockSingleton}, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}}, state::notify_redraw, util::{global_input::sort_keys, waveform::play_wave}};
+use crate::{component::{block::{loop_index, BlockSingleton}, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}}, state::notify_redraw, util::waveform::play_wave};
 use crate::component::popup::wave::WavePopup;
 use crate::component::popup::{set_popup, PopupComponent};
-use crate::{component::block::{settings::SettingsBlock, tabs::TabsBlock, BlockHandleKey, BlockNavigation, BlockRenderArea}, state::acquire, util::{global_input::keyboard_to_string, waveform::Waveform}};
+use crate::{component::block::{settings::SettingsBlock, tabs::TabsBlock, BlockHandleKey, BlockNavigation, BlockRenderArea}, state::acquire, util::waveform::Waveform};
 
 pub struct WavesBlock {
 	range: (i32, i32),
@@ -51,18 +51,17 @@ impl BlockRenderArea for WavesBlock {
 			let mut lines = vec![];
 			for (ii, wave) in app.waves.iter().enumerate() {
 				let mut spans = vec![];
-				wave.id.inspect(|id| {
-					spans.push(Span::from(format!("({})", id)).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)));
-					spans.push(Span::from(" "));
-				});
-				if !wave.keys.is_empty() {
-					let mut keys = wave.keys.iter()
-						.map(|key| { keyboard_to_string(*key) })
-						.collect::<Vec<String>>();
-					let keys = sort_keys(&mut keys);
-					spans.push(Span::from(format!("{{{}}}", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
+				if wave.id.is_some() {
+					spans.push(Span::from("I").style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)));
+				} else {
 					spans.push(Span::from(" "));
 				}
+				if !wave.keys.is_empty() {
+					spans.push(Span::from("K").style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
+				} else {
+					spans.push(Span::from(" "));
+				}
+				spans.push(Span::from(" "));
 				let style = if self.selected == ii {
 					Style::default().fg(Color::LightBlue).add_modifier(Modifier::REVERSED)
 				} else {
