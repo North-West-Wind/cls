@@ -1,10 +1,11 @@
-use std::{f32::consts::PI, io::{self, BufWriter, Read, Write}, process::{Child, ChildStdin, Command, Stdio}, sync::{LazyLock, Mutex, MutexGuard}, thread::{self, JoinHandle}, time::{Duration, SystemTime}};
+use std::{f32::consts::PI, io::{self, BufWriter, PipeWriter, Read, Write}, process::{Child, ChildStdin, Command, Stdio}, sync::{LazyLock, Mutex, MutexGuard}, thread::{self, JoinHandle}, time::{Duration, SystemTime}};
 
+use cpal::{SampleFormat, Stream, traits::{DeviceTrait, HostTrait}};
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}};
 use ratatui::{prelude::CrosstermBackend, Terminal};
 use signal_hook::iterator::Signals;
 
-use crate::{component::{block::log, popup::{PopupComponent, exit_popup, save::SavePopup, set_popup}}, config, constant::{APP_NAME, MIN_HEIGHT, MIN_WIDTH}, listener::{listen_events, listen_global, unlisten_global}, renderer, socket::{listen_socket, try_socket}, state::{Scanning, acquire, acquire_running, notify_redraw, wait_redraw}, util::{self, file::acquire_playing_files, waveform::{WaveType, acquire_playing_waves}}};
+use crate::{component::{block::log, popup::{PopupComponent, exit_popup, save::SavePopup, set_popup}}, config, constant::{APP_NAME, MIN_HEIGHT, MIN_WIDTH}, listener::{listen_events, listen_global, unlisten_global}, renderer, socket::{listen_socket, try_socket}, state::{Scanning, acquire, acquire_running, notify_redraw, wait_redraw}, util::{self, file::acquire_playing_files, fs::command_exists, waveform::{WaveType, acquire_playing_waves}}};
 
 pub fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
 	log::info("Spawning drawing thread...");
@@ -124,58 +125,64 @@ pub fn spawn_save_thread() {
 const FILE_CHUNK: usize = 1024;
 const WAVE_CHUNK: usize = 512;
 
-struct Pacat {
+struct AudioOutput {
 	last_used: SystemTime,
-	child: Child,
-	writer: BufWriter<ChildStdin>
+	pacat: Option<(Child, BufWriter<ChildStdin>)>,
+	stream: Option<(Stream, BufWriter<PipeWriter>)>,
 }
 
-static FILES: LazyLock<Mutex<Pacat>> = LazyLock::new(|| {
-	let mut child = Command::new("pacat").args([
-		"-d",
-		APP_NAME,
-		"--channels=2",
-		"--rate=48000",
-		"--format=float32le",
-		format!("--latency={}", FILE_CHUNK).as_str()
-	])
-		.stdin(Stdio::piped())
-		.stdout(Stdio::piped()).spawn().expect("Failed to spawn pacat process");
-	let stdin = child.stdin.take().unwrap();
-	let pacat = Pacat {
-		last_used: SystemTime::now(),
-		child: child,
-		writer: BufWriter::with_capacity(1024, stdin)
-	};
-	Mutex::new(pacat)
+fn create_audio_output() -> AudioOutput {
+	if command_exists("pacat") {
+		let mut child = Command::new("pacat").args([
+			"-d",
+			APP_NAME,
+			"--channels=2",
+			"--rate=48000",
+			"--format=float32le",
+			format!("--latency={}", FILE_CHUNK).as_str()
+		])
+			.stdin(Stdio::piped())
+			.stdout(Stdio::piped()).spawn().expect("Failed to spawn pacat process");
+		let stdin = child.stdin.take().unwrap();
+		return AudioOutput {
+			last_used: SystemTime::now(),
+			pacat: Some((child, BufWriter::with_capacity(1024, stdin))),
+			stream: None
+		};
+	} else {
+		let device = acquire().audio_host.default_output_device().expect("Failed to get audio device");
+		let mut configs = device.supported_output_configs().expect("Failed to get output configs");
+		let config = configs.find(|config| config.sample_format() == SampleFormat::F32).expect("No output config supports F32");
+		let config = config.with_sample_rate(48000).into();
+		let (mut reader, mut writer) = std::io::pipe().expect("Failed to create pipe");
+		let stream = device.build_output_stream(&config, |data: &mut [f32], _| {
+			let mut tmp = [0_u8; 1024 * 4];
+			while let read = reader.read(&mut tmp).expect("Failed to read audio") != 0 {
+					
+			}
+		}, |_| {}, None).expect("Failed to create stream");
+		return AudioOutput {
+			last_used: SystemTime::now(),
+			pacat: None,
+			stream: Some((stream, BufWriter::with_capacity(1024, writer)))
+		};
+	}
+}
+
+static FILES: LazyLock<Mutex<AudioOutput>> = LazyLock::new(|| {
+	Mutex::new(create_audio_output())
 });
 
-static WAVES: LazyLock<Mutex<Pacat>> = LazyLock::new(|| {
-	let mut child = Command::new("pacat").args([
-		"-d",
-		APP_NAME,
-		"--channels=1",
-		"--rate=48000",
-		"--format=float32le",
-		format!("--latency={}", WAVE_CHUNK).as_str()
-	])
-		.stdin(Stdio::piped())
-		.stdout(Stdio::piped()).spawn().expect("Failed to spawn pacat process");
-	let stdin = child.stdin.take().unwrap();
-	let pacat = Pacat {
-		last_used: SystemTime::now(),
-		child: child,
-		writer: BufWriter::with_capacity(1024, stdin)
-	};
-	Mutex::new(pacat)
+static WAVES: LazyLock<Mutex<AudioOutput>> = LazyLock::new(|| {
+	Mutex::new(create_audio_output())
 });
 
-fn acquire_files() -> MutexGuard<'static, Pacat> {
+fn acquire_files() -> MutexGuard<'static, AudioOutput> {
 	let pacat = FILES.lock().unwrap();
 	pacat
 }
 
-fn acquire_waves() -> MutexGuard<'static, Pacat> {
+fn acquire_waves() -> MutexGuard<'static, AudioOutput> {
 	let pacat = WAVES.lock().unwrap();
 	pacat
 }
@@ -227,20 +234,11 @@ pub fn spawn_pacat_file_thread() {
 					pacat_init = true;
 				} else if !pacat_running {
 					// Pacat is killed. Needs respawn
-					pacat.child = Command::new("pacat").args([
-						"-d",
-						APP_NAME,
-						"--channels=2",
-						"--rate=48000",
-						"--format=float32le",
-						format!("--latency={}", FILE_CHUNK).as_str()
-					])
-						.stdin(Stdio::piped())
-						.stdout(Stdio::piped()).spawn().expect("Failed to respawn pacat process");
-					pacat.writer = BufWriter::with_capacity(1024, pacat.child.stdin.take().unwrap());
+					*pacat = create_audio_output();
 				}
 
 				pacat_running = true;
+				
 				pacat.writer.write_all(&bytes).expect("Failed to write to pacat stdin");
 				// If blocked, we wait
 				while let Err(err) = pacat.writer.flush() {

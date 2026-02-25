@@ -1,5 +1,6 @@
 use std::{collections::HashMap, path::Path, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard, OnceLock}};
 
+use cpal::Host;
 use linked_hash_map::LinkedHashMap;
 use mki::Keyboard;
 use ratatui::{style::{Color, Style}, widgets::BorderType};
@@ -42,6 +43,7 @@ pub struct App {
 	pub module_loopback_default: String,
 	pub module_loopback_1: String,
 	pub module_loopback_2: String,
+	pub audio_host: Host,
 	// render states: files
 	pub files: HashMap<String, Vec<(String, String)>>,
 	pub scanning: Scanning,
@@ -167,6 +169,7 @@ fn static_app(hidden: bool, edit: bool) -> &'static Mutex<App> {
 			module_loopback_default: String::new(),
 			module_loopback_1: String::new(),
 			module_loopback_2: String::new(),
+			audio_host: cpal::default_host(),
 			// render states: files
 			files: HashMap::new(),
 			scanning: Scanning::None,
