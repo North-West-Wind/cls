@@ -3,7 +3,7 @@ use std::{cmp::{max, min}, sync::{LazyLock, Mutex, MutexGuard}};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 
-use crate::{component::block::{BlockNavigation, BlockSingleton, tabs::TabsBlock, waves::WavesBlock}, config::FileEntry, state::acquire, util::{global_input::{keyboard_to_string, sort_keys}, pulseaudio::set_volume_percentage, selected_file_path}};
+use crate::{component::block::{BlockNavigation, BlockSingleton, tabs::TabsBlock, waves::WavesBlock}, config::FileEntry, state::{MainOpened, acquire}, util::{global_input::{keyboard_to_string, sort_keys}, pulseaudio::set_volume_percentage, selected_file_path}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -35,53 +35,57 @@ impl BlockRenderArea for InfoBlock {
 		let mut lines = vec![
 			volume_line("Sink Volume".to_string(), app.config.volume, area.width, self.selected == 0)
 		];
-		if app.waves_opened {
-			let index = { WavesBlock::instance().selected };
-			if index < app.waves.len() {
-				let wave = &app.waves[index];
-				lines.push(Line::from(""));
-				lines.push(Line::from(vec![
-					Span::from("Selected "),
-					Span::from(format!("{} ({})", wave.label, wave.details())).style(Style::default().fg(Color::LightBlue))
-				]));
-				lines.push(volume_line("Wave Volume".to_string(), wave.volume, area.width, self.selected == 1));
-				let mut spans = vec![];
-				spans.push(Span::from("ID "));
-				spans.push(wave.id.map_or( Span::from("None").style(Style::default().fg(Color::Red)), |id| { Span::from(format!(" {} ", id)).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)) }));
-				spans.push(Span::from(" | Keys "));
-				if wave.keys.is_empty() {
-					spans.push(Span::from("None").style(Style::default().fg(Color::Red)));
-				} else {
-					let mut keys = wave.keys.iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
-					let keys = sort_keys(&mut keys);
-					spans.push(Span::from(format!(" {{{}}} ", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
+		match app.main_opened {
+			MainOpened::File => {
+				let path = selected_file_path(&app.config.tabs, &app.files, None);
+				if !path.is_empty() {
+					lines.push(Line::from(""));
+					lines.push(Line::from(vec![
+						Span::from("Selected "),
+						Span::from(path.clone()).style(Style::default().fg(Color::LightGreen))
+					]));
+					let (volume, hotkey, file_id) = match app.config.get_file_entry(path) {
+						Some(entry) => (entry.volume, if entry.keys.is_empty() { None } else {
+							let mut keys = entry.keys.clone().into_iter().collect::<Vec<String>>();
+							let keys = sort_keys(&mut keys);
+							Some(format!("{{{}}}", keys.join(" ")))
+						}, entry.id),
+						None => (100, None, None)
+					};
+					lines.push(volume_line("File Volume".to_string(), volume, area.width, self.selected == 1));
+					let mut spans = vec![];
+					spans.push(Span::from("ID "));
+					spans.push(file_id.map_or( Span::from("None").style(Style::default().fg(Color::Red)), |id| { Span::from(format!(" {} ", id)).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)) }));
+					spans.push(Span::from(" | Keys "));
+					spans.push(hotkey.map_or(Span::from("None").style(Style::default().fg(Color::Red)), |keys| { Span::from(format!(" {} ", keys)).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)) }));
+					lines.push(Line::from(spans));
 				}
-				lines.push(Line::from(spans));
-			}
-		} else {
-			let path = selected_file_path(&app.config.tabs, &app.files, None);
-			if !path.is_empty() {
-				lines.push(Line::from(""));
-				lines.push(Line::from(vec![
-					Span::from("Selected "),
-					Span::from(path.clone()).style(Style::default().fg(Color::LightGreen))
-				]));
-				let (volume, hotkey, file_id) = match app.config.get_file_entry(path) {
-					Some(entry) => (entry.volume, if entry.keys.is_empty() { None } else {
-						let mut keys = entry.keys.clone().into_iter().collect::<Vec<String>>();
+			},
+			MainOpened::Wave => {
+				let index = { WavesBlock::instance().selected };
+				if index < app.waves.len() {
+					let wave = &app.waves[index];
+					lines.push(Line::from(""));
+					lines.push(Line::from(vec![
+						Span::from("Selected "),
+						Span::from(format!("{} ({})", wave.label, wave.details())).style(Style::default().fg(Color::LightBlue))
+					]));
+					lines.push(volume_line("Wave Volume".to_string(), wave.volume, area.width, self.selected == 1));
+					let mut spans = vec![];
+					spans.push(Span::from("ID "));
+					spans.push(wave.id.map_or( Span::from("None").style(Style::default().fg(Color::Red)), |id| { Span::from(format!(" {} ", id)).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)) }));
+					spans.push(Span::from(" | Keys "));
+					if wave.keys.is_empty() {
+						spans.push(Span::from("None").style(Style::default().fg(Color::Red)));
+					} else {
+						let mut keys = wave.keys.iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
 						let keys = sort_keys(&mut keys);
-						Some(format!("{{{}}}", keys.join(" ")))
-					}, entry.id),
-					None => (100, None, None)
-				};
-				lines.push(volume_line("File Volume".to_string(), volume, area.width, self.selected == 1));
-				let mut spans = vec![];
-				spans.push(Span::from("ID "));
-				spans.push(file_id.map_or( Span::from("None").style(Style::default().fg(Color::Red)), |id| { Span::from(format!(" {} ", id)).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)) }));
-				spans.push(Span::from(" | Keys "));
-				spans.push(hotkey.map_or(Span::from("None").style(Style::default().fg(Color::Red)), |keys| { Span::from(format!(" {} ", keys)).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)) }));
-				lines.push(Line::from(spans));
-			}
+						spans.push(Span::from(format!(" {{{}}} ", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
+					}
+					lines.push(Line::from(spans));
+				}
+			},
+			_ => ()
 		}
 		let paragraph = Paragraph::new(Text::from(lines))
 			.block(block);
@@ -130,13 +134,12 @@ impl InfoBlock {
 	}
 
 	fn change_volume(&self, delta: i16) -> bool {
-		let waves_opened = { acquire().waves_opened };
 		if self.selected == 1 {
-			if waves_opened {
-				return change_wave_volume(delta);
-			} else {
-				return change_file_volume(delta);
-			}
+			return match acquire().main_opened {
+				MainOpened::File => change_file_volume(delta),
+				MainOpened::Wave => change_wave_volume(delta),
+				_ => false
+			};
 		}
 		let mut app = acquire();
 		let old_volume = app.config.volume as i16;

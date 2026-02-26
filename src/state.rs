@@ -1,11 +1,11 @@
-use std::{collections::HashMap, path::Path, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard, OnceLock}};
+use std::{collections::{HashMap, HashSet}, path::Path, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard, OnceLock}};
 
 use linked_hash_map::LinkedHashMap;
 use mki::Keyboard;
 use ratatui::{style::{Color, Style}, widgets::BorderType};
 use uuid::Uuid;
 
-use crate::{config::{load, SoundboardConfig}, util::{global_input::string_to_keyboard, pulseaudio::unload_module, waveform::Waveform}};
+use crate::{component::block::{BlockNavigation, dialogs::DialogBlock, files::FilesBlock, waves::WavesBlock}, config::{SoundboardConfig, load}, util::{dialog::Dialog, global_input::string_to_keyboard, pulseaudio::unload_module, waveform::Waveform}};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum SelectionLayer {
@@ -18,6 +18,25 @@ pub enum Scanning {
 	None,
 	All,
 	One(usize)
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum MainOpened {
+	File,
+	Wave,
+	Dialog,
+	Log
+}
+
+impl MainOpened {
+	pub fn id(&self, fallback: u8) -> u8 {
+		match self {
+			MainOpened::File => FilesBlock::ID,
+			MainOpened::Wave => WavesBlock::ID,
+			MainOpened::Dialog => DialogBlock::ID,
+			_ => fallback
+		}
+	}
 }
 
 pub struct App {
@@ -35,8 +54,7 @@ pub struct App {
 	pub block_selected: u8,
 	pub selection_layer: SelectionLayer,
 	pub settings_opened: bool,
-	pub waves_opened: bool,
-	pub logs_opened: bool,
+	pub main_opened: MainOpened,
 	// pulseaudio
 	pub module_null_sink: String,
 	pub module_loopback_default: String,
@@ -45,12 +63,14 @@ pub struct App {
 	// render states: files
 	pub files: HashMap<String, Vec<(String, String)>>,
 	pub scanning: Scanning,
-	pub rev_file_id: HashMap<u32, String>,
+	pub file_ids: HashMap<u32, String>,
 	// render states: playing
 	pub playing_file: LinkedHashMap<Uuid, (u32, String)>,
 	pub playing_wave: LinkedHashMap<Uuid, String>,
 	// waves
 	pub waves: Vec<Waveform>,
+	// dialog
+	pub dialogs: Vec<Dialog>,
 }
 
 impl App {
@@ -82,7 +102,21 @@ impl App {
 	}
 }
 
-pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Vec<Keyboard>>, HashMap<u32, String>, Vec<Waveform>) {
+fn key_strings_to_keyboards(keys: &HashSet<String>) -> Vec<Keyboard> {
+	let mut keyboard = vec![];
+	keys.iter().for_each(|key| {
+		let result = string_to_keyboard(key);
+		result.inspect(|result| {
+			keyboard.push(*result);
+		});
+	});
+	if keyboard.len() != keys.len() {
+		keyboard.clear();
+	}
+	keyboard
+}
+
+pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Vec<Keyboard>>, HashMap<u32, String>, Vec<Waveform>, Vec<Dialog>) {
 	let config = load();
 	let mut stopkey = vec![];
 	if config.stop_key.len() > 0 {
@@ -97,54 +131,54 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 		}
 	}
 	let mut hotkey = HashMap::new();
-	let mut rev_file_id = HashMap::new();
+	let mut file_ids = HashMap::new();
 	for (parent, map) in config.files.iter() {
 		for (name, entry) in map {
 			let path = Path::new(parent).join(name).to_str().unwrap().to_string();
-			let mut keyboard = vec![];
-			entry.keys.iter().for_each(|key| {
-				let result = string_to_keyboard(key);
-				result.inspect(|result| {
-					keyboard.push(*result);
-				});
-			});
-			let key_len = entry.keys.len();
-			if keyboard.len() > 0 && keyboard.len() == key_len {
+			let keyboard = key_strings_to_keyboards(&entry.keys);
+			if keyboard.len() > 0 && keyboard.len() == entry.keys.len() {
 				hotkey.insert(path.clone(), keyboard);
 			}
 
 			entry.id.inspect(|id| {
-				rev_file_id.insert(*id, path);
+				file_ids.insert(*id, path);
 			});
 		}
 	}
 	let mut waves = vec![];
 	for wave in config.waves.iter() {
-		let mut keyboard = vec![];
-		wave.keys.iter().for_each(|key| {
-			let result = string_to_keyboard(key);
-			result.inspect(|result| {
-				keyboard.push(*result);
-			});
+		let keyboard = key_strings_to_keyboards(&wave.keys);
+		waves.push(Waveform {
+			label: wave.label.clone(),
+			id: wave.id,
+			keys: keyboard,
+			waves: wave.waves.clone(),
+			volume: wave.volume,
+			playing: Arc::new(Mutex::new((false, false)))
 		});
-		if keyboard.len() == wave.keys.len() {
-			waves.push(Waveform {
-				label: wave.label.clone(),
-				id: wave.id,
-				keys: keyboard,
-				waves: wave.waves.clone(),
-				volume: wave.volume,
-				playing: Arc::new(Mutex::new((false, false)))
-			});
-		}
 	}
-	(config, stopkey, hotkey, rev_file_id, waves)
+	let mut dialogs = vec![];
+	for dialog in config.dialogs.iter() {
+		let keyboard = key_strings_to_keyboards(&dialog.keys);
+		dialogs.push(Dialog {
+			label: dialog.label.clone(),
+			id: dialog.id,
+			keys: keyboard,
+			files: dialog.files.clone(),
+			delay: dialog.delay,
+			random: dialog.random,
+			play_next: 0,
+			playing: Arc::new(Mutex::new((false, false)))
+		});
+	}
+
+	(config, stopkey, hotkey, file_ids, waves, dialogs)
 }
 
 fn static_app(hidden: bool, edit: bool) -> &'static Mutex<App> {
 	static APP: OnceLock<Mutex<App>> = OnceLock::new();
 	APP.get_or_init(|| {
-		let (config, stopkey, hotkey, rev_file_id, waves) = load_app_config();
+		let (config, stopkey, hotkey, file_ids, waves, dialogs) = load_app_config();
 		let app = App {
 			// config
 			config,
@@ -160,8 +194,7 @@ fn static_app(hidden: bool, edit: bool) -> &'static Mutex<App> {
 			block_selected: 0,
 			selection_layer: SelectionLayer::Block,
 			settings_opened: false,
-			waves_opened: false,
-			logs_opened: false,
+			main_opened: MainOpened::File,
 			// pulseaudio
 			module_null_sink: String::new(),
 			module_loopback_default: String::new(),
@@ -170,12 +203,14 @@ fn static_app(hidden: bool, edit: bool) -> &'static Mutex<App> {
 			// render states: files
 			files: HashMap::new(),
 			scanning: Scanning::None,
-			rev_file_id,
+			file_ids,
 			// render states: playing
 			playing_file: LinkedHashMap::new(),
 			playing_wave: LinkedHashMap::new(),
 			// waves
-			waves
+			waves,
+			// dialogs
+			dialogs,
 		};
 		Mutex::new(app)
 	})

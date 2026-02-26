@@ -8,9 +8,10 @@ use mki::Keyboard;
 use ratatui::{layout::Rect, Frame};
 use save::SavePopup;
 
-use crate::{component::popup::{confirm::ConfirmPopup, wave::WavePopup}};
+use crate::component::popup::{confirm::ConfirmPopup, dialog::DialogPopup, wave::WavePopup};
 
 pub mod confirm;
+pub mod dialog;
 pub mod help;
 pub mod input;
 pub mod key_bind;
@@ -25,7 +26,8 @@ pub enum PopupComponent {
 	Input(InputPopup),
 	KeyBind(KeyBindPopup),
 	Save(SavePopup),
-	Wave(WavePopup)
+	Wave(WavePopup),
+	Dialog(DialogPopup),
 }
 
 pub trait PopupRender {
@@ -54,6 +56,7 @@ impl PopupRender for PopupComponent {
 			KeyBind(popup) => popup.render(f),
 			Save(popup) => popup.render(f),
 			Wave(popup) => popup.render(f),
+			Dialog(popup) => popup.render(f),
 		}
 	}
 }
@@ -67,7 +70,8 @@ impl PopupHandleKey for PopupComponent {
 			Input(popup) => popup.handle_key(event),
 			KeyBind(popup) => popup.handle_key(event),
 			Save(popup) => popup.handle_key(event),
-			Wave(popup) => popup.handle_key(event)
+			Wave(popup) => popup.handle_key(event),
+			Dialog(popup) => popup.handle_key(event),
 		}
 	}
 }

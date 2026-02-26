@@ -1,6 +1,6 @@
 use std::{path::Path, sync::{Mutex, MutexGuard, OnceLock}};
 
-use crate::{component::{block::{files::FilesBlock, info::InfoBlock, waves::WavesBlock, BlockNavigation, BlockSingleton}, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, set_popup, PopupComponent}}, state::acquire};
+use crate::{component::{block::{BlockNavigation, BlockSingleton, files::FilesBlock, info::InfoBlock}, popup::{PopupComponent, confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, set_popup}}, state::acquire};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -92,10 +92,7 @@ impl BlockNavigation for TabsBlock {
 
 	fn navigate_block(&self, _dx: i16, dy: i16) -> u8 {
 		if dy > 0 {
-			if acquire().waves_opened {
-				return WavesBlock::ID;
-			}
-			return FilesBlock::ID;
+			return acquire().main_opened.id(Self::ID);
 		} else if dy < 0 {
 			return InfoBlock::ID;
 		}

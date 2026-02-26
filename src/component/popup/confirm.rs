@@ -1,14 +1,16 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Style}, text::{Line, Text}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 
-use crate::{component::{block::{tabs::TabsBlock, waves::WavesBlock, BlockSingleton}, popup::defer_exit_popup}, state::{acquire, acquire_running}};
+use crate::{component::{block::{BlockSingleton, dialogs::DialogBlock, tabs::TabsBlock, waves::WavesBlock}, popup::defer_exit_popup}, state::{acquire, acquire_running}};
 
 use super::{PopupHandleKey, PopupRender};
 
 pub enum ConfirmAction {
 	DeleteTab,
 	DeleteWave,
+	DeleteDialog,
 	DiscardWaveChanges,
+	DiscardDialogChanges,
 	Quit
 }
 
@@ -47,7 +49,8 @@ impl PopupHandleKey for ConfirmPopup {
 				match self.action {
 					DeleteTab => self.delete_tab(),
 					DeleteWave => self.delete_wave(),
-					DiscardWaveChanges => self.discard_wave_changes(),
+					DeleteDialog => self.delete_dialog(),
+					DiscardWaveChanges|DiscardDialogChanges => self.exit_popup(),
 					Quit => self.quit()
 				}
 			},
@@ -62,11 +65,11 @@ impl ConfirmPopup {
 		let title: &str;
 		let verb: &str;
 		match action {
-			DeleteTab|DeleteWave => {
+			DeleteTab|DeleteWave|DeleteDialog => {
 				title = "Delete?";
 				verb = "delete";
 			},
-			DiscardWaveChanges => {
+			DiscardWaveChanges|DiscardDialogChanges => {
 				title = "Discard?";
 				verb = "discard";
 			},
@@ -109,7 +112,20 @@ impl ConfirmPopup {
 		true
 	}
 
-	fn discard_wave_changes(&self) -> bool {
+	fn delete_dialog(&self) -> bool {
+		let mut app = acquire();
+		let mut dialog_block = DialogBlock::instance();
+		let selected = dialog_block.selected;
+		app.dialogs.remove(selected);
+		app.config.dialogs.remove(selected);
+		let len = app.config.dialogs.len();
+		if selected >= len && len != 0 {
+			dialog_block.selected = len - 1;
+		}
+		true
+	}
+
+	fn exit_popup(&self) -> bool {
 		defer_exit_popup(); // exit the wave popup
 		true
 	}

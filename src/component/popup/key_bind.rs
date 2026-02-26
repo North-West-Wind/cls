@@ -5,7 +5,7 @@ use linked_hash_set::LinkedHashSet;
 use mki::Keyboard;
 use ratatui::{style::{Color, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 
-use crate::{component::{block::{waves::WavesBlock, BlockSingleton}, popup::defer_exit_popup}, config::FileEntry, state::{acquire, notify_redraw}, util::{global_input::keyboard_to_string, selected_file_path}};
+use crate::{component::{block::{BlockSingleton, dialogs::DialogBlock, waves::WavesBlock}, popup::defer_exit_popup}, config::FileEntry, state::{acquire, notify_redraw}, util::{global_input::keyboard_to_string, selected_file_path}};
 
 use super::{safe_centered_rect, PopupHandleGlobalKey, PopupHandleKey, PopupRender};
 
@@ -13,6 +13,7 @@ pub enum KeyBindFor {
 	File,
 	Stop,
 	Wave,
+	Dialog,
 }
 
 pub struct KeyBindPopup {
@@ -60,6 +61,7 @@ impl PopupHandleKey for KeyBindPopup {
 						KeyBindFor::File => self.set_file_key_bind(),
 						KeyBindFor::Stop => self.set_stop_key_bind(),
 						KeyBindFor::Wave => self.set_wave_key_bind(),
+						KeyBindFor::Dialog => self.set_dialog_key_bind(),
 					}
 					defer_exit_popup();
 				}
@@ -131,6 +133,14 @@ impl KeyBindPopup {
 		let selected = { WavesBlock::instance().selected };
 		app.config.waves[selected].keys = self.recorded.iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>();
 		app.waves[selected].keys = self.recorded.clone().into_iter().collect::<Vec<Keyboard>>();
+		notify_redraw();
+	}
+
+	fn set_dialog_key_bind(&self) {
+		let mut app = acquire();
+		let selected = { DialogBlock::instance().selected };
+		app.config.dialogs[selected].keys = self.recorded.iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>();
+		app.dialogs[selected].keys = self.recorded.clone().into_iter().collect::<Vec<Keyboard>>();
 		notify_redraw();
 	}
 }

@@ -2,7 +2,7 @@ use std::{io, time::Duration};
 use crossterm::event::{poll, read, Event, KeyEvent};
 use mki::Action;
 
-use crate::{component::{block, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste, popups}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{SelectionLayer, acquire, acquire_running, notify_redraw}, util::{file::{play_file, stop_all}, waveform::play_wave}};
+use crate::{component::{block, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste, popups}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{SelectionLayer, acquire, acquire_running, notify_redraw}, util::{file::{play_file, stop_all}}};
 
 pub fn listen_events() -> io::Result<()> {
 	let hidden = { acquire().hidden };
@@ -62,9 +62,24 @@ pub fn listen_global() {
 				return;
 			}
 			if wave.keys.iter().all(|key| { key.is_pressed() }) {
-				play_wave(wave.clone(), false);
+				wave.play(false);
 			} else {
 				let mut playing = wave.playing.lock().expect("Failed to lock mutex");
+				if !playing.1 {
+					playing.0 = false;
+				}
+			}
+		});
+
+		// Dialog hotkey
+		app.dialogs.iter().for_each(|dialog| {
+			if dialog.keys.len() == 0 {
+				return;
+			}
+			if dialog.keys.iter().all(|key| { key.is_pressed() }) {
+				dialog.play(false);
+			} else {
+				let mut playing = dialog.playing.lock().expect("Failed to lock mutex");
 				if !playing.1 {
 					playing.0 = false;
 				}

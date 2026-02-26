@@ -33,6 +33,16 @@ pub struct WaveformEntry {
 	pub volume: u32,
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default)]
+pub struct DialogEntry {
+	pub label: String,
+	pub id: Option<u32>,
+	pub keys: HashSet<String>,
+	pub files: Vec<String>,
+	pub delay: f32,
+	pub random: bool
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(default)]
 pub struct ConfigV1 {
@@ -47,6 +57,7 @@ pub struct ConfigV1 {
 	pub fast_scan: bool,
 	pub files: HashMap<String, HashMap<String, FileEntry>>,
 	pub waves: Vec<WaveformEntry>,
+	pub dialogs: Vec<DialogEntry>,
 }
 
 impl Default for ConfigV1 {
@@ -62,7 +73,8 @@ impl Default for ConfigV1 {
 			playlist_mode: false,
 			fast_scan: true,
 			files: HashMap::new(),
-			waves: vec![]
+			waves: vec![],
+			dialogs: vec![],
 		}
 	}
 }

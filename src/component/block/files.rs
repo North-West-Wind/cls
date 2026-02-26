@@ -261,7 +261,7 @@ impl FilesBlock {
 		let Some(entry) = app.config.get_file_entry_mut(path) else { return false };
 		let Some(id) = entry.id else { return false };
 		entry.id = Option::None;
-		app.rev_file_id.remove(&id);
+		app.file_ids.remove(&id);
 		true
 	}
 }

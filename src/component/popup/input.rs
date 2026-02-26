@@ -5,7 +5,7 @@ use normpath::PathExt;
 use ratatui::{style::{Color, Style}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 use tui_input::{Input, InputRequest, backend::crossterm::EventHandler};
 
-use crate::{component::{block::{tabs::TabsBlock, waves::{set_wave_name, WavesBlock}, BlockSingleton}, popup::{defer_exit_popup, popups, PopupComponent}}, config::FileEntry, state::{acquire, Scanning}, util::{pulseaudio::{loopback, unload_module}, selected_file_path, threads::spawn_scan_thread}};
+use crate::{component::{block::{BlockSingleton, dialogs::DialogBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupComponent, defer_exit_popup, popups}}, config::FileEntry, state::{Scanning, acquire, notify_redraw}, util::{pulseaudio::{loopback, unload_module}, selected_file_path, threads::spawn_scan_thread}};
 
 use super::{safe_centered_rect, PopupHandleKey, PopupHandlePaste, PopupRender};
 
@@ -13,14 +13,18 @@ use super::{safe_centered_rect, PopupHandleKey, PopupHandlePaste, PopupRender};
 pub enum AwaitInput {
 	None,
 	AddTab,
+	AddDialogFile,
 	Loopback1,
 	Loopback2,
 	SetFileId,
 	SetWaveId,
+	SetDialogId,
 	WaveFrequency,
 	WaveAmplitude,
 	WavePhase,
 	WaveName,
+	DialogName,
+	DialogDelay,
 }
 
 pub struct InputPopup {
@@ -58,15 +62,19 @@ impl PopupRender for InputPopup {
 		let input_para = Paragraph::new(input.value())
 			.scroll((0, scroll as u16))
 			.block(Block::bordered().border_type(BorderType::Rounded).border_style(Style::default().fg(Color::Green)).title(match self.await_input {
-				AddTab => "Add directory as tab",
+				AddTab => "Add Directory as Tab",
+				AddDialogFile => "Add Dialog File",
 				Loopback1 => "Loopback 1",
 				Loopback2 => "Loopback 2",
 				SetFileId => "File ID",
 				SetWaveId => "Wave ID",
+				SetDialogId => "Dialog ID",
 				WaveFrequency => "Frequency (Hz)",
 				WaveAmplitude => "Amplitude (default = 1)",
 				WavePhase => "Phase",
 				WaveName => "Waveform Label",
+				DialogName => "Dialog Label",
+				DialogDelay => "Dialog Delay",
 				_ => "Input"
 			}).padding(Padding::horizontal(1)).style(Style::default().fg(Color::Cyan)));
 		let input_area = safe_centered_rect(width, height, area);
@@ -109,7 +117,7 @@ impl PopupHandleKey for InputPopup {
 				true
 			},
 			KeyCode::Tab => {
-				if self.await_input == AwaitInput::AddTab {
+				if self.await_input == AwaitInput::AddTab || self.await_input == AwaitInput::AddDialogFile {
 					// Try to auto-fill path
 					let input = self.input.value();
 					let parent: &Path;
@@ -197,14 +205,18 @@ impl InputPopup {
 		if send {
 			match self.await_input {
 				AddTab => self.send_add_tab(),
+				AddDialogFile => self.send_add_dialog_file(),
 				Loopback1 => self.send_loopback(true),
 				Loopback2 => self.send_loopback(false),
 				SetFileId => self.send_file_id(),
 				SetWaveId => self.send_wave_id(),
+				SetDialogId => self.send_dialog_id(),
 				WaveFrequency => self.send_wave_frequency(),
 				WaveAmplitude => self.send_wave_amplitude(),
 				WavePhase => self.send_wave_phase(),
 				WaveName => self.send_wave_name(),
+				DialogName => self.send_dialog_name(),
+				DialogDelay => self.send_dialog_delay(),
 				_ => (),
 			}
 		}
@@ -219,6 +231,37 @@ impl InputPopup {
 		let len = app.config.tabs.len() - 1;
 		{ TabsBlock::instance().selected = len; }
 		spawn_scan_thread(Scanning::One(len));
+	}
+
+	fn send_add_dialog_file(&self) {
+		let mut new_files= vec![];
+		let path = Path::new(self.input.value());
+		if path.is_dir() {
+			let Ok(read_dir) = path.read_dir() else { return; };
+			read_dir.for_each(|file| {
+				let Ok(entry) = file else { return; };
+				let Ok(file_type) = entry.file_type() else { return; };
+				if !file_type.is_dir() {
+					let Ok(norm) = entry.path().normalize() else { return; };
+					new_files.push(norm.clone().into_os_string().into_string().unwrap());
+				}
+			});
+		} else {
+			let Ok(norm) = path.normalize() else { return; };
+			new_files.push(norm.clone().into_os_string().into_string().unwrap());
+		}
+		
+		thread::spawn(move || {
+			let mut popups = popups();
+			let Some(popup) = popups.iter_mut().find_map(|popup| {
+				match popup {
+					PopupComponent::Dialog(popup) => { Option::Some(popup) },
+					_ => Option::None
+				}
+			}) else { return; };
+
+			popup.dialog.files.append(&mut new_files);
+		});
 	}
 
 	fn send_loopback(&self, one: bool) {
@@ -256,14 +299,14 @@ impl InputPopup {
 			return;
 		}
 		let Ok(id) = u32::from_str_radix(self.input.value(), 10) else { return; };
-		let existing = app.rev_file_id.get(&id);
+		let existing = app.file_ids.get(&id);
 		if existing.is_some() {
 			if existing.unwrap() != &path {
 				app.error = "File ID must be unique".to_string();
 			}
 			return;
 		}
-		app.rev_file_id.insert(id, path.clone());
+		app.file_ids.insert(id, path.clone());
 		match app.config.get_file_entry_mut(path.clone()) {
 			Some(entry) => {
 				entry.id = Some(id);
@@ -282,6 +325,14 @@ impl InputPopup {
 		let selected = { WavesBlock::instance().selected };
 		app.waves[selected].id = Some(id);
 		app.config.waves[selected].id = Some(id);
+	}
+
+	fn send_dialog_id(&self) {
+		let Ok(id) = u32::from_str_radix(self.input.value(), 10) else { return; };
+		let mut app = acquire();
+		let selected = { DialogBlock::instance().selected };
+		app.dialogs[selected].id = Some(id);
+		app.config.dialogs[selected].id = Some(id);
 	}
 
 	fn send_wave_frequency(&self) {
@@ -339,6 +390,35 @@ impl InputPopup {
 	}
 
 	fn send_wave_name(&self) {
-		set_wave_name(self.input.value().to_string());
+		let name = self.input.value().to_string();
+		let mut app = acquire();
+		let selected = { WavesBlock::instance().selected };
+		app.waves[selected].label = name.clone();
+		app.config.waves[selected].label = name;
+		notify_redraw();
+	}
+
+	fn send_dialog_name(&self) {
+		let name = self.input.value().to_string();
+		let mut app = acquire();
+		let selected = { DialogBlock::instance().selected };
+		app.dialogs[selected].label = name.clone();
+		app.config.dialogs[selected].label = name;
+		notify_redraw();
+	}
+
+	fn send_dialog_delay(&self) {
+		let Ok(delay) = self.input.value().parse::<f32>() else { return; };
+		thread::spawn(move || {
+			let mut popups = popups();
+			let Some(popup) = popups.iter_mut().find_map(|popup| {
+				match popup {
+					PopupComponent::Dialog(popup) => { Option::Some(popup) },
+					_ => Option::None
+				}
+			}) else { return; };
+
+			popup.dialog.delay = delay;
+		});
 	}
 }

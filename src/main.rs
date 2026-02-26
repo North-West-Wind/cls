@@ -43,8 +43,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		.subcommand(Command::new("play").about("play a file").arg(Arg::new("path").required(true)))
 		.subcommand(Command::new("play-id").about("play a file by user-defined ID").arg(Arg::new("id").required(true)))
 		.subcommand(Command::new("play-wave").about("play a waveform by user-defined ID").arg(Arg::new("id").required(true)))
+		.subcommand(Command::new("play-dialog").about("play a dialog by user-defined ID").arg(Arg::new("id").required(true)))
 		.subcommand(Command::new("stop").about("stop all playing files"))
 		.subcommand(Command::new("stop-wave").about("stop a waveform by user-defined ID").arg(Arg::new("id").required(true)))
+		.subcommand(Command::new("stop-dialog").about("stop a dialog by user-defined ID").arg(Arg::new("id").required(true)))
 		.subcommand(Command::new("set-volume").about("set volume of the sink or a file").args([
 			Arg::new("volume").help("new volume or volume increment (-200 - +200)"),
 			Arg::new("increment").long("increment").help("increment volume instead of setting it").action(ArgAction::SetTrue),

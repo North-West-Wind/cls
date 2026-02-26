@@ -5,7 +5,7 @@ use code::SocketCode;
 use interprocess::local_socket::{traits::{ListenerExt, Stream as _}, GenericFilePath, GenericNamespaced, Listener, ListenerOptions, Name, NameType, Stream, ToFsName, ToNsName};
 use normpath::PathExt;
 
-use crate::{component::block::{BlockSingleton, log, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, acquire_running, load_app_config, notify_redraw}, util::{file::{play_file, stop_all}, fs::separate_parent_file, pulseaudio::set_volume_percentage, threads::spawn_scan_thread, waveform::{play_wave, stop_all_waves}}};
+use crate::{component::block::{BlockSingleton, log, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, acquire_running, load_app_config, notify_redraw}, util::{file::{play_file, stop_all}, fs::separate_parent_file, pulseaudio::set_volume_percentage, threads::spawn_scan_thread, waveform::stop_all_waves}};
 
 pub mod code;
 
@@ -75,12 +75,13 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 			return send_response(reader.get_mut(), &[0], true);
 		},
 		ReloadConfig => {
-			let (config, stopkey, hotkey, rev_file_id, waves) = load_app_config();
+			let (config, stopkey, hotkey, rev_file_id, waves, dialogs) = load_app_config();
 			app.config = config;
 			app.stopkey = stopkey;
 			app.hotkey = hotkey;
-			app.rev_file_id = rev_file_id;
+			app.file_ids = rev_file_id;
 			app.waves = waves;
+			app.dialogs = dialogs;
 			notify_redraw();
 			return send_response(reader.get_mut(), &[0], true);
 		},
@@ -178,7 +179,7 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 			let mut bytes = [0; 4];
 			reader.read_exact(&mut bytes)?;
 			let id = u32::from_le_bytes(bytes);
-			let path = app.rev_file_id.get(&id);
+			let path = app.file_ids.get(&id);
 			if path.is_some() {
 				let path = path.unwrap();
 				if !path.is_empty() {
@@ -199,9 +200,25 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 			if wave.is_some() {
 				let wave = wave.unwrap();
 				{ wave.playing.lock().unwrap().1 = true; }
-				play_wave((*wave).clone(), false);
+				wave.play(false);
 				notify_redraw();
 				let mut bytes = wave.label.as_bytes().to_vec();
+				bytes.insert(0, 0);
+				return send_response(reader.get_mut(), &bytes, true);
+			}
+			return send_response(reader.get_mut(), &[1], false);
+		},
+		PlayDialogId => {
+			let mut bytes = [0; 4];
+			reader.read_exact(&mut bytes)?;
+			let id = u32::from_le_bytes(bytes);
+			let dialog = app.dialogs.iter().find(|dialog| { dialog.id.is_some_and(|wave_id| wave_id == id) });
+			if dialog.is_some() {
+				let dialog = dialog.unwrap();
+				{ dialog.playing.lock().unwrap().1 = true; }
+				dialog.play(false);
+				notify_redraw();
+				let mut bytes = dialog.label.as_bytes().to_vec();
 				bytes.insert(0, 0);
 				return send_response(reader.get_mut(), &bytes, true);
 			}
@@ -219,6 +236,23 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 				playing.1 = false;
 				notify_redraw();
 				let mut bytes = wave.label.as_bytes().to_vec();
+				bytes.insert(0, 10);
+				return send_response(reader.get_mut(), &bytes, true);
+			}
+			return send_response(reader.get_mut(), &[1], false);
+		},
+		StopDialogId => {
+			let mut bytes = [0; 4];
+			reader.read_exact(&mut bytes)?;
+			let id = u32::from_le_bytes(bytes);
+			let dialog = app.dialogs.iter().find(|dialog| { dialog.id.is_some_and(|wave_id| wave_id == id) });
+			if dialog.is_some() {
+				let dialog = dialog.unwrap();
+				let mut playing = dialog.playing.lock().expect("Failed to lock mutex");
+				playing.0 = false;
+				playing.1 = false;
+				notify_redraw();
+				let mut bytes = dialog.label.as_bytes().to_vec();
 				bytes.insert(0, 10);
 				return send_response(reader.get_mut(), &bytes, true);
 			}

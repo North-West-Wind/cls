@@ -76,6 +76,58 @@ impl Waveform {
 			format!("{:?} {:.2} Hz + {} more", self.waves[0].wave_type,  self.waves[0].frequency, self.waves.len() - 1)
 		}
 	}
+
+	pub fn play(&self, auto_stop: bool) {
+		let wave = self.clone();
+		thread::spawn(move || {
+			let uuid = Uuid::new_v4();
+			let mut app = acquire();
+
+			if app.edit {
+				return;
+			}
+
+			if wave.waves.len() == 0 {
+				return;
+			}
+
+			let mut playing = wave.playing.lock().expect("Failed to check if wave is playing");
+			if playing.0 {
+				return;
+			}
+			playing.0 = true;
+			drop(playing);
+
+			let playable = wave.waves.iter().map(|w| {
+				PlayableWave {
+					wave_type: w.wave_type,
+					period: (1.0 * 48000.0 / w.frequency) as u32,
+					samples: (48000.0 * w.phase) as u32,
+					amplitude: w.amplitude * (wave.volume as f32) / 100.0
+				}
+			}).collect::<Vec<PlayableWave>>();
+			app.playing_wave.insert(uuid, format!("{} ({})", wave.label, wave.details()));
+			acquire_playing_waves().insert(uuid, playable);
+			drop(app);
+			notify_redraw();
+
+			if auto_stop {
+				thread::sleep(Duration::from_secs(1));
+			} else {
+				while {
+					let (playing, force) = *wave.playing.lock().unwrap();
+					playing && force
+				} || wave.keys.iter().all(|key| { key.is_pressed() }) {
+					thread::sleep(Duration::from_millis(100));
+				}
+			}
+			wave.playing.lock().unwrap().0 = false;
+
+			acquire().playing_wave.remove(&uuid);
+			acquire_playing_waves().remove(&uuid);
+			notify_redraw();
+		});
+	}
 }
 
 pub struct PlayableWave {
@@ -89,57 +141,6 @@ static PLAYING_WAVES: LazyLock<Mutex<HashMap<Uuid, Vec<PlayableWave>>>> = LazyLo
 
 pub fn acquire_playing_waves() -> MutexGuard<'static, HashMap<Uuid, Vec<PlayableWave>>> {
 	PLAYING_WAVES.lock().unwrap()
-}
-
-pub fn play_wave(wave: Waveform, auto_stop: bool) {
-	thread::spawn(move || {
-		let uuid = Uuid::new_v4();
-		let mut app = acquire();
-
-		if app.edit {
-			return;
-		}
-
-		if wave.waves.len() == 0 {
-			return;
-		}
-
-		let mut playing = wave.playing.lock().expect("Failed to check if wave is playing");
-		if playing.0 {
-			return;
-		}
-		playing.0 = true;
-		drop(playing);
-
-		let playable = wave.waves.iter().map(|w| {
-			PlayableWave {
-				wave_type: w.wave_type,
-				period: (1.0 * 48000.0 / w.frequency) as u32,
-				samples: (48000.0 * w.phase) as u32,
-				amplitude: w.amplitude * (wave.volume as f32) / 100.0
-			}
-		}).collect::<Vec<PlayableWave>>();
-		app.playing_wave.insert(uuid, format!("{} ({})", wave.label, wave.details()));
-		acquire_playing_waves().insert(uuid, playable);
-		drop(app);
-		notify_redraw();
-
-		if auto_stop {
-			thread::sleep(Duration::from_secs(1));
-		} else {
-			while {
-				let (playing, force) = *wave.playing.lock().unwrap();
-				playing && force
-			} || wave.keys.iter().all(|key| { key.is_pressed() }) {
-				thread::sleep(Duration::from_millis(100));
-			}
-		}
-		wave.playing.lock().unwrap().0 = false;
-
-		acquire().playing_wave.remove(&uuid);
-		acquire_playing_waves().remove(&uuid);
-		notify_redraw();
-	});
 }
 
 pub fn stop_all_waves() {

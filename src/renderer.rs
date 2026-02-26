@@ -2,7 +2,7 @@ use ratatui::{
 	layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, widgets::{Block, BorderType, Borders, Paragraph}, Frame
 };
 
-use crate::{component::{block::{BlockRender, BlockRenderArea, BlockSingleton, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::LogBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupRender, popups}}, state::acquire};
+use crate::{component::{block::{BlockRender, BlockRenderArea, BlockSingleton, dialogs::DialogBlock, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::LogBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupRender, popups}}, state::{MainOpened, acquire}};
 
 pub fn ui(f: &mut Frame) {
 	let app = acquire();
@@ -24,10 +24,9 @@ pub fn ui(f: &mut Frame) {
 		.split(f.area());
 
 	let settings = app.settings_opened;
-	let waves = app.waves_opened;
-	let logs = app.logs_opened;
+	let main_opened = app.main_opened;
 	drop(app);
-	if logs {
+	if main_opened == MainOpened::Log {
 		LogBlock::instance().render_area(f, f.area());
 		return;
 	}
@@ -49,10 +48,11 @@ pub fn ui(f: &mut Frame) {
 	} else {
 		files_area = chunks[2];
 	}
-	if waves {
-		WavesBlock::instance().render_area(f, files_area);
-	} else {
-		FilesBlock::instance().render_area(f, files_area);
+	match main_opened {
+		MainOpened::File => FilesBlock::instance().render_area(f, files_area),
+		MainOpened::Wave => WavesBlock::instance().render_area(f, files_area),
+		MainOpened::Dialog => DialogBlock::instance().render_area(f, files_area),
+		_ => ()
 	}
 	{ HelpBlock::instance().render_area(f, chunks[3]); }
 	{ PlayingBlock::instance().render(f); }

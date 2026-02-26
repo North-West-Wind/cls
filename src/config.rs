@@ -3,6 +3,7 @@ use migrate::migrate_config;
 pub use migrate::SoundboardConfig;
 pub use migrate::FileEntry;
 pub use migrate::WaveformEntry;
+pub use migrate::DialogEntry;
 
 use crate::constant::APP_NAME;
 use crate::state::acquire;

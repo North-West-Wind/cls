@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::{component::{block::{self, files::FilesBlock, settings::SettingsBlock, waves::WavesBlock, BlockNavigation}, popup::confirm::{ConfirmAction, ConfirmPopup}}, state::{acquire, SelectionLayer}, util::threads::spawn_save_thread};
+use crate::{component::{block::{self, BlockNavigation, dialogs::DialogBlock, files::FilesBlock, settings::SettingsBlock, waves::WavesBlock}, popup::confirm::{ConfirmAction, ConfirmPopup}}, state::{MainOpened, SelectionLayer, acquire}, util::threads::spawn_save_thread};
 
 use super::{popup::{help::HelpPopup, set_popup, PopupComponent}};
 
@@ -24,23 +24,25 @@ pub fn handle_key(event: KeyEvent) -> bool {
 			let mut app = acquire();
 			app.settings_opened = !app.settings_opened;
 			if !app.settings_opened && app.block_selected == SettingsBlock::ID {
-				app.block_selected = if app.waves_opened { WavesBlock::ID } else { FilesBlock::ID };
+				app.block_selected = app.main_opened.id(SettingsBlock::ID);
 			}
 			return true;
 		},
 		KeyCode::Char('w') => {
-			let mut app = acquire();
-			app.waves_opened = !app.waves_opened;
-			if app.waves_opened && app.block_selected == FilesBlock::ID {
-				app.block_selected = WavesBlock::ID;
-			} else if !app.waves_opened && app.block_selected == WavesBlock::ID {
-				app.block_selected = FilesBlock::ID;
-			}
+			toggle_main_opened(MainOpened::Wave);
+			return true;
+		},
+		KeyCode::Char('t') => {
+			toggle_main_opened(MainOpened::Dialog);
 			return true;
 		},
 		KeyCode::Char('\\') => {
 			let mut app = acquire();
-			app.logs_opened = !app.logs_opened;
+			if app.main_opened == MainOpened::Log {
+				app.main_opened = MainOpened::File;
+			} else {
+				app.main_opened = MainOpened::Log;
+			}
 			return true;
 		},
 		_ => {
@@ -93,5 +95,17 @@ pub fn navigate_layer(escape: bool) -> bool {
 			},
 			SelectionLayer::Content => return false,
 		}
+	}
+}
+
+fn toggle_main_opened(main_opened: MainOpened) {
+	let mut app = acquire();
+	if app.main_opened == main_opened {
+		app.main_opened = MainOpened::File;
+	} else {
+		app.main_opened = main_opened;
+	}
+	if app.block_selected == FilesBlock::ID || app.block_selected == WavesBlock::ID || app.block_selected == DialogBlock::ID {
+		app.block_selected = app.main_opened.id(app.block_selected);
 	}
 }

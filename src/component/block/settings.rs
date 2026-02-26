@@ -3,7 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Padding, Paragraph}, Frame};
 use substring::Substring;
 
-use crate::{component::{block::{files::FilesBlock, waves::WavesBlock, BlockNavigation, BlockSingleton}, popup::{input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup, PopupComponent}}, state::acquire, util::pulseaudio::{loopback, unload_module}};
+use crate::{component::{block::{BlockNavigation, BlockSingleton}, popup::{PopupComponent, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, state::acquire, util::pulseaudio::{loopback, unload_module}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -75,10 +75,7 @@ impl BlockNavigation for SettingsBlock {
 
 	fn navigate_block(&self, dx: i16, _dy: i16) -> u8 {
 		if dx < 0 {
-			if acquire().waves_opened {
-				return WavesBlock::ID;
-			}
-			return FilesBlock::ID;
+			return acquire().main_opened.id(Self::ID);
 		}
 		Self::ID
 	}

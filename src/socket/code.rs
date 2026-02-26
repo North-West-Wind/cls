@@ -14,8 +14,10 @@ pub enum SocketCode {
 	Play,
 	PlayId,
 	PlayWaveId,
+	PlayDialogId,
 	Stop,
 	StopWaveId,
+	StopDialogId,
 
 	SetVolume,
 }
@@ -33,8 +35,10 @@ impl SocketCode {
 			"play" => Some(Play),
 			"play-id" => Some(PlayId),
 			"play-wave" => Some(PlayWaveId),
+			"play-dialog" => Some(PlayDialogId),
 			"stop" => Some(Stop),
 			"stop-wave" => Some(StopWaveId),
+			"stop-dialog" => Some(StopDialogId),
 			"set-volume" => Some(SetVolume),
 			_ => None,
 		}
@@ -70,8 +74,10 @@ impl SocketCode {
 			Play => 6,
 			PlayId => 9,
 			PlayWaveId => 10,
+			PlayDialogId => 12,
 			Stop => 7,
 			StopWaveId => 11,
+			StopDialogId => 13,
 			SetVolume => 8,
 		}
 	}

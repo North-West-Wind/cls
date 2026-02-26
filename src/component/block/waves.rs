@@ -6,7 +6,7 @@ use rand::Rng;
 use ratatui::{style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}};
 use substring::Substring;
 
-use crate::{component::{block::{loop_index, BlockSingleton}, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}}, state::notify_redraw, util::waveform::play_wave};
+use crate::{component::{block::{loop_index, BlockSingleton}, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}}};
 use crate::component::popup::wave::WavePopup;
 use crate::component::popup::{set_popup, PopupComponent};
 use crate::{component::block::{settings::SettingsBlock, tabs::TabsBlock, BlockHandleKey, BlockNavigation, BlockRenderArea}, state::acquire, util::waveform::Waveform};
@@ -155,7 +155,7 @@ impl WavesBlock {
 			}
 			index = self.selected;
 		}
-		play_wave(app.waves[index].clone(), true);
+		app.waves[index].play(true);
 		true
 	}
 
@@ -254,12 +254,4 @@ impl WavesBlock {
 		app.config.waves[self.selected].id = Option::None;
 		true
 	}
-}
-
-pub fn set_wave_name(name: String) {
-	let mut app = acquire();
-	let selected = { WavesBlock::instance().selected };
-	app.waves[selected].label = name.clone();
-	app.config.waves[selected].label = name;
-	notify_redraw();
 }
