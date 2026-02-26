@@ -65,7 +65,7 @@ pub struct App {
 	pub scanning: Scanning,
 	pub file_ids: HashMap<u32, String>,
 	// render states: playing
-	pub playing_file: LinkedHashMap<Uuid, (u32, String)>,
+	pub playing_file: LinkedHashMap<Uuid, String>,
 	pub playing_wave: LinkedHashMap<Uuid, String>,
 	// waves
 	pub waves: Vec<Waveform>,

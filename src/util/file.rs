@@ -1,13 +1,15 @@
-use std::{collections::HashMap, io::BufReader, path::Path, process::{ChildStdout, Command, Stdio}, sync::{LazyLock, Mutex, MutexGuard}, thread, time::Duration};
+use std::{collections::HashMap, num::NonZero, path::Path, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard}, thread, time::Duration};
 
-use nix::{sys::signal::{self, Signal}, unistd::Pid};
+use symphonium::{DecodedAudioF32, ResampleQuality, SymphoniumLoader};
 use uuid::Uuid;
 
 use crate::{state::{acquire, acquire_playlist_lock, notify_redraw}, util::ffprobe_info};
 
 pub struct PlayableFile {
-	pub reader: BufReader<ChildStdout>,
+	pub head: usize,
+	pub data: DecodedAudioF32,
 	pub volume: f32,
+	pub signal: Arc<(Mutex<bool>, Condvar)>
 }
 
 static PLAYING_FILES: LazyLock<Mutex<HashMap<Uuid, PlayableFile>>> = LazyLock::new(|| { Mutex::new(HashMap::new()) });
@@ -22,7 +24,7 @@ pub fn play_file(path: &String) {
 		let uuid = Uuid::new_v4();
 		let mut app = acquire();
 		if app.edit {
-			app.playing_file.insert(uuid, (0, "Edit-only mode!".to_string()));
+			app.playing_file.insert(uuid, "Edit-only mode!".to_string());
 			notify_redraw();
 			drop(app);
 			thread::sleep(Duration::from_secs(1));
@@ -39,7 +41,7 @@ pub fn play_file(path: &String) {
 				.inspect(|_| {
 					let mut app = acquire();
 					let using_semaphore = app.config.playlist_mode;
-					app.playing_file.insert(uuid, (0, string.to_string()));
+					app.playing_file.insert(uuid, string.to_string());
 					drop(app);
 					notify_redraw();
 					let playlist_lock = if using_semaphore {
@@ -49,14 +51,12 @@ pub fn play_file(path: &String) {
 					};
 
 					let mut app = acquire();
-					let mut ffmpeg_child = Command::new("ffmpeg").args([
-						"-loglevel", "-8",
-						"-i", &string,
-						"-f", "f32le",
-						"-ac", "2",
-						"-ar", "48000",
-						"-"
-					]).stdout(Stdio::piped()).spawn().expect("Failed to spawn ffmpeg process");
+					let mut loader = SymphoniumLoader::new();
+					let audio_data = loader.load_f32(
+						&string,
+						Option::expect(Some(NonZero::new(48000)), "Failed to create sample rate"),
+						ResampleQuality::High,
+						None).unwrap();
 
 					let path = Path::new(&string);
 					let parent = path.parent().unwrap().to_str().unwrap().to_string();
@@ -70,11 +70,21 @@ pub fn play_file(path: &String) {
 						},
 						None => 1.0
 					};
-					acquire_playing_files().insert(uuid, PlayableFile { reader: BufReader::new(ffmpeg_child.stdout.take().unwrap()), volume });
-					app.playing_file.insert(uuid, (ffmpeg_child.id(), string.to_string()));
+					let signal = Arc::new((Mutex::new(false), Condvar::new()));
+					acquire_playing_files().insert(uuid, PlayableFile {
+						head: 0,
+						data: audio_data,
+						volume,
+						signal: signal.clone()
+					});
+					app.playing_file.insert(uuid, string.to_string());
 					drop(app);
 
-					let _ = ffmpeg_child.wait();
+					let (lock, cvar) = &*signal;
+					let mut ended = lock.lock().unwrap();
+					while !*ended {
+				    ended = cvar.wait(ended).unwrap();
+					}
 					if playlist_lock.is_some() {
 						drop(playlist_lock.unwrap());
 					}
@@ -86,11 +96,14 @@ pub fn play_file(path: &String) {
 pub fn stop_all() {
 	// Defer to avoid deadlock
 	thread::spawn(move || {
-		acquire_playing_files().clear();
-		let mut app = acquire();
-		for (id, _file) in app.playing_file.values() {
-			signal::kill(Pid::from_raw(*id as i32), Signal::SIGTERM).ok();
-		}
-		app.playing_file.clear();
+		let mut playing_files = acquire_playing_files();
+		playing_files.iter().for_each(|(_uuid, playable)| {
+	    let (lock, cvar) = &*playable.signal;
+	    let mut ended = lock.lock().unwrap();
+	    *ended = true;
+	    cvar.notify_one();
+		});
+		playing_files.clear();
+		acquire().playing_file.clear();
 	});
 }

@@ -24,7 +24,7 @@ impl BlockRender for PlayingBlock {
 		let mut lines: Vec<Line> = vec![];
 
 		if playing.len() > 0 {
-			lines.extend(playing.values().map(|(_id, file)| {
+			lines.extend(playing.values().map(|file| {
 				Line::from(file.as_str()).style(Style::default().fg(Color::LightGreen))
 			}));
 		}

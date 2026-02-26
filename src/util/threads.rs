@@ -1,4 +1,4 @@
-use std::{f32::consts::PI, io::{self, BufWriter, Read, Write}, process::{Child, ChildStdin, Command, Stdio}, sync::{LazyLock, Mutex, MutexGuard}, thread::{self, JoinHandle}, time::{Duration, SystemTime}};
+use std::{f32::consts::PI, io::{self, BufWriter, Write}, process::{Child, ChildStdin, Command, Stdio}, sync::{LazyLock, Mutex, MutexGuard}, thread::{self, JoinHandle}, time::{Duration, SystemTime}};
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}};
 use ratatui::{prelude::CrosstermBackend, Terminal};
@@ -192,18 +192,24 @@ pub fn spawn_pacat_file_thread() {
 			if playing_files.len() > 0 {
 				let mut sum_bytes = [0_f32; FILE_CHUNK];
 				for (uuid, playable) in playing_files.iter_mut() {
-					let Ok(read) = playable.reader.read(&mut bytes) else {
-						eofs.push(*uuid);
-						continue;
-					};
-					if read == 0 {
-						eofs.push(*uuid);
-						continue;
+					if playable.data.channels() == 1 {
+						for ii in 0..(FILE_CHUNK / 2).min(playable.data.data[0].len() - playable.head) {
+							sum_bytes[ii * 2] = playable.data.data[0][ii + playable.head] * playable.volume;
+							sum_bytes[ii * 2 + 1] = playable.data.data[0][ii + playable.head] * playable.volume;
+						}
+					} else {
+						for ii in 0..(FILE_CHUNK / 2).min(playable.data.data[0].len() - playable.head) {
+							sum_bytes[ii * 2] = playable.data.data[0][ii + playable.head] * playable.volume;
+							sum_bytes[ii * 2 + 1] = playable.data.data[1][ii + playable.head] * playable.volume;
+						}
 					}
-					for (ii, byte) in bytes[0..read].chunks_exact(4).map(|chunk| {
-						f32::from_le_bytes(chunk.try_into().unwrap())
-					}).enumerate() {
-						sum_bytes[ii] += byte * playable.volume;
+					playable.head += FILE_CHUNK / 2;
+					if playable.head >= playable.data.data[0].len() {
+						eofs.push(*uuid);
+				    let (lock, cvar) = &*playable.signal;
+				    let mut ended = lock.lock().unwrap();
+				    *ended = true;
+				    cvar.notify_one();
 					}
 				}
 				eofs.iter().for_each(|uuid| {
