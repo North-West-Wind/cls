@@ -1,9 +1,9 @@
-use std::{collections::HashMap, io::BufReader, path::Path, process::{ChildStdout, Command, Stdio}, sync::{Arc, LazyLock, Mutex, MutexGuard}, thread, time::{Duration, SystemTime}};
+use std::{collections::HashMap, io::BufReader, path::Path, process::{ChildStdout, Command, Stdio}, sync::{Arc, LazyLock, Mutex, MutexGuard}, thread, time::Duration};
 
 use nix::{sys::signal::{self, Signal}, unistd::Pid};
 use uuid::Uuid;
 
-use crate::{component::block::log, state::{acquire, notify_redraw}, util::ffprobe_info};
+use crate::state::{acquire, notify_redraw};
 
 pub struct PlayableFile {
 	pub reader: BufReader<ChildStdout>,
@@ -17,7 +17,6 @@ pub fn acquire_playing_files() -> MutexGuard<'static, HashMap<Uuid, PlayableFile
 }
 
 pub fn play_file(path: &String, lock: Arc<Mutex<()>>) {
-	log::info(format!("Playing {} at {}", path, SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis()).as_str());
 	let string = path.trim().to_string();
 	thread::spawn(move || {
 		let _locked = lock.lock().expect("Failed to lock while playing file");
@@ -33,47 +32,36 @@ pub fn play_file(path: &String, lock: Arc<Mutex<()>>) {
 			notify_redraw();
 			return;
 		}
+		let path = Path::new(&string);
+		let parent = path.parent().unwrap().to_str().unwrap().to_string();
+		let name = path.file_name().unwrap().to_os_string().into_string().unwrap();
+		let volume: f32 = match app.config.files.get(&parent) {
+			Some(map) => {
+				match map.get(&name) {
+					Some(entry) => (entry.volume as f32) / 100.0,
+					None => 1.0,
+				}
+			},
+			None => 1.0
+		};
 		drop(app);
 
-		let info = ffprobe_info(&string);
-		info.inspect(|info| {
-			info.streams.iter()
-				.find(|stream| stream.codec_type == Option::Some("audio".to_string()))
-				.inspect(|_| {
-					let mut app = acquire();
-					app.playing_file.insert(uuid, (0, string.to_string()));
-					drop(app);
-					notify_redraw();
+		let mut ffmpeg_child = Command::new("ffmpeg").args([
+			"-loglevel", "-8",
+			"-i", &string,
+			"-f", "f32le",
+			"-ac", "2",
+			"-ar", "48000",
+			"-"
+		]).stdout(Stdio::piped()).spawn().expect("Failed to spawn ffmpeg process");
 
-					let mut app = acquire();
-					let mut ffmpeg_child = Command::new("ffmpeg").args([
-						"-loglevel", "-8",
-						"-i", &string,
-						"-f", "f32le",
-						"-ac", "2",
-						"-ar", "48000",
-						"-"
-					]).stdout(Stdio::piped()).spawn().expect("Failed to spawn ffmpeg process");
+		acquire_playing_files().insert(uuid, PlayableFile { reader: BufReader::new(ffmpeg_child.stdout.take().unwrap()), volume });
+		let mut app = acquire();
+		app.playing_file.insert(uuid, (ffmpeg_child.id(), string.to_string()));
+		drop(app);
+		notify_redraw();
 
-					let path = Path::new(&string);
-					let parent = path.parent().unwrap().to_str().unwrap().to_string();
-					let name = path.file_name().unwrap().to_os_string().into_string().unwrap();
-					let volume: f32 = match app.config.files.get(&parent) {
-						Some(map) => {
-							match map.get(&name) {
-								Some(entry) => (entry.volume as f32) / 100.0,
-								None => 1.0,
-							}
-						},
-						None => 1.0
-					};
-					acquire_playing_files().insert(uuid, PlayableFile { reader: BufReader::new(ffmpeg_child.stdout.take().unwrap()), volume });
-					app.playing_file.insert(uuid, (ffmpeg_child.id(), string.to_string()));
-					drop(app);
-
-					let _ = ffmpeg_child.wait();
-				});
-		});
+		let _ = ffmpeg_child.wait();
 	});
 }
 

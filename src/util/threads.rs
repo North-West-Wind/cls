@@ -145,7 +145,7 @@ static FILES: LazyLock<Mutex<Pacat>> = LazyLock::new(|| {
 	let pacat = Pacat {
 		last_used: SystemTime::now(),
 		child: child,
-		writer: BufWriter::with_capacity(1024, stdin)
+		writer: BufWriter::with_capacity(FILE_CHUNK * 4, stdin)
 	};
 	Mutex::new(pacat)
 });
@@ -241,7 +241,7 @@ pub fn spawn_pacat_file_thread() {
 					])
 						.stdin(Stdio::piped())
 						.stdout(Stdio::piped()).spawn().expect("Failed to respawn pacat process");
-					pacat.writer = BufWriter::with_capacity(1024, pacat.child.stdin.take().unwrap());
+					pacat.writer = BufWriter::with_capacity(FILE_CHUNK * 4, pacat.child.stdin.take().unwrap());
 				}
 
 				pacat_running = true;
@@ -255,11 +255,14 @@ pub fn spawn_pacat_file_thread() {
 				}
 				pacat.last_used = SystemTime::now();
 			} else if pacat_running {
+				drop(playing_files);
 				let mut pacat = acquire_files();
 				if SystemTime::now().duration_since(pacat.last_used).expect("Failed to get pacat duration").as_secs() > 5 {
 					pacat.child.kill().expect("Failed to kill pacat");
 					pacat_running = false;
 				}
+			} else {
+				drop(playing_files);
 			}
 			thread::sleep(Duration::from_millis(10));
 		}

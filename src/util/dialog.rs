@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::{Arc, Mutex}, thread, time::{Duration, Sys
 use mki::Keyboard;
 use rand::Rng;
 
-use crate::{component::block::log, config::DialogEntry, state::{acquire, notify_redraw}, util::{file::play_file, global_input::keyboard_to_string}};
+use crate::{config::DialogEntry, state::{acquire, notify_redraw}, util::{file::play_file, global_input::keyboard_to_string}};
 
 #[derive(Clone)]
 pub struct Dialog {
@@ -93,14 +93,12 @@ impl Dialog {
 					} else {
 						Arc::new(Mutex::new(()))
 					};
-					log::info(format!("About to play dialog file at {}", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis()).as_str());
 					play_file(dialog.get_next_path(), lock.clone());
 					if dialog.sequential {
 						let _locked = lock.lock().expect("Failed to lock play lock");
 					} else {
 						thread::sleep(Duration::from_secs_f32(dialog.delay));
 					}
-					thread::sleep(Duration::from_secs_f32(dialog.delay));
 
 					// Calculate time elapsed
 					let duration = SystemTime::now().duration_since(start);
