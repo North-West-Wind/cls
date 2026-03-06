@@ -1,4 +1,4 @@
-use std::{f32::consts::PI, io::{self, BufWriter, Read, Write}, process::{Child, ChildStdin, Command, Stdio}, sync::{LazyLock, Mutex, MutexGuard}, thread::{self, JoinHandle}, time::{Duration, SystemTime}};
+use std::{f32::consts::PI, io::{self, BufWriter, Write}, process::{Child, ChildStdin, Command, Stdio}, sync::{LazyLock, Mutex, MutexGuard}, thread::{self, JoinHandle}, time::{Duration, SystemTime}};
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}};
 use ratatui::{prelude::CrosstermBackend, Terminal};
@@ -186,25 +186,28 @@ pub fn spawn_pacat_file_thread() {
 		let mut pacat_init = false;
 
 		while *acquire_running() {
-			let mut bytes = [0_u8; FILE_CHUNK * 4];
+			let mut buf_l = [0_f32; FILE_CHUNK];
+			let mut buf_r = [0_f32; FILE_CHUNK];
+			let mut bytes = [0_u8; FILE_CHUNK * 8];
 			let mut playing_files = acquire_playing_files();
 			let mut eofs = vec![];
 			if playing_files.len() > 0 {
-				let mut sum_bytes = [0_f32; FILE_CHUNK];
+				let mut sum_l = [0_f32; FILE_CHUNK];
+				let mut sum_r = [0_f32; FILE_CHUNK];
 				for (uuid, playable) in playing_files.iter_mut() {
-					let Ok(read) = playable.reader.read(&mut bytes) else {
-						eofs.push(*uuid);
-						continue;
-					};
+					let read = playable.audio_data.fill_stereo(playable.position, &mut buf_l, &mut buf_r);
 					if read == 0 {
+						let (lock, cvar) = &*playable.finished;
+						let _locked = lock.lock().expect("Failed to lock conditional variable");
+						cvar.notify_one();
 						eofs.push(*uuid);
 						continue;
 					}
-					for (ii, byte) in bytes[0..read].chunks_exact(4).map(|chunk| {
-						f32::from_le_bytes(chunk.try_into().unwrap())
-					}).enumerate() {
-						sum_bytes[ii] += byte * playable.volume;
+					for ii in 0..read {
+						sum_l[ii] += buf_l[ii] * playable.volume;
+						sum_r[ii] += buf_r[ii] * playable.volume;
 					}
+					playable.position += read;
 				}
 				if !eofs.is_empty() {
 					let mut app = acquire();
@@ -218,11 +221,17 @@ pub fn spawn_pacat_file_thread() {
 
 				for ii in 0..FILE_CHUNK {
 					[
-						bytes[ii * 4],
-						bytes[ii * 4 + 1],
-						bytes[ii * 4 + 2],
-						bytes[ii * 4 + 3]
-					] = sum_bytes[ii].to_le_bytes();
+						bytes[ii * 8],
+						bytes[ii * 8 + 1],
+						bytes[ii * 8 + 2],
+						bytes[ii * 8 + 3]
+					] = sum_l[ii].to_le_bytes();
+					[
+						bytes[ii * 8 + 4],
+						bytes[ii * 8 + 5],
+						bytes[ii * 8 + 6],
+						bytes[ii * 8 + 7]
+					] = sum_r[ii].to_le_bytes();
 				}
 
 				let mut pacat = acquire_files();
@@ -246,14 +255,20 @@ pub fn spawn_pacat_file_thread() {
 
 				pacat_running = true;
 				pacat.writer.write_all(&bytes).expect("Failed to write to pacat stdin");
+				drop(pacat);
 				// If blocked, we wait
-				while let Err(err) = pacat.writer.flush() {
-					if err.kind() != io::ErrorKind::WouldBlock {
+				loop {
+					let mut pacat = acquire_files();
+					if let Err(err) = pacat.writer.flush() {
+						if err.kind() != io::ErrorKind::WouldBlock {
+							break;
+						}
+						thread::sleep(Duration::from_millis(10));
+					} else {
+						pacat.last_used = SystemTime::now();
 						break;
 					}
-					thread::sleep(Duration::from_millis(10));
 				}
-				pacat.last_used = SystemTime::now();
 			} else if pacat_running {
 				drop(playing_files);
 				let mut pacat = acquire_files();

@@ -1,16 +1,19 @@
-use std::{collections::HashMap, io::BufReader, path::Path, process::{ChildStdout, Command, Stdio}, sync::{Arc, LazyLock, Mutex, MutexGuard}, thread, time::Duration};
+use std::{collections::HashMap, num::NonZero, path::Path, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard}, thread, time::Duration};
 
-use nix::{sys::signal::{self, Signal}, unistd::Pid};
+use symphonium::{DecodedAudio, ResampleQuality, SymphoniumLoader};
 use uuid::Uuid;
 
-use crate::state::{acquire, notify_redraw};
+use crate::{component::block::log, state::{acquire, notify_redraw}};
 
 pub struct PlayableFile {
-	pub reader: BufReader<ChildStdout>,
+	pub audio_data: DecodedAudio,
+	pub position: usize,
 	pub volume: f32,
+	pub finished: Arc<(Mutex<()>, Condvar)>,
 }
 
 static PLAYING_FILES: LazyLock<Mutex<HashMap<Uuid, PlayableFile>>> = LazyLock::new(|| { Mutex::new(HashMap::new()) });
+static SYMPHONIUM_LOADER: LazyLock<Mutex<SymphoniumLoader>> = LazyLock::new(|| { Mutex::new(SymphoniumLoader::new()) });
 
 pub fn acquire_playing_files() -> MutexGuard<'static, HashMap<Uuid, PlayableFile>> {
 	PLAYING_FILES.lock().unwrap()
@@ -24,7 +27,7 @@ pub fn play_file(path: &String, lock: Arc<Mutex<()>>) {
 		let uuid = Uuid::new_v4();
 		let mut app = acquire();
 		if app.edit {
-			app.playing_file.insert(uuid, (0, "Edit-only mode!".to_string()));
+			app.playing_file.insert(uuid, "Edit-only mode!".to_string());
 			notify_redraw();
 			drop(app);
 			thread::sleep(Duration::from_secs(1));
@@ -46,22 +49,23 @@ pub fn play_file(path: &String, lock: Arc<Mutex<()>>) {
 		};
 		drop(app);
 
-		let mut ffmpeg_child = Command::new("ffmpeg").args([
-			"-loglevel", "-8",
-			"-i", &string,
-			"-f", "f32le",
-			"-ac", "2",
-			"-ar", "48000",
-			"-"
-		]).stdout(Stdio::piped()).spawn().expect("Failed to spawn ffmpeg process");
+		let mut loader = SYMPHONIUM_LOADER.lock().unwrap();
 
-		acquire_playing_files().insert(uuid, PlayableFile { reader: BufReader::new(ffmpeg_child.stdout.take().unwrap()), volume });
+		let Ok(audio_data) = loader.load(&string, NonZero::new(48000), ResampleQuality::Low, None) else {
+			log::error(format!("File {} cannot be decoded", string).as_str());
+			return;
+		};
+		drop(loader);
+
+		let finished = Arc::new((Mutex::new(()), Condvar::new()));
+		acquire_playing_files().insert(uuid, PlayableFile { audio_data, position: 0, volume, finished: finished.clone() });
 		let mut app = acquire();
-		app.playing_file.insert(uuid, (ffmpeg_child.id(), string.to_string()));
+		app.playing_file.insert(uuid, string.to_string());
 		drop(app);
 		notify_redraw();
 
-		let _ = ffmpeg_child.wait();
+		let (lock, cvar) = &*finished;
+		drop(cvar.wait(lock.lock().unwrap()).unwrap());
 	});
 }
 
@@ -69,10 +73,6 @@ pub fn stop_all() {
 	// Defer to avoid deadlock
 	thread::spawn(move || {
 		acquire_playing_files().clear();
-		let mut app = acquire();
-		for (id, _file) in app.playing_file.values() {
-			signal::kill(Pid::from_raw(*id as i32), Signal::SIGTERM).ok();
-		}
-		app.playing_file.clear();
+		acquire().playing_file.clear();
 	});
 }
