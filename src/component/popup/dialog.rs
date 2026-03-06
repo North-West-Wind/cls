@@ -83,7 +83,7 @@ impl PopupHandleKey for DialogPopup {
 			Char('r') => self.toggle_random(),
 			Char('s') => self.toggle_sequential(),
 			Enter => self.commit_changes(),
-			Esc => self.discard_changes(),
+			Esc|Char('q') => self.discard_changes(),
 			_ => false
 		}
 	}

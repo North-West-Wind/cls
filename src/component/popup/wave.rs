@@ -36,7 +36,10 @@ impl PopupRender for WavePopup {
 			Line::from("Wave List").style(Style::default().add_modifier(Modifier::BOLD)).centered()
 		];
 
-		for (ii, wave) in self.waveform.waves.iter().enumerate() {
+		let page_size = f.area().height as usize - 2 - lines.len();
+		let page = self.index / page_size;
+		for ii in (page * page_size)..((page + 1) * page_size).min(self.waveform.waves.len()) {
+			let wave = self.waveform.waves[ii];
 			lines.push(Line::from(format!("{:?} {:.2} Hz x{:.2} >{:2.}", wave.wave_type, wave.frequency, wave.amplitude, wave.phase))
 				.style(if self.selected == ii {
 					Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)
@@ -82,7 +85,7 @@ impl PopupHandleKey for WavePopup {
 			Char('g') => self.popup_amplitude(),
 			Char('h') => self.popup_phase(),
 			Enter => self.commit_changes(),
-			Esc => self.discard_changes(),
+			Esc|Char('q') => self.discard_changes(),
 			_ => false
 		}
 	}
