@@ -1,9 +1,9 @@
-use std::{collections::HashMap, io::BufReader, path::Path, process::{ChildStdout, Command, Stdio}, sync::{LazyLock, Mutex, MutexGuard}, thread, time::Duration};
+use std::{collections::HashMap, io::BufReader, path::Path, process::{ChildStdout, Command, Stdio}, sync::{Arc, LazyLock, Mutex, MutexGuard}, thread, time::{Duration, SystemTime}};
 
 use nix::{sys::signal::{self, Signal}, unistd::Pid};
 use uuid::Uuid;
 
-use crate::{state::{acquire, acquire_playlist_lock, notify_redraw}, util::ffprobe_info};
+use crate::{component::block::log, state::{acquire, notify_redraw}, util::ffprobe_info};
 
 pub struct PlayableFile {
 	pub reader: BufReader<ChildStdout>,
@@ -16,9 +16,12 @@ pub fn acquire_playing_files() -> MutexGuard<'static, HashMap<Uuid, PlayableFile
 	PLAYING_FILES.lock().unwrap()
 }
 
-pub fn play_file(path: &String) {
+pub fn play_file(path: &String, lock: Arc<Mutex<()>>) {
+	log::info(format!("Playing {} at {}", path, SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis()).as_str());
 	let string = path.trim().to_string();
 	thread::spawn(move || {
+		let _locked = lock.lock().expect("Failed to lock while playing file");
+
 		let uuid = Uuid::new_v4();
 		let mut app = acquire();
 		if app.edit {
@@ -38,15 +41,9 @@ pub fn play_file(path: &String) {
 				.find(|stream| stream.codec_type == Option::Some("audio".to_string()))
 				.inspect(|_| {
 					let mut app = acquire();
-					let using_semaphore = app.config.playlist_mode;
 					app.playing_file.insert(uuid, (0, string.to_string()));
 					drop(app);
 					notify_redraw();
-					let playlist_lock = if using_semaphore {
-						Some(acquire_playlist_lock())
-					} else {
-						None
-					};
 
 					let mut app = acquire();
 					let mut ffmpeg_child = Command::new("ffmpeg").args([
@@ -75,9 +72,6 @@ pub fn play_file(path: &String) {
 					drop(app);
 
 					let _ = ffmpeg_child.wait();
-					if playlist_lock.is_some() {
-						drop(playlist_lock.unwrap());
-					}
 				});
 		});
 	});

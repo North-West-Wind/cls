@@ -40,7 +40,8 @@ pub struct DialogEntry {
 	pub keys: HashSet<String>,
 	pub files: Vec<String>,
 	pub delay: f32,
-	pub random: bool
+	pub random: bool,
+	pub sequential: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -1,4 +1,4 @@
-use std::{cmp::{max, min}, collections::HashSet, i32, path::Path, sync::{Mutex, MutexGuard, OnceLock}};
+use std::{cmp::{max, min}, collections::HashSet, i32, path::Path, sync::{Arc, Mutex, MutexGuard, OnceLock}};
 
 use crate::{component::{block::{BlockNavigation, BlockSingleton, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, state::{Scanning, acquire}, util::{file::play_file, selected_file_path, threads::spawn_scan_thread}};
 
@@ -172,7 +172,12 @@ impl FilesBlock {
 				}
 				index = self.selected;
 			}
-			play_file(&Path::new(&tab).join(&files[index].0).into_os_string().into_string().unwrap());
+			let lock = if app.config.playlist_mode {
+				app.playlist_lock.clone()
+			} else {
+				Arc::new(Mutex::new(()))
+			};
+			play_file(&Path::new(&tab).join(&files[index].0).into_os_string().into_string().unwrap(), lock);
 			true
 		});
 	}

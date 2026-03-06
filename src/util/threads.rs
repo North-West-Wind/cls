@@ -206,11 +206,15 @@ pub fn spawn_pacat_file_thread() {
 						sum_bytes[ii] += byte * playable.volume;
 					}
 				}
-				eofs.iter().for_each(|uuid| {
-					playing_files.remove(uuid);
-					acquire().playing_file.remove(uuid);
-					notify_redraw();
-				});
+				if !eofs.is_empty() {
+					let mut app = acquire();
+					eofs.iter().for_each(|uuid| {
+						playing_files.remove(uuid);
+						app.playing_file.remove(uuid);
+						notify_redraw();
+					});
+				}
+				drop(playing_files);
 
 				for ii in 0..FILE_CHUNK {
 					[
@@ -257,7 +261,6 @@ pub fn spawn_pacat_file_thread() {
 					pacat_running = false;
 				}
 			}
-			drop(playing_files);
 			thread::sleep(Duration::from_millis(10));
 		}
 		if pacat_running {

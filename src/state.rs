@@ -50,6 +50,7 @@ pub struct App {
 	pub socket_holder: bool,
 	pub hidden: bool,
 	pub edit: bool,
+	pub playlist_lock: Arc<Mutex<()>>,
 	// render states: root
 	pub block_selected: u8,
 	pub selection_layer: SelectionLayer,
@@ -167,6 +168,8 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 			files: dialog.files.clone(),
 			delay: dialog.delay,
 			random: dialog.random,
+			sequential: dialog.sequential,
+			play_lock: Arc::new(Mutex::new(())),
 			play_next: 0,
 			playing: Arc::new(Mutex::new((false, false)))
 		});
@@ -190,6 +193,7 @@ fn static_app(hidden: bool, edit: bool) -> &'static Mutex<App> {
 			socket_holder: false,
 			hidden,
 			edit,
+			playlist_lock: Arc::new(Mutex::new(())),
 			// render states: root
 			block_selected: 0,
 			selection_layer: SelectionLayer::Block,
@@ -248,9 +252,4 @@ pub fn wait_redraw() {
 pub fn acquire_running() -> MutexGuard<'static, bool> {
 	static RUNNING: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(true));
 	RUNNING.lock().unwrap()
-}
-
-pub fn acquire_playlist_lock() -> MutexGuard<'static, ()> {
-	static PLAYLIST_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
-	PLAYLIST_LOCK.lock().unwrap()
 }

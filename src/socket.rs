@@ -1,4 +1,4 @@
-use std::{cmp::{max, min}, collections::HashMap, io::{BufReader, Error, Read, Write}, os::unix::ffi::OsStrExt, path::Path};
+use std::{cmp::{max, min}, collections::HashMap, io::{BufReader, Error, Read, Write}, os::unix::ffi::OsStrExt, path::Path, sync::{Arc, Mutex}};
 
 use clap::ArgMatches;
 use code::SocketCode;
@@ -167,7 +167,12 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 			let mut path = String::new();
 			reader.read_to_string(&mut path)?;
 			if !path.is_empty() {
-				play_file(&path);
+				let lock = if app.config.playlist_mode {
+					app.playlist_lock.clone()
+				} else {
+					Arc::new(Mutex::new(()))
+				};
+				play_file(&path, lock);
 				notify_redraw();
 				let mut bytes = path.as_bytes().to_vec();
 				bytes.insert(0, 0);
@@ -183,7 +188,12 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 			if path.is_some() {
 				let path = path.unwrap();
 				if !path.is_empty() {
-					play_file(&path);
+					let lock = if app.config.playlist_mode {
+						app.playlist_lock.clone()
+					} else {
+						Arc::new(Mutex::new(()))
+					};
+					play_file(&path, lock);
 					notify_redraw();
 					let mut bytes = path.as_bytes().to_vec();
 					bytes.insert(0, 0);

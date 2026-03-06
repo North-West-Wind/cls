@@ -1,4 +1,4 @@
-use std::{io, time::Duration};
+use std::{io, sync::{Arc, Mutex}, time::Duration};
 use crossterm::event::{poll, read, Event, KeyEvent};
 use mki::Action;
 
@@ -47,7 +47,12 @@ pub fn listen_global() {
 		// File hotkey
 		app.hotkey.iter().for_each(|(path, keys)| {
 			if keys.iter().all(|key| { key.is_pressed() }) {
-				play_file(path);
+				let lock = if app.config.playlist_mode {
+					app.playlist_lock.clone()
+				} else {
+					Arc::new(Mutex::new(()))
+				};
+				play_file(path, lock);
 			}
 		});
 		if !app.stopkey.is_empty() && !app.edit {

@@ -28,16 +28,19 @@ impl PopupRender for DialogPopup {
 			Line::from("a - add, d - delete"),
 			Line::from("up / down - select"),
 			Line::from("c - change delay, r - toggle random"),
+			Line::from("s - toggle sequential"),
 			Line::from("enter / esc - save / discard changes"),
 			Line::from(""),
 
-			Line::from(format!("Delay: {} s", self.dialog.delay)),
+			Line::from(if self.dialog.sequential { "Sequential: true".to_string() } else { format!("Delay: {} s", self.dialog.delay) }),
 			Line::from(format!("Random: {}", self.dialog.random)),
 			Line::from("File List").style(Style::default().add_modifier(Modifier::BOLD)).centered()
 		];
 
-		for (ii, file) in self.dialog.files.iter().enumerate() {
-			lines.push(Line::from(file.clone())
+		let page_size = f.area().height as usize - 2 - lines.len();
+		let page = self.index / page_size;
+		for ii in (page * page_size)..((page + 1) * page_size).min(self.dialog.files.len()) {
+			lines.push(Line::from(self.dialog.files[ii].clone())
 				.style(if self.selected == ii {
 					Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)
 				} else {
@@ -78,6 +81,7 @@ impl PopupHandleKey for DialogPopup {
 			Char('d') => self.delete_file(),
 			Char('c') => self.change_delay(),
 			Char('r') => self.toggle_random(),
+			Char('s') => self.toggle_sequential(),
 			Enter => self.commit_changes(),
 			Esc => self.discard_changes(),
 			_ => false
@@ -126,6 +130,11 @@ impl DialogPopup {
 
 	fn toggle_random(&mut self) -> bool {
 		self.dialog.random = !self.dialog.random;
+		true
+	}
+
+	fn toggle_sequential(&mut self) -> bool {
+		self.dialog.sequential = !self.dialog.sequential;
 		true
 	}
 

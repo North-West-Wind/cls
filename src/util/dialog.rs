@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::{Arc, Mutex}, thread, time::{Duration, Sys
 use mki::Keyboard;
 use rand::Rng;
 
-use crate::{config::DialogEntry, state::{acquire, notify_redraw}, util::{file::play_file, global_input::keyboard_to_string}};
+use crate::{component::block::log, config::DialogEntry, state::{acquire, notify_redraw}, util::{file::play_file, global_input::keyboard_to_string}};
 
 #[derive(Clone)]
 pub struct Dialog {
@@ -13,6 +13,8 @@ pub struct Dialog {
 	pub files: Vec<String>,
 	pub delay: f32,
 	pub random: bool,
+	pub sequential: bool,
+	pub play_lock: Arc<Mutex<()>>,
 	pub play_next: usize,
 	pub playing: Arc<Mutex<(bool, bool)>>
 }
@@ -26,6 +28,8 @@ impl Default for Dialog {
 			files: vec![],
 			delay: 0.2,
 			random: true,
+			sequential: false,
+			play_lock: Arc::new(Mutex::new(())),
 			play_next: 0,
 			playing: Arc::new(Mutex::new((false, false)))
 		}
@@ -41,6 +45,7 @@ impl Dialog {
 			files: self.files.clone(),
 			delay: self.delay,
 			random: self.random,
+			sequential: self.sequential,
 		}
 	}
 
@@ -83,7 +88,18 @@ impl Dialog {
 				let start = SystemTime::now();
 				let mut elapsed = 0;
 				while elapsed < 1000 {
-					play_file(dialog.get_next_path());
+					let lock = if dialog.sequential {
+						dialog.play_lock.clone()
+					} else {
+						Arc::new(Mutex::new(()))
+					};
+					log::info(format!("About to play dialog file at {}", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis()).as_str());
+					play_file(dialog.get_next_path(), lock.clone());
+					if dialog.sequential {
+						let _locked = lock.lock().expect("Failed to lock play lock");
+					} else {
+						thread::sleep(Duration::from_secs_f32(dialog.delay));
+					}
 					thread::sleep(Duration::from_secs_f32(dialog.delay));
 
 					// Calculate time elapsed
@@ -99,8 +115,17 @@ impl Dialog {
 					let (playing, force) = *dialog.playing.lock().unwrap();
 					playing && force
 				} || dialog.keys.iter().all(|key| { key.is_pressed() }) {
-					play_file(dialog.get_next_path());
-					thread::sleep(Duration::from_secs_f32(dialog.delay));
+					let lock = if dialog.sequential {
+						dialog.play_lock.clone()
+					} else {
+						Arc::new(Mutex::new(()))
+					};
+					play_file(dialog.get_next_path(), lock.clone());
+					if dialog.sequential {
+						let _locked = lock.lock().expect("Failed to lock play lock");
+					} else {
+						thread::sleep(Duration::from_secs_f32(dialog.delay));
+					}
 				}
 			}
 			dialog.playing.lock().unwrap().0 = false;
