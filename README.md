@@ -18,7 +18,7 @@ As I told you, this is just a file manager and command runner.
 This only works on Linux with a PulseAudio provider. If you want a soundboard for other platforms or providers similar to this, I recommend [Soundux](https://github.com/Soundux/Soundux).
 
 ### Dependencies
-- `ffmpeg`
+- `ffmpeg` (Optional)
 - `pulseaudio` / `pipewire-pulse` / anything to provides `pactl` and `pacat`
 
 ### Install

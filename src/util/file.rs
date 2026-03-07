@@ -1,4 +1,4 @@
-use std::{collections::HashMap, num::NonZero, path::Path, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard}, thread, time::Duration};
+use std::{collections::HashMap, io::{Error, Read}, num::NonZero, path::Path, process::{Command, Stdio}, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard}, thread, time::Duration};
 
 use symphonium::{ResampleQuality, SymphoniumLoader};
 use uuid::Uuid;
@@ -61,19 +61,26 @@ pub fn play_file(path: &String, volume: f32, lock: Arc<Mutex<()>>) {
 		let mut loader = SYMPHONIUM_LOADER.lock().unwrap();
 		let result = loader.load_f32(&string, NonZero::new(48000), ResampleQuality::Low, None);
 		drop(loader);
-		if result.is_err() {
-			log::error(format!("File {} cannot be decoded", string).as_str());
+		let interleaved = if result.is_err() {
+			log::error(format!("File {} cannot be decoded with symphonium", string).as_str());
 			log::error(format!("{:?}", result.unwrap_err()).as_str());
-			return;
-		}
 
-		let audio_data = result.unwrap();
-		let interleaved = if audio_data.channels() == 1 {
-			audio_data.data[0].iter().zip(audio_data.data[0].iter()).flat_map(|(a, b)| [*a, *b]).collect()
-		} else if audio_data.channels() > 2 {
-			audio_data.data[0].iter().zip(audio_data.data[1].iter()).flat_map(|(a, b)| [*a, *b]).collect()
+			let result = read_file_ffmpeg(&string);
+			if result.is_err() {
+				log::error(format!("File {} cannot be decoded with ffmpeg", string).as_str());
+				log::error(format!("{:?}", result.unwrap_err()).as_str());
+				return;
+			}
+			result.unwrap()
 		} else {
-			audio_data.as_interleaved()
+			let audio_data = result.unwrap();
+			if audio_data.channels() == 1 {
+				audio_data.data[0].iter().zip(audio_data.data[0].iter()).flat_map(|(a, b)| [*a, *b]).collect()
+			} else if audio_data.channels() > 2 {
+				audio_data.data[0].iter().zip(audio_data.data[1].iter()).flat_map(|(a, b)| [*a, *b]).collect()
+			} else {
+				audio_data.as_interleaved()
+			}
 		};
 
 		let finished = Arc::new((Mutex::new(()), Condvar::new()));
@@ -94,4 +101,21 @@ pub fn stop_all() {
 		acquire_playing_files().clear();
 		acquire().playing_file.clear();
 	});
+}
+
+pub fn read_file_ffmpeg(path: &str) -> Result<Vec<f32>, Error> {
+	let result = Command::new("ffmpeg").args([
+		"-loglevel", "-8",
+		"-i", path,
+		"-f", "f32le",
+		"-ac", "2",
+		"-ar", "48000",
+		"-"
+	]).stdout(Stdio::piped()).spawn();
+	if result.is_err() {
+		return Err(result.unwrap_err());
+	}
+	let mut buf = vec![];
+	let _ = result.unwrap().stdout.unwrap().read_to_end(&mut buf);
+	Ok(buf.chunks(4).map(|chunk| f32::from_le_bytes(chunk.try_into().unwrap())).collect())
 }

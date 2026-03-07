@@ -1,10 +1,11 @@
 use std::{collections::HashMap, path::Path, thread::{self, JoinHandle}};
 
+use ffprobe;
 use file_format::{FileFormat, Kind};
 use mime_guess::mime;
 use symphonium::{ResampleQuality, SymphoniumLoader};
 
-use crate::{component::block::{files::FilesBlock, tabs::TabsBlock, BlockSingleton}, state::{acquire, notify_redraw}};
+use crate::{component::block::{BlockSingleton, files::FilesBlock, tabs::TabsBlock}, state::{acquire, notify_redraw}, util::file::read_file_ffmpeg};
 
 pub mod dialog;
 pub mod file;
@@ -13,6 +14,19 @@ pub mod global_input;
 pub mod pulseaudio;
 pub mod threads;
 pub mod waveform;
+
+pub fn ffprobe_duration(path: &str) -> Option<u128> {
+	let Ok(info) = ffprobe::ffprobe(path) else { return None };
+	if info.streams.iter().any(|stream| stream.codec_type == Option::Some("audio".to_string())) {
+		if let Some(duration) = info.format.get_duration() {
+			Some(duration.as_millis())
+		} else {
+			None
+		}
+	} else {
+		None
+	}
+}
 
 fn add_duration(tab: String) {
 	thread::spawn(move || {
@@ -29,13 +43,23 @@ fn add_duration(tab: String) {
 			let longpath = Path::new(&tab).join(filename);
 			let filepath = longpath.into_os_string().into_string().unwrap();
 
-			let result = loader.load(filepath, None, ResampleQuality::Low, None);
-			if result.is_err() {
-				new_files.push((filename.clone(), String::new()));
-				continue;
-			}
-			let audio_data = result.unwrap();
-			let millis = audio_data.frames() * 1000 / audio_data.sample_rate().get() as usize;
+			let result = ffprobe_duration(&filepath);
+			let millis: u128 = if result.is_none() {
+				let result = loader.load(&filepath, None, ResampleQuality::Low, None);
+				if result.is_err() {
+					let result = read_file_ffmpeg(&filepath);
+					if result.is_err() {
+						new_files.push((filename.clone(), String::new()));
+						continue;
+					}
+					result.unwrap().len() as u128 / 48
+				} else {
+					let audio_data = result.unwrap();
+					audio_data.frames() as u128 * 1000 / audio_data.sample_rate().get() as u128
+				}
+			} else {
+				result.unwrap()
+			};
 
 			let mut duration_str = String::new();
 			let hours = millis / (1000 * 60 * 60);
