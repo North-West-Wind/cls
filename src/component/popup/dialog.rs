@@ -34,11 +34,18 @@ impl PopupRender for DialogPopup {
 
 			Line::from(if self.dialog.sequential { "Sequential: true".to_string() } else { format!("Delay: {} s", self.dialog.delay) }),
 			Line::from(format!("Random: {}", self.dialog.random)),
-			Line::from("File List").style(Style::default().add_modifier(Modifier::BOLD)).centered()
 		];
 
-		let page_size = f.area().height as usize - 2 - lines.len();
-		let page = self.index / page_size;
+		let area = f.area();
+		let page_size = area.height as usize - 3 - lines.len();
+		let page = self.selected / page_size;
+
+		lines.push(Line::from(if self.dialog.files.len() > page_size {
+			format!("File List (Page {} / {})", page + 1, (self.dialog.files.len() + page_size - 1) / page_size)
+		} else {
+			"File List".to_string()
+		}).style(Style::default().add_modifier(Modifier::BOLD)).centered());
+
 		for ii in (page * page_size)..((page + 1) * page_size).min(self.dialog.files.len()) {
 			lines.push(Line::from(self.dialog.files[ii].clone())
 				.style(if self.selected == ii {
@@ -48,7 +55,6 @@ impl PopupRender for DialogPopup {
 				}));
 		}
 
-		let area = f.area();
 		let width = lines.iter()
 			.map(|line| { line.width() })
 			.fold(0, |acc, width| acc.max(width)) as u16 + 4;

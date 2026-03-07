@@ -32,12 +32,17 @@ impl PopupRender for WavePopup {
 			Line::from("f / g / h - change frequency / amplitude / phase"),
 			Line::from("enter / esc - save / discard changes"),
 			Line::from(""),
-
-			Line::from("Wave List").style(Style::default().add_modifier(Modifier::BOLD)).centered()
 		];
 
 		let page_size = f.area().height as usize - 2 - lines.len();
-		let page = self.index / page_size;
+		let page = self.selected / page_size;
+
+		lines.push(Line::from(if self.waveform.waves.len() > page_size {
+			format!("Wave List (Page {} / {})", page + 1, (self.waveform.waves.len() + page_size - 1) / page_size)
+		} else {
+			"Wave List".to_string()
+		}).style(Style::default().add_modifier(Modifier::BOLD)).centered());
+
 		for ii in (page * page_size)..((page + 1) * page_size).min(self.waveform.waves.len()) {
 			let wave = self.waveform.waves[ii];
 			lines.push(Line::from(format!("{:?} {:.2} Hz x{:.2} >{:2.}", wave.wave_type, wave.frequency, wave.amplitude, wave.phase))
