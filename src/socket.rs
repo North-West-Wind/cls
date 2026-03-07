@@ -5,7 +5,7 @@ use code::SocketCode;
 use interprocess::local_socket::{traits::{ListenerExt, Stream as _}, GenericFilePath, GenericNamespaced, Listener, ListenerOptions, Name, NameType, Stream, ToFsName, ToNsName};
 use normpath::PathExt;
 
-use crate::{component::block::{BlockSingleton, log, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, acquire_running, load_app_config, notify_redraw}, util::{file::{play_file, stop_all}, fs::separate_parent_file, pulseaudio::set_volume_percentage, threads::spawn_scan_thread, waveform::stop_all_waves}};
+use crate::{component::block::{BlockSingleton, log, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, acquire_running, load_app_config, notify_redraw}, util::{file::{play_file_auto_volume, stop_all}, fs::separate_parent_file, pulseaudio::set_volume_percentage, threads::spawn_scan_thread, waveform::stop_all_waves}};
 
 pub mod code;
 
@@ -172,7 +172,7 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 				} else {
 					Arc::new(Mutex::new(()))
 				};
-				play_file(&path, lock);
+				play_file_auto_volume(&path, lock);
 				notify_redraw();
 				let mut bytes = path.as_bytes().to_vec();
 				bytes.insert(0, 0);
@@ -193,7 +193,7 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 					} else {
 						Arc::new(Mutex::new(()))
 					};
-					play_file(&path, lock);
+					play_file_auto_volume(&path, lock);
 					notify_redraw();
 					let mut bytes = path.as_bytes().to_vec();
 					bytes.insert(0, 0);

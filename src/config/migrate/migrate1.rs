@@ -42,6 +42,7 @@ pub struct DialogEntry {
 	pub delay: f32,
 	pub random: bool,
 	pub sequential: bool,
+	pub volume: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

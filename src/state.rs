@@ -169,6 +169,7 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 			delay: dialog.delay,
 			random: dialog.random,
 			sequential: dialog.sequential,
+			volume: dialog.volume,
 			play_lock: Arc::new(Mutex::new(())),
 			play_next: 0,
 			playing: Arc::new(Mutex::new((false, false)))

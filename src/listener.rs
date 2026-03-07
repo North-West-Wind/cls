@@ -2,7 +2,7 @@ use std::{io, sync::{Arc, Mutex}, time::Duration};
 use crossterm::event::{poll, read, Event, KeyEvent};
 use mki::Action;
 
-use crate::{component::{block, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste, popups}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{SelectionLayer, acquire, acquire_running, notify_redraw}, util::{file::{play_file, stop_all}}};
+use crate::{component::{block, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste, popups}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{SelectionLayer, acquire, acquire_running, notify_redraw}, util::file::{play_file_auto_volume, stop_all}};
 
 pub fn listen_events() -> io::Result<()> {
 	let hidden = { acquire().hidden };
@@ -52,7 +52,7 @@ pub fn listen_global() {
 				} else {
 					Arc::new(Mutex::new(()))
 				};
-				play_file(path, lock);
+				play_file_auto_volume(path, lock);
 			}
 		});
 		if !app.stopkey.is_empty() && !app.edit {

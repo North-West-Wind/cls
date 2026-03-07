@@ -3,7 +3,7 @@ use std::{cmp::{max, min}, sync::{LazyLock, Mutex, MutexGuard}};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 
-use crate::{component::block::{BlockNavigation, BlockSingleton, tabs::TabsBlock, waves::WavesBlock}, config::FileEntry, state::{MainOpened, acquire}, util::{global_input::{keyboard_to_string, sort_keys}, pulseaudio::set_volume_percentage, selected_file_path}};
+use crate::{component::block::{BlockNavigation, BlockSingleton, dialogs::DialogBlock, tabs::TabsBlock, waves::WavesBlock}, config::FileEntry, state::{MainOpened, acquire}, util::{global_input::{keyboard_to_string, sort_keys}, pulseaudio::set_volume_percentage, selected_file_path}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -85,6 +85,30 @@ impl BlockRenderArea for InfoBlock {
 					lines.push(Line::from(spans));
 				}
 			},
+			MainOpened::Dialog => {
+				let index = { DialogBlock::instance().selected };
+				if index < app.dialogs.len() {
+					let dialog = &app.dialogs[index];
+					lines.push(Line::from(""));
+					lines.push(Line::from(vec![
+						Span::from("Selected "),
+						Span::from(dialog.label.clone()).style(Style::default().fg(Color::LightYellow))
+					]));
+					lines.push(volume_line("Dialog Volume".to_string(), dialog.volume, area.width, self.selected == 1));
+					let mut spans = vec![];
+					spans.push(Span::from("ID "));
+					spans.push(dialog.id.map_or( Span::from("None").style(Style::default().fg(Color::Red)), |id| { Span::from(format!(" {} ", id)).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)) }));
+					spans.push(Span::from(" | Keys "));
+					if dialog.keys.is_empty() {
+						spans.push(Span::from("None").style(Style::default().fg(Color::Red)));
+					} else {
+						let mut keys = dialog.keys.iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
+						let keys = sort_keys(&mut keys);
+						spans.push(Span::from(format!(" {{{}}} ", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
+					}
+					lines.push(Line::from(spans));
+				}
+			},
 			_ => ()
 		}
 		let paragraph = Paragraph::new(Text::from(lines))
@@ -138,6 +162,7 @@ impl InfoBlock {
 			return match acquire().main_opened {
 				MainOpened::File => change_file_volume(delta),
 				MainOpened::Wave => change_wave_volume(delta),
+				MainOpened::Dialog => change_dialog_volume(delta),
 				_ => false
 			};
 		}
@@ -221,6 +246,22 @@ fn change_wave_volume(delta: i16) -> bool {
 	if new_volume != wave.volume {
 		wave.volume = new_volume;
 		app.config.waves[index].volume = new_volume;
+		return true;
+	}
+	false
+}
+
+fn change_dialog_volume(delta: i16) -> bool {
+	let mut app = acquire();
+	let index = { DialogBlock::instance().selected };
+	if index >= app.dialogs.len() {
+		return false;
+	}
+	let dialog = &mut app.dialogs[index];
+	let new_volume = min(100, max(0, dialog.volume as i16 + delta)) as u32;
+	if new_volume != dialog.volume {
+		dialog.volume = new_volume;
+		app.config.dialogs[index].volume = new_volume;
 		return true;
 	}
 	false

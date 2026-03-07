@@ -19,7 +19,24 @@ pub fn acquire_playing_files() -> MutexGuard<'static, HashMap<Uuid, PlayableFile
 	PLAYING_FILES.lock().unwrap()
 }
 
-pub fn play_file(path: &String, lock: Arc<Mutex<()>>) {
+pub fn play_file_auto_volume(path: &String, lock: Arc<Mutex<()>>) {
+	let app = acquire();
+	let pathed = Path::new(&path);
+	let parent = pathed.parent().unwrap().to_str().unwrap().to_string();
+	let name = pathed.file_name().unwrap().to_os_string().into_string().unwrap();
+	let volume: f32 = match app.config.files.get(&parent) {
+		Some(map) => {
+			match map.get(&name) {
+				Some(entry) => (entry.volume as f32) / 100.0,
+				None => 1.0,
+			}
+		},
+		None => 1.0
+	};
+	play_file(path, volume, lock);
+}
+
+pub fn play_file(path: &String, volume: f32, lock: Arc<Mutex<()>>) {
 	let string = path.trim().to_string();
 	thread::spawn(move || {
 		let _locked = lock.lock().expect("Failed to lock while playing file");
@@ -35,26 +52,17 @@ pub fn play_file(path: &String, lock: Arc<Mutex<()>>) {
 			notify_redraw();
 			return;
 		}
-		let path = Path::new(&string);
-		let parent = path.parent().unwrap().to_str().unwrap().to_string();
-		let name = path.file_name().unwrap().to_os_string().into_string().unwrap();
-		let volume: f32 = match app.config.files.get(&parent) {
-			Some(map) => {
-				match map.get(&name) {
-					Some(entry) => (entry.volume as f32) / 100.0,
-					None => 1.0,
-				}
-			},
-			None => 1.0
-		};
 		drop(app);
 
 		let mut loader = SYMPHONIUM_LOADER.lock().unwrap();
 
-		let Ok(audio_data) = loader.load(&string, NonZero::new(48000), ResampleQuality::Low, None) else {
+		let result = loader.load(&string, NonZero::new(48000), ResampleQuality::Low, None);
+		if result.is_err() {
 			log::error(format!("File {} cannot be decoded", string).as_str());
+			log::error(format!("{:?}", result.unwrap_err()).as_str());
 			return;
-		};
+		}
+		let audio_data = result.unwrap();
 		drop(loader);
 
 		let finished = Arc::new((Mutex::new(()), Condvar::new()));

@@ -14,6 +14,7 @@ pub struct Dialog {
 	pub delay: f32,
 	pub random: bool,
 	pub sequential: bool,
+	pub volume: u32,
 	pub play_lock: Arc<Mutex<()>>,
 	pub play_next: usize,
 	pub playing: Arc<Mutex<(bool, bool)>>
@@ -29,6 +30,7 @@ impl Default for Dialog {
 			delay: 0.2,
 			random: true,
 			sequential: false,
+			volume: 100,
 			play_lock: Arc::new(Mutex::new(())),
 			play_next: 0,
 			playing: Arc::new(Mutex::new((false, false)))
@@ -46,6 +48,7 @@ impl Dialog {
 			delay: self.delay,
 			random: self.random,
 			sequential: self.sequential,
+			volume: 100,
 		}
 	}
 
@@ -93,7 +96,8 @@ impl Dialog {
 					} else {
 						Arc::new(Mutex::new(()))
 					};
-					play_file(dialog.get_next_path(), lock.clone());
+					let volume = dialog.volume as f32 / 100.0;
+					play_file(dialog.get_next_path(), volume, lock.clone());
 					if dialog.sequential {
 						let _locked = lock.lock().expect("Failed to lock play lock");
 					} else {
@@ -118,7 +122,8 @@ impl Dialog {
 					} else {
 						Arc::new(Mutex::new(()))
 					};
-					play_file(dialog.get_next_path(), lock.clone());
+					let volume = dialog.volume as f32 / 100.0;
+					play_file(dialog.get_next_path(), volume, lock.clone());
 					if dialog.sequential {
 						let _locked = lock.lock().expect("Failed to lock play lock");
 					} else {

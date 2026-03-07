@@ -65,7 +65,8 @@ impl BlockRenderArea for DialogBlock {
 				} else {
 					Style::default().fg(Color::Yellow)
 				};
-				lines.push(Line::from(Span::from(dialog.label.clone()).style(style)));
+				spans.push(Span::from(dialog.label.clone()).style(style));
+				lines.push(Line::from(spans));
 			}
 			if self.selected < self.range.0 as usize {
 				self.range = (self.selected as i32, self.selected as i32 + area.height as i32 - 5);
