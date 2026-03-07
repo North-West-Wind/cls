@@ -17,6 +17,8 @@ It's just a file manager and command runner.
 As I told you, this is just a file manager and command runner.  
 This only works on Linux with a PulseAudio provider. If you want a soundboard for other platforms or providers similar to this, I recommend [Soundux](https://github.com/Soundux/Soundux).
 
+The features of this program is now weird enough that I am considering making it cross-platform.
+
 ### Dependencies
 - `ffmpeg` (Optional)
 - `pulseaudio` / `pipewire-pulse` / anything to provides `pactl` and `pacat`
@@ -133,6 +135,27 @@ Here's the current list of subcommands implemented:
 	- If `--increment` is **NOT** set, the volume is set to `<volume>` provided.
 	- If `--increment` is **SET**, the volume is incremented by `<volume>` (can be negative).
 	- If `--path` is provided, volume is set for the file instead of the sink.
+
+### Waves (>=2.0.0)
+The wave feature is added in version 2.0.0.  
+![Wave menu](waves.png)
+
+To toggle the wave menu, press 'w'.
+Users can create waveforms and play them for a dynamic amount of time.
+
+It is highly recommended to add a global hotkey for waves.
+As long as you are holding the set of keys down, the waveform will keep playing.
+
+### Dialogs (>=3.0.0)
+The dialog feature is added in version 3.0.0.
+![Dialog menu](dialogs.png)
+
+To toggle the dialog menu, press 't'.
+Dialogs are meant to mimick dialog sound effects used in video games.
+Users can setup a list of sound files that will be played with a certain interval.
+
+It is highly recommended to add a global hotkey for dialogs as well.
+As long as you are holding the set of keys down, the dialog will keep playing.
 
 ## Motivation
 I was using another soundboard - [Soundux](https://github.com/Soundux/Soundux). It was a solid program, until everyone wants to switch to Wayland. Due to Soundux being Electron-based, global hotkeys doesn't work on Wayland.
