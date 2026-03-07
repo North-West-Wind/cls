@@ -1,12 +1,12 @@
 use std::{collections::HashMap, num::NonZero, path::Path, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard}, thread, time::Duration};
 
-use symphonium::{DecodedAudio, ResampleQuality, SymphoniumLoader};
+use symphonium::{ResampleQuality, SymphoniumLoader};
 use uuid::Uuid;
 
 use crate::{component::block::log, state::{acquire, notify_redraw}};
 
 pub struct PlayableFile {
-	pub audio_data: DecodedAudio,
+	pub data: Vec<f32>,
 	pub position: usize,
 	pub volume: f32,
 	pub finished: Arc<(Mutex<()>, Condvar)>,
@@ -59,18 +59,25 @@ pub fn play_file(path: &String, volume: f32, lock: Arc<Mutex<()>>) {
 		drop(app);
 
 		let mut loader = SYMPHONIUM_LOADER.lock().unwrap();
-
-		let result = loader.load(&string, NonZero::new(48000), ResampleQuality::Low, None);
+		let result = loader.load_f32(&string, NonZero::new(48000), ResampleQuality::Low, None);
+		drop(loader);
 		if result.is_err() {
 			log::error(format!("File {} cannot be decoded", string).as_str());
 			log::error(format!("{:?}", result.unwrap_err()).as_str());
 			return;
 		}
+
 		let audio_data = result.unwrap();
-		drop(loader);
+		let interleaved = if audio_data.channels() == 1 {
+			audio_data.data[0].iter().zip(audio_data.data[0].iter()).flat_map(|(a, b)| [*a, *b]).collect()
+		} else if audio_data.channels() > 2 {
+			audio_data.data[0].iter().zip(audio_data.data[1].iter()).flat_map(|(a, b)| [*a, *b]).collect()
+		} else {
+			audio_data.as_interleaved()
+		};
 
 		let finished = Arc::new((Mutex::new(()), Condvar::new()));
-		acquire_playing_files().insert(uuid, PlayableFile { audio_data, position: 0, volume, finished: finished.clone() });
+		acquire_playing_files().insert(uuid, PlayableFile { data: interleaved, position: 0, volume, finished: finished.clone() });
 		let mut app = acquire();
 		app.playing_file.insert(uuid, string.to_string());
 		drop(app);

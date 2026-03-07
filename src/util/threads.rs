@@ -186,28 +186,24 @@ pub fn spawn_pacat_file_thread() {
 		let mut pacat_init = false;
 
 		while *acquire_running() {
-			let mut buf_l = [0_f32; FILE_CHUNK];
-			let mut buf_r = [0_f32; FILE_CHUNK];
-			let mut bytes = [0_u8; FILE_CHUNK * 8];
+			let mut bytes = [0_u8; FILE_CHUNK * 4];
 			let mut playing_files = acquire_playing_files();
 			let mut eofs = vec![];
 			if playing_files.len() > 0 {
-				let mut sum_l = [0_f32; FILE_CHUNK];
-				let mut sum_r = [0_f32; FILE_CHUNK];
+				let mut sum_bytes = [0_f32; FILE_CHUNK];
 				for (uuid, playable) in playing_files.iter_mut() {
-					let read = playable.audio_data.fill_stereo(playable.position, &mut buf_l, &mut buf_r);
-					if read == 0 {
+					let max_read = FILE_CHUNK.min(playable.data.len() - playable.position);
+					for ii in 0..max_read {
+						sum_bytes[ii] += playable.data[ii + playable.position] * playable.volume;
+					}
+					playable.position += max_read;
+					if playable.position == playable.data.len() {
 						let (lock, cvar) = &*playable.finished;
 						let _locked = lock.lock().expect("Failed to lock conditional variable");
 						cvar.notify_one();
 						eofs.push(*uuid);
 						continue;
 					}
-					for ii in 0..read {
-						sum_l[ii] += buf_l[ii] * playable.volume;
-						sum_r[ii] += buf_r[ii] * playable.volume;
-					}
-					playable.position += read;
 				}
 				if !eofs.is_empty() {
 					let mut app = acquire();
@@ -221,17 +217,11 @@ pub fn spawn_pacat_file_thread() {
 
 				for ii in 0..FILE_CHUNK {
 					[
-						bytes[ii * 8],
-						bytes[ii * 8 + 1],
-						bytes[ii * 8 + 2],
-						bytes[ii * 8 + 3]
-					] = sum_l[ii].to_le_bytes();
-					[
-						bytes[ii * 8 + 4],
-						bytes[ii * 8 + 5],
-						bytes[ii * 8 + 6],
-						bytes[ii * 8 + 7]
-					] = sum_r[ii].to_le_bytes();
+						bytes[ii * 4],
+						bytes[ii * 4 + 1],
+						bytes[ii * 4 + 2],
+						bytes[ii * 4 + 3]
+					] = sum_bytes[ii].to_le_bytes();
 				}
 
 				let mut pacat = acquire_files();
