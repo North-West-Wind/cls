@@ -1,4 +1,4 @@
-use std::{path::Path, thread};
+use std::{fs, path::Path, thread};
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use normpath::PathExt;
@@ -144,8 +144,13 @@ impl PopupHandleKey for InputPopup {
 					let mut file_names = vec![];
 					for file in files {
 						let Ok(file) = file else { continue };
-						let Ok(file_type) = file.file_type() else { continue };
-						if !file_type.is_dir() { continue; }
+						if self.await_input == AwaitInput::AddTab {
+							let Ok(file_type) = file.file_type() else { continue };
+							if file_type.is_symlink() {
+								let result = fs::read_link(path);
+								if result.is_err() || !Path::is_dir(Path::new(&result.unwrap())) { continue; }
+							} else if !file_type.is_dir() { continue; }
+						}
 						let os_str = file.file_name();
 						let Some(file) = os_str.to_str() else { continue };
 						file_names.push(file.to_string());
@@ -179,7 +184,12 @@ impl PopupHandleKey for InputPopup {
 							return false;
 						}
 						let joined = parent.join(prefix);
-						self.input = self.input.clone().with_value(joined.to_str().unwrap().to_string());
+						let new_input = if Path::is_dir(&joined) {
+							format!("{}/", joined.to_str().unwrap())
+						} else {
+							joined.to_str().unwrap().to_string()
+						};
+						self.input = self.input.clone().with_value(new_input);
 					}
 				}
 				true
