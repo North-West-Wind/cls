@@ -1,8 +1,8 @@
 use std::{collections::HashMap, path::Path, thread::{self, JoinHandle}};
 
-use ffprobe::FfProbe;
 use file_format::{FileFormat, Kind};
 use mime_guess::mime;
+use symphonium::{ResampleQuality, SymphoniumLoader};
 
 use crate::{component::block::{files::FilesBlock, tabs::TabsBlock, BlockSingleton}, state::{acquire, notify_redraw}};
 
@@ -14,23 +14,6 @@ pub mod pulseaudio;
 pub mod threads;
 pub mod waveform;
 
-pub fn ffprobe_info(path: &str) -> Option<FfProbe> {
-	let result = ffprobe::ffprobe(path);
-	match result {
-		Ok(info) => {
-			if info.streams.iter().any(|stream| stream.codec_type == Option::Some("audio".to_string())) {
-				return Option::Some(info);
-			} else {
-				return Option::None;
-			}
-		},
-		Err(_err) => {
-			// not a media file
-			return Option::None;
-		}
-	}
-}
-
 fn add_duration(tab: String) {
 	thread::spawn(move || {
 		let app = acquire();
@@ -40,42 +23,46 @@ fn add_duration(tab: String) {
 		}
 		let files = files.unwrap().clone();
 		drop(app);
+		let mut loader = SymphoniumLoader::new();
 		let mut new_files = vec![];
 		for (filename, _) in &files {
 			let longpath = Path::new(&tab).join(filename);
 			let filepath = longpath.into_os_string().into_string().unwrap();
-			let info = ffprobe_info(filepath.as_str());
-			info.inspect(|info| {
-				let mut duration_str = String::new();
-				info.format.get_duration().inspect(|duration| {
-					let millis = duration.as_millis();
-					let hours = millis / (1000 * 60 * 60);
-					let minutes = millis / (1000 * 60) - hours * 60;
-					let seconds = millis / 1000 - hours * 60 * 60 - minutes * 60;
-					let millis = millis - ((hours * 60 + minutes) * 60 + seconds) * 1000;
-					let mut unit = "";
-					if hours > 0 {
-						duration_str += &format!("{:0>2}:", hours.to_string());
-					}
-					if minutes > 0 || !duration_str.is_empty() {
-						duration_str += &format!("{:0>2}:", minutes.to_string());
-					}
-					if duration_str.is_empty() && seconds > 0 {
-						duration_str += &format!("{}.", seconds.to_string());
-						unit = " s";
-					} else if !duration_str.is_empty() {
-						duration_str += &format!("{:0>2}.", seconds.to_string());
-					}
-					if duration_str.is_empty() {
-						duration_str += &format!("{}", millis.to_string());
-						unit = " ms";
-					} else {
-						duration_str += &format!("{:0>3}", millis.to_string());
-					}
-					duration_str += unit;
-				});
-				new_files.push((filename.clone(), duration_str));
-			});
+
+			let result = loader.load(filepath, None, ResampleQuality::Low, None);
+			if result.is_err() {
+				new_files.push((filename.clone(), String::new()));
+				continue;
+			}
+			let audio_data = result.unwrap();
+			let millis = audio_data.frames() * 1000 / audio_data.sample_rate().get() as usize;
+
+			let mut duration_str = String::new();
+			let hours = millis / (1000 * 60 * 60);
+			let minutes = millis / (1000 * 60) - hours * 60;
+			let seconds = millis / 1000 - hours * 60 * 60 - minutes * 60;
+			let millis = millis - ((hours * 60 + minutes) * 60 + seconds) * 1000;
+			let mut unit = "";
+			if hours > 0 {
+				duration_str += &format!("{:0>2}:", hours.to_string());
+			}
+			if minutes > 0 || !duration_str.is_empty() {
+				duration_str += &format!("{:0>2}:", minutes.to_string());
+			}
+			if duration_str.is_empty() && seconds > 0 {
+				duration_str += &format!("{}.", seconds.to_string());
+				unit = " s";
+			} else if !duration_str.is_empty() {
+				duration_str += &format!("{:0>2}.", seconds.to_string());
+			}
+			if duration_str.is_empty() {
+				duration_str += &format!("{}", millis.to_string());
+				unit = " ms";
+			} else {
+				duration_str += &format!("{:0>3}", millis.to_string());
+			}
+			duration_str += unit;
+			new_files.push((filename.clone(), duration_str));
 		}
 		acquire().files.insert(tab, new_files);
 		notify_redraw();

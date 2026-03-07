@@ -84,8 +84,16 @@ impl BlockRenderArea for FilesBlock {
 						spans.push(Span::from("  "));
 					}
 					spans.push(Span::from(" "));
-					let style = if self.selected == ii {
-						Style::default().fg(Color::LightBlue).add_modifier(Modifier::REVERSED)
+					let style = if duration.is_empty() {
+						let tmp = Style::default().fg(Color::Red);
+						if self.selected == ii {
+							tmp.add_modifier(Modifier::REVERSED)
+						} else {
+							tmp
+						}
+					} else if self.selected == ii {
+						Style::default().fg(Color::LightBlue)
+						.add_modifier(Modifier::REVERSED)
 					} else {
 						Style::default().fg(Color::Cyan)
 					};

@@ -181,7 +181,6 @@ dependencies = [
  "crossterm",
  "dirs",
  "event-listener",
- "ffprobe",
  "file-format",
  "interprocess",
  "linked-hash-map",
@@ -409,16 +408,6 @@ name = "fast-interleave"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0a5ab837f0983c0a9210d7847931f64e3be67fcb0ab93d625f7845a0132c825"
-
-[[package]]
-name = "ffprobe"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ffef835e1f9ac151db5bb2adbb95c9dfe1f315f987f011dd89cd655b4e9a52c"
-dependencies = [
- "serde",
- "serde_json",
-]
 
 [[package]]
 name = "file-format"

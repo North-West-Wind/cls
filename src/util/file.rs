@@ -20,20 +20,24 @@ pub fn acquire_playing_files() -> MutexGuard<'static, HashMap<Uuid, PlayableFile
 }
 
 pub fn play_file_auto_volume(path: &String, lock: Arc<Mutex<()>>) {
-	let app = acquire();
-	let pathed = Path::new(&path);
-	let parent = pathed.parent().unwrap().to_str().unwrap().to_string();
-	let name = pathed.file_name().unwrap().to_os_string().into_string().unwrap();
-	let volume: f32 = match app.config.files.get(&parent) {
-		Some(map) => {
-			match map.get(&name) {
-				Some(entry) => (entry.volume as f32) / 100.0,
-				None => 1.0,
-			}
-		},
-		None => 1.0
-	};
-	play_file(path, volume, lock);
+	let path = path.clone();
+	thread::spawn(move || {
+		let app = acquire();
+		let pathed = Path::new(&path);
+		let parent = pathed.parent().unwrap().to_str().unwrap().to_string();
+		let name = pathed.file_name().unwrap().to_os_string().into_string().unwrap();
+		let volume: f32 = match app.config.files.get(&parent) {
+			Some(map) => {
+				match map.get(&name) {
+					Some(entry) => (entry.volume as f32) / 100.0,
+					None => 1.0,
+				}
+			},
+			None => 1.0
+		};
+		drop(app);
+		play_file(&path, volume, lock);
+	});
 }
 
 pub fn play_file(path: &String, volume: f32, lock: Arc<Mutex<()>>) {
