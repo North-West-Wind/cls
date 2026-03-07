@@ -1,6 +1,6 @@
 [package]
 name = "cls"
-version = "2.1.2"
+version = "3.0.0"
 edition = "2024"
 
 [dependencies]
