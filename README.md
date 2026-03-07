@@ -147,7 +147,7 @@ It is highly recommended to add a global hotkey for waves.
 As long as you are holding the set of keys down, the waveform will keep playing.
 
 ### Dialogs (>=3.0.0)
-The dialog feature is added in version 3.0.0.
+The dialog feature is added in version 3.0.0.  
 ![Dialog menu](dialogs.png)
 
 To toggle the dialog menu, press 't'.
