@@ -4,7 +4,7 @@ use state::Scanning;
 use util::threads::spawn_scan_thread;
 use clap::{command, Arg, ArgAction, Command};
 
-use crate::{state::acquire, util::threads::{spawn_drawing_thread, spawn_listening_thread, spawn_pacat_file_thread, spawn_pacat_wave_thread, spawn_signal_thread, spawn_socket_thread}};
+use crate::{listener::{listen_signals, program_loop}, renderer::draw_loop, state::acquire, util::{audio::{PlayerType, create_audio_player}, threads::spawn_socket_thread}};
 mod component;
 mod config;
 mod constant;
@@ -101,22 +101,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	drop(app);
 
 	// Create threads for all background listeners
-	spawn_signal_thread()?;
+	listen_signals();
 	spawn_scan_thread(Scanning::All);
-	let listen_thread = spawn_listening_thread();
 	let socket_thread = spawn_socket_thread();
-	// Wave playing thread
+	// Audio players
 	if !is_edit {
-		spawn_pacat_file_thread();
-		spawn_pacat_wave_thread();
+		create_audio_player(PlayerType::File);
+		create_audio_player(PlayerType::Wave);
 	}
-	if !is_hidden {
+	let draw_thread = if !is_hidden {
 		// If not hidden, we need to render the UI
-		let draw_thread = spawn_drawing_thread();
-		draw_thread.join().ok();
-	}
+		Some(draw_loop())
+	} else {
+		None
+	};
+	// Keep the program running
+	program_loop().ok();
+	draw_thread.map(|thread| thread.join());
 	// Wait for all threads to end before closing
-	listen_thread.join().ok();
 	if socket_thread.is_ok() {
 		send_exit().ok();
 		socket_thread.unwrap().join().ok();

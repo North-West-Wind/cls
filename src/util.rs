@@ -7,6 +7,7 @@ use symphonium::{ResampleQuality, SymphoniumLoader};
 
 use crate::{component::block::{BlockSingleton, files::FilesBlock, tabs::TabsBlock}, state::{acquire, notify_redraw}, util::file::read_file_ffmpeg};
 
+pub mod audio;
 pub mod dialog;
 pub mod file;
 pub mod fs;

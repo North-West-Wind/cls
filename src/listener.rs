@@ -1,40 +1,13 @@
-use std::{io, sync::{Arc, Mutex}, time::Duration};
+use std::{io, sync::{Arc, Mutex}, thread, time::Duration};
 use crossterm::event::{poll, read, Event, KeyEvent};
 use mki::Action;
+use signal_hook::iterator::Signals;
 
-use crate::{component::{block, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste, popups}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{SelectionLayer, acquire, is_running, notify_redraw}, util::file::{play_file_auto_volume, stop_all}};
+use crate::{component::{block::{self, log}, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste, popups}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{SelectionLayer, acquire, is_running, notify_redraw, stop_running}, util::file::{play_file_auto_volume, stop_all}};
 
-pub fn listen_events() -> io::Result<()> {
-	let hidden = { acquire().hidden };
-	if hidden {
-		while is_running() {
-			// This is still required to keep the program from stopping
-			std::thread::sleep(Duration::from_millis(500));
-		}
-	} else {
-		while is_running() {
-			// `poll()` waits for an `Event` for a given time period
-			if poll(Duration::from_millis(500))? {
-				// It's guaranteed that the `read()` won't block when the `poll()`
-				// function returns `true`
-				match read()? {
-					//Event::FocusGained => on_focus(true),
-					//Event::FocusLost => on_focus(false),
-					Event::Key(event) => on_key(event),
-					//Event::Mouse(event) => println!("{:?}", event),
-					Event::Paste(data) => on_paste(data),
-					Event::Resize(width, height) => on_resize(width, height),
-					_ => (),
-				}
-			}
-		}
-	}
-	// Exit redraw
-	notify_redraw();
-	Ok(())
-}
-
-pub fn listen_global() {
+pub fn program_loop() -> io::Result<()> {
+	// Global key listener
+	log::info("Starting global key listener...");
 	mki::bind_any_key(Action::handle_kb(move |key| {
 		popups().iter_mut().for_each(|popup| {
 			if popup.has_global_key_handler() {
@@ -91,10 +64,41 @@ pub fn listen_global() {
 			}
 		});
 	}));
-}
 
-pub fn unlisten_global() {
+	// Local key listener
+	log::info("Starting local key listener...");
+	let hidden = { acquire().hidden };
+	if hidden {
+		while is_running() {
+			// This is still required to keep the program from stopping
+			std::thread::sleep(Duration::from_millis(500));
+		}
+	} else {
+		while is_running() {
+			// `poll()` waits for an `Event` for a given time period
+			if poll(Duration::from_millis(500))? {
+				// It's guaranteed that the `read()` won't block when the `poll()`
+				// function returns `true`
+				match read()? {
+					//Event::FocusGained => on_focus(true),
+					//Event::FocusLost => on_focus(false),
+					Event::Key(event) => on_key(event),
+					//Event::Mouse(event) => println!("{:?}", event),
+					Event::Paste(data) => on_paste(data),
+					Event::Resize(width, height) => on_resize(width, height),
+					_ => (),
+				}
+			}
+		}
+	}
+
+	// Program has exited
+	log::info("Stopping global key listener...");
 	mki::remove_any_key_bind();
+
+	// Exit redraw
+	notify_redraw();
+	Ok(())
 }
 
 fn on_resize(width: u16, height: u16) {
@@ -144,4 +148,21 @@ fn on_paste(data: String) {
 		.fold(false, |acc, redraw| { acc || redraw }) {
 			notify_redraw();
 		}
+}
+
+pub fn listen_signals() {
+	log::info("Starting signal listener...");
+	use signal_hook::consts::*;
+	let mut signals = Signals::new([SIGINT, SIGTERM]).expect("Failed to create signals");
+	thread::spawn(move || {
+		for sig in signals.forever() {
+			match sig {
+				SIGINT|SIGTERM => {
+					stop_running();
+					break;
+				},
+				_ => (),
+			}
+		}
+	});
 }

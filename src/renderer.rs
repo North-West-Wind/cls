@@ -1,8 +1,50 @@
+use std::{io, thread::{self, JoinHandle}};
+
+use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode}};
 use ratatui::{
-	layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, widgets::{Block, BorderType, Borders, Paragraph}, Frame
+	Frame, Terminal, layout::{Alignment, Constraint, Direction, Layout, Rect}, prelude::CrosstermBackend, style::{Color, Style}, widgets::{Block, BorderType, Borders, Paragraph}
 };
 
-use crate::{component::{block::{BlockRender, BlockRenderArea, BlockSingleton, dialogs::DialogBlock, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::LogBlock, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupRender, popups}}, state::{MainOpened, acquire}};
+use crate::{component::{block::{BlockRender, BlockRenderArea, BlockSingleton, dialogs::DialogBlock, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::{self, LogBlock}, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupRender, popups}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{MainOpened, acquire, is_running, wait_redraw}};
+
+pub fn draw_loop() -> JoinHandle<Result<(), io::Error>> {
+	log::info("Spawning drawing thread...");
+	return thread::spawn(move || -> Result<(), io::Error> {
+		// Setup terminal
+		enable_raw_mode()?;
+		let mut stdout = io::stdout();
+		execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+		let backend = CrosstermBackend::new(stdout);
+		let mut terminal = Terminal::new(backend)?;
+
+		// Check minimum terminal size
+		let size = terminal.size()?;
+		if size.width < MIN_WIDTH || size.height < MIN_HEIGHT {
+			let width = size.width;
+			let height = size.height;
+			let mut app = acquire();
+			app.error = String::from(format!("Terminal size requires at least {MIN_WIDTH}x{MIN_HEIGHT}.\nCurrent size: {width}x{height}"));
+			app.error_important = true;
+		}
+
+		// Render to the terminal
+		while is_running() {
+			wait_redraw();
+			// Render again
+			terminal.draw(|f| { ui(f); })?;
+		}
+
+		// Restore terminal
+		disable_raw_mode()?;
+		execute!(
+			terminal.backend_mut(),
+			LeaveAlternateScreen,
+			DisableMouseCapture
+		)?;
+		terminal.show_cursor()?;
+		Ok(())
+	});
+}
 
 pub fn ui(f: &mut Frame) {
 	let app = acquire();
