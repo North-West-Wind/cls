@@ -2,17 +2,17 @@ use std::{io, sync::{Arc, Mutex}, time::Duration};
 use crossterm::event::{poll, read, Event, KeyEvent};
 use mki::Action;
 
-use crate::{component::{block, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste, popups}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{SelectionLayer, acquire, acquire_running, notify_redraw}, util::file::{play_file_auto_volume, stop_all}};
+use crate::{component::{block, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste, popups}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{SelectionLayer, acquire, is_running, notify_redraw}, util::file::{play_file_auto_volume, stop_all}};
 
 pub fn listen_events() -> io::Result<()> {
 	let hidden = { acquire().hidden };
 	if hidden {
-		while *acquire_running() {
+		while is_running() {
 			// This is still required to keep the program from stopping
 			std::thread::sleep(Duration::from_millis(500));
 		}
 	} else {
-		while *acquire_running() {
+		while is_running() {
 			// `poll()` waits for an `Event` for a given time period
 			if poll(Duration::from_millis(500))? {
 				// It's guaranteed that the `read()` won't block when the `poll()`

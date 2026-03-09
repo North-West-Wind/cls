@@ -250,7 +250,12 @@ pub fn wait_redraw() {
 	*shared = false;
 }
 
-pub fn acquire_running() -> MutexGuard<'static, bool> {
-	static RUNNING: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(true));
-	RUNNING.lock().unwrap()
+static RUNNING: LazyLock<Mutex<bool>> = LazyLock::new(|| Mutex::new(true));
+
+pub fn is_running() -> bool {
+	*RUNNING.lock().unwrap()
+}
+
+pub fn stop_running() {
+	*RUNNING.lock().unwrap() = false;
 }

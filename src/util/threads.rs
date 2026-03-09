@@ -4,7 +4,7 @@ use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, termi
 use ratatui::{prelude::CrosstermBackend, Terminal};
 use signal_hook::iterator::Signals;
 
-use crate::{component::{block::log, popup::{PopupComponent, exit_popup, save::SavePopup, set_popup}}, config, constant::{APP_NAME, MIN_HEIGHT, MIN_WIDTH}, listener::{listen_events, listen_global, unlisten_global}, renderer, socket::{listen_socket, try_socket}, state::{Scanning, acquire, acquire_running, notify_redraw, wait_redraw}, util::{self, file::acquire_playing_files, waveform::{WaveType, acquire_playing_waves}}};
+use crate::{component::{block::log, popup::{PopupComponent, exit_popup, save::SavePopup, set_popup}}, config, constant::{APP_NAME, MIN_HEIGHT, MIN_WIDTH}, listener::{listen_events, listen_global, unlisten_global}, renderer, socket::{listen_socket, try_socket}, state::{Scanning, acquire, is_running, notify_redraw, stop_running, wait_redraw}, util::{self, file::acquire_playing_files, waveform::{WaveType, acquire_playing_waves}}};
 
 pub fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
 	log::info("Spawning drawing thread...");
@@ -27,7 +27,7 @@ pub fn spawn_drawing_thread() -> JoinHandle<Result<(), io::Error>> {
 		}
 
 		// Render to the terminal
-		while *acquire_running() {
+		while is_running() {
 			wait_redraw();
 			// Render again
 			terminal.draw(|f| { renderer::ui(f); })?;
@@ -64,7 +64,7 @@ pub fn spawn_signal_thread() -> Result<JoinHandle<()>, io::Error> {
 		for sig in signals.forever() {
 			match sig {
 				SIGINT|SIGTERM => {
-					*acquire_running() = false;
+					stop_running();
 					break;
 				},
 				_ => (),
@@ -185,7 +185,7 @@ pub fn spawn_pacat_file_thread() {
 		let mut pacat_running = false;
 		let mut pacat_init = false;
 
-		while *acquire_running() {
+		while is_running() {
 			let mut bytes = [0_u8; FILE_CHUNK * 4];
 			let mut playing_files = acquire_playing_files();
 			let mut eofs = vec![];
@@ -283,7 +283,7 @@ pub fn spawn_pacat_wave_thread() {
 		let mut pacat_running = false;
 		let mut pacat_init = false;
 
-		while *acquire_running() {
+		while is_running() {
 			let mut bytes = [0_u8; WAVE_CHUNK * 4];
 			let mut playing_waves = acquire_playing_waves();
 			if playing_waves.len() > 0 {

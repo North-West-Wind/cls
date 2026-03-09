@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Style}, text::{Line, Text}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 
-use crate::{component::{block::{BlockSingleton, dialogs::DialogBlock, tabs::TabsBlock, waves::WavesBlock}, popup::defer_exit_popup}, state::{acquire, acquire_running}};
+use crate::{component::{block::{BlockSingleton, dialogs::DialogBlock, tabs::TabsBlock, waves::WavesBlock}, popup::defer_exit_popup}, state::{acquire, stop_running}};
 
 use super::{PopupHandleKey, PopupRender};
 
@@ -131,7 +131,7 @@ impl ConfirmPopup {
 	}
 
 	fn quit(&self) -> bool {
-		*acquire_running() = false;
+		stop_running();
 		false
 	}
 }

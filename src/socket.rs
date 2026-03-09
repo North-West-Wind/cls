@@ -5,7 +5,7 @@ use code::SocketCode;
 use interprocess::local_socket::{traits::{ListenerExt, Stream as _}, GenericFilePath, GenericNamespaced, Listener, ListenerOptions, Name, NameType, Stream, ToFsName, ToNsName};
 use normpath::PathExt;
 
-use crate::{component::block::{BlockSingleton, log, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, acquire_running, load_app_config, notify_redraw}, util::{file::{play_file_auto_volume, stop_all}, fs::separate_parent_file, pulseaudio::set_volume_percentage, threads::spawn_scan_thread, waveform::stop_all_waves}};
+use crate::{component::block::{BlockSingleton, log, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, is_running, load_app_config, notify_redraw, stop_running}, util::{file::{play_file_auto_volume, stop_all}, fs::separate_parent_file, pulseaudio::set_volume_percentage, threads::spawn_scan_thread, waveform::stop_all_waves}};
 
 pub mod code;
 
@@ -34,7 +34,7 @@ pub fn listen_socket(listener: Listener) {
 				log::error(&app.error);
 			}
 		}
-		if !*acquire_running() {
+		if !is_running() {
 			break;
 		}
 	}
@@ -71,7 +71,7 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 	let mut app = acquire();
 	match code {
 		Exit => {
-			*acquire_running() = false;
+			stop_running();
 			return send_response(reader.get_mut(), &[0], true);
 		},
 		ReloadConfig => {
