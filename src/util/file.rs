@@ -3,7 +3,7 @@ use std::{collections::HashMap, io::BufReader, path::Path, process::{ChildStdout
 use nix::{sys::signal::{self, Signal}, unistd::Pid};
 use uuid::Uuid;
 
-use crate::{state::{acquire, acquire_playlist_lock, notify_redraw}, util::ffprobe_info};
+use crate::{state::{acquire, acquire_playlist_lock, notify_redraw}, util::fs::ffprobe_info};
 
 pub struct PlayableFile {
 	pub reader: BufReader<ChildStdout>,
@@ -38,11 +38,11 @@ pub fn play_file(path: &String) {
 				.find(|stream| stream.codec_type == Option::Some("audio".to_string()))
 				.inspect(|_| {
 					let mut app = acquire();
-					let using_semaphore = app.config.playlist_mode;
+					let playlist_mode = app.config.playlist_mode;
 					app.playing_file.insert(uuid, (0, string.to_string()));
 					drop(app);
 					notify_redraw();
-					let playlist_lock = if using_semaphore {
+					let playlist_lock = if playlist_mode {
 						Some(acquire_playlist_lock())
 					} else {
 						None

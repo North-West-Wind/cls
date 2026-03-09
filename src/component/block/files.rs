@@ -1,6 +1,6 @@
 use std::{cmp::{max, min}, collections::HashSet, i32, path::Path, sync::{Mutex, MutexGuard, OnceLock}};
 
-use crate::{component::{block::{BlockNavigation, BlockSingleton, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, state::{Scanning, acquire}, util::{file::play_file, selected_file_path, threads::spawn_scan_thread}};
+use crate::{component::{block::{BlockNavigation, BlockSingleton, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, state::{Scanning, acquire}, util::{file::play_file, fs::scan, selected_file_path}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -199,7 +199,7 @@ impl FilesBlock {
 
 	fn reload_tab(&self) -> bool {
 		if self.selected < acquire().config.tabs.len() {
-			spawn_scan_thread(Scanning::One(self.selected));
+			scan(Scanning::One(self.selected));
 			return true;
 		}
 		false

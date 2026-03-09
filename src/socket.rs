@@ -5,7 +5,7 @@ use code::SocketCode;
 use interprocess::local_socket::{traits::{ListenerExt, Stream as _}, GenericFilePath, GenericNamespaced, Listener, ListenerOptions, Name, NameType, Stream, ToFsName, ToNsName};
 use normpath::PathExt;
 
-use crate::{component::block::{BlockSingleton, log, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, acquire_running, load_app_config, notify_redraw}, util::{file::{play_file, stop_all}, fs::separate_parent_file, pulseaudio::set_volume_percentage, threads::spawn_scan_thread, waveform::stop_all_waves}};
+use crate::{component::block::{BlockSingleton, log, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, acquire_running, load_app_config, notify_redraw}, util::{file::{play_file, stop_all}, fs::{scan, separate_parent_file}, pulseaudio::set_volume_percentage, waveform::stop_all_waves}};
 
 pub mod code;
 
@@ -93,7 +93,7 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 				let len = app.config.tabs.len();
 				app.config.tabs.push(norm.clone().into_os_string().into_string().unwrap());
 				{ TabsBlock::instance().selected = len; }
-				spawn_scan_thread(Scanning::One(len));
+				scan(Scanning::One(len));
 				notify_redraw();
 				let mut bytes = norm.as_os_str().as_bytes().to_vec();
 				bytes.insert(0, 0);
@@ -153,7 +153,7 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 				return send_response(reader.get_mut(), &bytes, true);
 			} else {
 				if chosen_index < app.config.tabs.len() {
-					spawn_scan_thread(Scanning::One(chosen_index));
+					scan(Scanning::One(chosen_index));
 					notify_redraw();
 					let path = app.config.tabs[chosen_index].clone();
 					let mut bytes = path.as_bytes().to_vec();

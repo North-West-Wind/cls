@@ -1,10 +1,9 @@
 use socket::{send_exit, send_socket};
 use util::pulseaudio::{load_null_sink, loopback, set_volume_percentage};
 use state::Scanning;
-use util::threads::spawn_scan_thread;
 use clap::{command, Arg, ArgAction, Command};
 
-use crate::{state::acquire, util::threads::{spawn_drawing_thread, spawn_listening_thread, spawn_pacat_file_thread, spawn_pacat_wave_thread, spawn_signal_thread, spawn_socket_thread}};
+use crate::{state::acquire, util::{fs::scan, threads::{spawn_drawing_thread, spawn_listening_thread, spawn_pacat_file_thread, spawn_pacat_wave_thread, spawn_signal_thread, spawn_socket_thread}}};
 mod component;
 mod config;
 mod constant;
@@ -14,7 +13,8 @@ mod socket;
 mod state;
 mod util;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// Setup command line to for subcommands and options
 	let mut command = command!()
 		.about("Command-Line Soundboard")
@@ -102,7 +102,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	// Create threads for all background listeners
 	spawn_signal_thread()?;
-	spawn_scan_thread(Scanning::All);
+	tokio::spawn(scan(Scanning::All));
 	let listen_thread = spawn_listening_thread();
 	let socket_thread = spawn_socket_thread();
 	// Wave playing thread

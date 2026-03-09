@@ -84,32 +84,6 @@ pub fn spawn_socket_thread() -> Result<JoinHandle<()>, io::Error> {
 	}))
 }
 
-pub fn spawn_scan_thread(mode: Scanning) {
-	if mode == Scanning::None {
-		return;
-	}
-	thread::spawn(move || {
-		{ acquire().scanning = mode; }
-		match mode {
-			Scanning::All => {
-				log::info("Scanning all tabs...");
-				let _ = util::scan_tabs();
-				log::info("Scanned all tabs");
-			},
-			Scanning::One(index) => {
-				log::info(format!("Scanning tab {}...", index).as_str());
-				util::scan_tab(index);
-				log::info(format!("Scanned tab {}", index).as_str());
-			},
-			_ => ()
-		};
-
-		let mut app = acquire();
-		app.scanning = Scanning::None;
-		notify_redraw();
-	});
-}
-
 pub fn spawn_save_thread() {
 	thread::spawn(move || {
 		set_popup(PopupComponent::Save(SavePopup::new(false)));
