@@ -1,9 +1,9 @@
-use std::{collections::HashMap, io::{Error, Read}, num::NonZero, path::Path, process::{Command, Stdio}, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard}, thread, time::Duration};
+use std::{collections::HashMap, io::{Error, Read}, num::NonZero, path::Path, process::{Command, Stdio}, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard}, thread, time::{Duration, SystemTime}};
 
 use symphonium::{ResampleQuality, SymphoniumLoader};
 use uuid::Uuid;
 
-use crate::{component::block::log, constant::ENDIANESS, state::{acquire, notify_redraw}};
+use crate::{component::block::log, constant::ENDIANESS, state::{acquire, is_running, notify_redraw}};
 
 pub fn parent_file(str: String) -> (String, String) {
 	let path = Path::new(&str);
@@ -21,6 +21,7 @@ pub struct PlayableFile {
 
 static PLAYING_FILES: LazyLock<Mutex<HashMap<Uuid, PlayableFile>>> = LazyLock::new(|| { Mutex::new(HashMap::new()) });
 static SYMPHONIUM_LOADER: LazyLock<Mutex<SymphoniumLoader>> = LazyLock::new(|| { Mutex::new(SymphoniumLoader::new()) });
+static AUDIO_CACHE: LazyLock<Mutex<HashMap<String, (Vec<f32>, SystemTime)>>> = LazyLock::new(|| { Mutex::new(HashMap::new()) });
 
 pub fn acquire_playing_files() -> MutexGuard<'static, HashMap<Uuid, PlayableFile>> {
 	PLAYING_FILES.lock().unwrap()
@@ -65,29 +66,42 @@ pub fn play_file(path: &String, volume: f32, lock: Arc<Mutex<()>>) {
 		}
 		drop(app);
 
-		let mut loader = SYMPHONIUM_LOADER.lock().unwrap();
-		let result = loader.load_f32(&string, NonZero::new(48000), ResampleQuality::Low, None);
-		drop(loader);
-		let interleaved = if result.is_err() {
-			log::error(format!("File {} cannot be decoded with symphonium", string).as_str());
-			log::error(format!("{:?}", result.unwrap_err()).as_str());
-
-			let result = read_file_ffmpeg(&string);
-			if result.is_err() {
-				log::error(format!("File {} cannot be decoded with ffmpeg", string).as_str());
-				log::error(format!("{:?}", result.unwrap_err()).as_str());
-				return;
-			}
-			result.unwrap()
+		let mut cache = AUDIO_CACHE.lock().unwrap();
+		let interleaved = if cache.contains_key(&string) {
+			let (data, last_accessed) = cache.get_mut(&string).unwrap();
+			*last_accessed = SystemTime::now();
+			let data = data.clone();
+			drop(cache);
+			data
 		} else {
-			let audio_data = result.unwrap();
-			if audio_data.channels() == 1 {
-				audio_data.data[0].iter().zip(audio_data.data[0].iter()).flat_map(|(a, b)| [*a, *b]).collect()
-			} else if audio_data.channels() > 2 {
-				audio_data.data[0].iter().zip(audio_data.data[1].iter()).flat_map(|(a, b)| [*a, *b]).collect()
+			drop(cache);
+			let mut loader = SYMPHONIUM_LOADER.lock().unwrap();
+			let result = loader.load_f32(&string, NonZero::new(48000), ResampleQuality::Low, None);
+			drop(loader);
+			let data = if result.is_err() {
+				log::error(format!("File {} cannot be decoded with symphonium", string).as_str());
+				log::error(format!("{:?}", result.unwrap_err()).as_str());
+
+				let result = read_file_ffmpeg(&string);
+				if result.is_err() {
+					log::error(format!("File {} cannot be decoded with ffmpeg", string).as_str());
+					log::error(format!("{:?}", result.unwrap_err()).as_str());
+					return;
+				}
+				result.unwrap()
 			} else {
-				audio_data.as_interleaved()
-			}
+				let audio_data = result.unwrap();
+				if audio_data.channels() == 1 {
+					audio_data.data[0].iter().zip(audio_data.data[0].iter()).flat_map(|(a, b)| [*a, *b]).collect()
+				} else if audio_data.channels() > 2 {
+					audio_data.data[0].iter().zip(audio_data.data[1].iter()).flat_map(|(a, b)| [*a, *b]).collect()
+				} else {
+					audio_data.as_interleaved()
+				}
+			};
+			let mut cache = AUDIO_CACHE.lock().unwrap();
+			cache.insert(string.clone(), (data.clone(), SystemTime::now()));
+			data
 		};
 
 		let finished = Arc::new((Mutex::new(()), Condvar::new()));
@@ -125,4 +139,23 @@ pub fn read_file_ffmpeg(path: &str) -> Result<Vec<f32>, Error> {
 	let mut buf = vec![];
 	let _ = result.unwrap().stdout.unwrap().read_to_end(&mut buf);
 	Ok(buf.chunks(4).map(|chunk| f32::from_le_bytes(chunk.try_into().unwrap())).collect())
+}
+
+pub fn audio_cache_invalidator() {
+	thread::spawn(move || {
+		while is_running() {
+			let mut cache = AUDIO_CACHE.lock().unwrap();
+			let mut removable = vec![];
+			for (key, (_data, last_accessed)) in cache.iter() {
+				if SystemTime::now().duration_since(*last_accessed).unwrap().as_secs() > 60 {
+					removable.push(key.clone());
+				}
+			}
+			for key in removable {
+				cache.remove(&key);
+			}
+			drop(cache);
+			thread::sleep(Duration::from_mins(1));
+		}
+	});
 }

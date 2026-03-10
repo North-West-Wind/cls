@@ -3,7 +3,7 @@ use util::pulseaudio::{load_null_sink, loopback, set_volume_percentage};
 use state::Scanning;
 use clap::{command, Arg, ArgAction, Command};
 
-use crate::{listener::{listen_signals, program_loop}, renderer::draw_loop, socket::start_socket, state::acquire, util::{audio::{PlayerType, create_audio_player}, tab::scan}};
+use crate::{listener::{listen_signals, program_loop}, renderer::draw_loop, socket::start_socket, state::acquire, util::{audio::{PlayerType, create_audio_player}, file::audio_cache_invalidator, tab::scan}};
 mod component;
 mod config;
 mod constant;
@@ -107,6 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	if !is_edit {
 		create_audio_player(PlayerType::File);
 		create_audio_player(PlayerType::Wave);
+		audio_cache_invalidator();
 	}
 	let draw_thread = if !is_hidden {
 		// If not hidden, we need to render the UI
