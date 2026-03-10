@@ -4,6 +4,7 @@ version = "3.0.0"
 edition = "2024"
 
 [dependencies]
+bytemuck = "1.25.0"
 clap = { version = "4.5.20", features = ["cargo"] }
 config = { version = "0.15.19", default-features = false, features = ["json", "toml"] }
 crossterm = "0.28"

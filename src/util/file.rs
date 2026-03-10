@@ -3,7 +3,7 @@ use std::{collections::HashMap, io::{Error, Read}, num::NonZero, path::Path, pro
 use symphonium::{ResampleQuality, SymphoniumLoader};
 use uuid::Uuid;
 
-use crate::{component::block::log, state::{acquire, notify_redraw}};
+use crate::{component::block::log, constant::ENDIANESS, state::{acquire, notify_redraw}};
 
 pub fn parent_file(str: String) -> (String, String) {
 	let path = Path::new(&str);
@@ -114,7 +114,7 @@ pub fn read_file_ffmpeg(path: &str) -> Result<Vec<f32>, Error> {
 	let result = Command::new("ffmpeg").args([
 		"-loglevel", "-8",
 		"-i", path,
-		"-f", "f32le",
+		"-f", format!("f32{}", ENDIANESS).as_str(),
 		"-ac", "2",
 		"-ar", "48000",
 		"-"
