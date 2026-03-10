@@ -5,6 +5,13 @@ use uuid::Uuid;
 
 use crate::{component::block::log, state::{acquire, notify_redraw}};
 
+pub fn parent_file(str: String) -> (String, String) {
+	let path = Path::new(&str);
+	let parent = path.parent().unwrap().to_str().unwrap().to_string();
+	let name = path.file_name().unwrap().to_str().unwrap().to_string();
+	(parent, name)
+}
+
 pub struct PlayableFile {
 	pub data: Vec<f32>,
 	pub position: usize,

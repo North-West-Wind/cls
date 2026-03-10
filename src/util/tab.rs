@@ -1,0 +1,182 @@
+use std::{collections::HashMap, path::Path, thread::{self, JoinHandle}};
+
+use file_format::{FileFormat, Kind};
+use mime_guess::mime;
+use symphonium::{ResampleQuality, SymphoniumLoader};
+
+use crate::{component::block::{BlockSingleton, files::FilesBlock, log, tabs::TabsBlock}, state::{Scanning, acquire, notify_redraw}, util::file::read_file_ffmpeg};
+
+fn ffprobe_duration(path: &str) -> Option<u128> {
+	let Ok(info) = ffprobe::ffprobe(path) else { return None };
+	if info.streams.iter().any(|stream| stream.codec_type == Option::Some("audio".to_string())) {
+		if let Some(duration) = info.format.get_duration() {
+			Some(duration.as_millis())
+		} else {
+			None
+		}
+	} else {
+		None
+	}
+}
+
+fn add_duration(tab: String) {
+	thread::spawn(move || {
+		let app = acquire();
+		let files = app.files.get(&tab);
+		if files.is_none() {
+			return;
+		}
+		let files = files.unwrap().clone();
+		drop(app);
+		let mut loader = SymphoniumLoader::new();
+		let mut new_files = vec![];
+		for (filename, _) in &files {
+			let longpath = Path::new(&tab).join(filename);
+			let filepath = longpath.into_os_string().into_string().unwrap();
+
+			let result = ffprobe_duration(&filepath);
+			let millis: u128 = if result.is_none() {
+				let result = loader.load(&filepath, None, ResampleQuality::Low, None);
+				if result.is_err() {
+					let result = read_file_ffmpeg(&filepath);
+					if result.is_err() {
+						new_files.push((filename.clone(), String::new()));
+						continue;
+					}
+					result.unwrap().len() as u128 / 48
+				} else {
+					let audio_data = result.unwrap();
+					audio_data.frames() as u128 * 1000 / audio_data.sample_rate().get() as u128
+				}
+			} else {
+				result.unwrap()
+			};
+
+			let mut duration_str = String::new();
+			let hours = millis / (1000 * 60 * 60);
+			let minutes = millis / (1000 * 60) - hours * 60;
+			let seconds = millis / 1000 - hours * 60 * 60 - minutes * 60;
+			let millis = millis - ((hours * 60 + minutes) * 60 + seconds) * 1000;
+			let mut unit = "";
+			if hours > 0 {
+				duration_str += &format!("{:0>2}:", hours.to_string());
+			}
+			if minutes > 0 || !duration_str.is_empty() {
+				duration_str += &format!("{:0>2}:", minutes.to_string());
+			}
+			if duration_str.is_empty() && seconds > 0 {
+				duration_str += &format!("{}.", seconds.to_string());
+				unit = " s";
+			} else if !duration_str.is_empty() {
+				duration_str += &format!("{:0>2}.", seconds.to_string());
+			}
+			if duration_str.is_empty() {
+				duration_str += &format!("{}", millis.to_string());
+				unit = " ms";
+			} else {
+				duration_str += &format!("{:0>3}", millis.to_string());
+			}
+			duration_str += unit;
+			new_files.push((filename.clone(), duration_str));
+		}
+		acquire().files.insert(tab, new_files);
+		notify_redraw();
+	});
+}
+
+fn scan_tab(index: usize) -> JoinHandle<Result<(), std::io::Error>> {
+	thread::spawn(move || {
+		let app = acquire();
+		let tabs = &app.config.tabs;
+		if index >= tabs.len() {
+			return Ok(());
+		}
+		let tab = tabs[index].clone();
+		let fast_scan = app.config.fast_scan;
+		drop(app);
+		let mut files = vec![];
+		let path = Path::new(tab.as_str());
+		if path.is_dir() {
+			for entry in std::fs::read_dir(path)? {
+				let file = entry?;
+				let longpath = file.path();
+				let matched;
+				if fast_scan {
+					let guess = mime_guess::from_path(longpath.clone());
+					let Some(guess) = guess.first() else { continue };
+					let mimetype = guess.type_();
+					matched = mimetype == mime::AUDIO || mimetype == mime::VIDEO;
+				} else {
+					let Ok(fmt) = FileFormat::from_file(longpath.clone()) else { continue; };
+					let kind = fmt.kind();
+					matched = kind == Kind::Audio || kind == Kind::Video;
+				}
+				if matched {
+					let filename = longpath.file_name().unwrap().to_os_string().into_string().unwrap();
+					files.push((filename, String::new()));
+				}
+			}
+	    files.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+			{ acquire().files.insert(tab.clone(), files); }
+			add_duration(tab);
+		}
+		Ok(())
+	})
+}
+
+fn scan_tabs() -> Result<(), std::io::Error> {
+	let len = { acquire().config.tabs.len() };
+	let mut handles = vec![];
+	for ii in 0..len {
+		let handle = scan_tab(ii);
+		handles.push(handle);
+	}
+	for handle in handles {
+		handle.join().expect("Failed to join threads")?;
+	}
+	Ok(())
+}
+
+pub fn selected_file_path(tabs: &Vec<String>, files: &HashMap<String, Vec<(String, String)>>, selected: Option<usize>) -> String {
+	let tab_selected = { TabsBlock::instance().selected };
+	if tab_selected >= tabs.len() {
+		return String::new();
+	}
+	let tab = tabs[tab_selected].clone();
+	let files = files.get(&tab);
+	if files.is_none() {
+		return String::new();
+	}
+	let files = files.unwrap();
+	let selected = selected.unwrap_or_else(|| { FilesBlock::instance().selected });
+	if selected >= files.len() {
+		return String::new();
+	}
+	return Path::new(&tab).join(&files[selected].0).into_os_string().into_string().unwrap();
+}
+
+pub fn scan(mode: Scanning) {
+	if mode == Scanning::None {
+		return;
+	}
+	thread::spawn(move || {
+		{ acquire().scanning = mode; }
+		match mode {
+			Scanning::All => {
+				log::info("Scanning all tabs...");
+				let _ = scan_tabs();
+				log::info("Scanned all tabs");
+			},
+			Scanning::One(index) => {
+				log::info(format!("Scanning tab {}...", index).as_str());
+				scan_tab(index);
+				log::info(format!("Scanned tab {}", index).as_str());
+			},
+			_ => ()
+		};
+
+		let mut app = acquire();
+		app.scanning = Scanning::None;
+		notify_redraw();
+	});
+}

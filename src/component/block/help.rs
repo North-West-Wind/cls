@@ -2,7 +2,7 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use ratatui::{layout::Rect, style::{Color, Style}, widgets::Paragraph, Frame};
 
-use crate::{component::block::BlockSingleton, state::acquire, util::global_input::sort_keys};
+use crate::{component::block::BlockSingleton, state::acquire, util::keyboard::sort_keys};
 
 use super::BlockRenderArea;
 

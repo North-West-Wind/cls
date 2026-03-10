@@ -1,15 +1,15 @@
-use std::{cmp::{max, min}, collections::HashMap, io::{BufReader, Error, Read, Write}, os::unix::ffi::OsStrExt, path::Path, sync::{Arc, Mutex}};
+use std::{cmp::{max, min}, collections::HashMap, io::{self, BufReader, Error, Read, Write}, os::unix::ffi::OsStrExt, path::Path, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
 
 use clap::ArgMatches;
 use code::SocketCode;
 use interprocess::local_socket::{traits::{ListenerExt, Stream as _}, GenericFilePath, GenericNamespaced, Listener, ListenerOptions, Name, NameType, Stream, ToFsName, ToNsName};
 use normpath::PathExt;
 
-use crate::{component::block::{BlockSingleton, log, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, is_running, load_app_config, notify_redraw, stop_running}, util::{file::{play_file_auto_volume, stop_all}, fs::separate_parent_file, pulseaudio::set_volume_percentage, threads::spawn_scan_thread, waveform::stop_all_waves}};
+use crate::{component::block::{BlockSingleton, log, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, is_running, load_app_config, notify_redraw, stop_running}, util::{file::{parent_file, play_file_auto_volume, stop_all}, pulseaudio::set_volume_percentage, tab::scan, wave::stop_all_waves}};
 
 pub mod code;
 
-pub fn socket_name() -> std::io::Result<Name<'static>> {
+fn socket_name() -> std::io::Result<Name<'static>> {
 	if GenericNamespaced::is_supported() {
 		format!("{APP_NAME}.sock").to_ns_name::<GenericNamespaced>()
 	} else {
@@ -17,12 +17,12 @@ pub fn socket_name() -> std::io::Result<Name<'static>> {
 	}
 }
 
-pub fn try_socket() -> std::io::Result<Listener> {
+fn try_socket() -> std::io::Result<Listener> {
 	let opts = ListenerOptions::new().name(socket_name()?);
 	opts.create_sync()
 }
 
-pub fn listen_socket(listener: Listener) {
+fn listen_socket(listener: Listener) {
 	for conn in listener.incoming() {
 		let Ok(stream) = conn else { continue; };
 		if let Err(err) = handle_stream(BufReader::new(stream)) {
@@ -38,6 +38,16 @@ pub fn listen_socket(listener: Listener) {
 			break;
 		}
 	}
+}
+
+pub fn start_socket() -> Result<JoinHandle<()>, io::Error> {
+	let listener = try_socket()?;
+	log::info("Spawning socket thread...");
+
+	Ok(thread::spawn(move || {
+		{ acquire().socket_holder = true; }
+		listen_socket(listener);
+	}))
 }
 
 pub fn send_exit() -> std::io::Result<()> {
@@ -93,7 +103,7 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 				let len = app.config.tabs.len();
 				app.config.tabs.push(norm.clone().into_os_string().into_string().unwrap());
 				{ TabsBlock::instance().selected = len; }
-				spawn_scan_thread(Scanning::One(len));
+				scan(Scanning::One(len));
 				notify_redraw();
 				let mut bytes = norm.as_os_str().as_bytes().to_vec();
 				bytes.insert(0, 0);
@@ -153,7 +163,7 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 				return send_response(reader.get_mut(), &bytes, true);
 			} else {
 				if chosen_index < app.config.tabs.len() {
-					spawn_scan_thread(Scanning::One(chosen_index));
+					scan(Scanning::One(chosen_index));
 					notify_redraw();
 					let path = app.config.tabs[chosen_index].clone();
 					let mut bytes = path.as_bytes().to_vec();
@@ -299,7 +309,7 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 				if file.is_empty() {
 					return send_response(reader.get_mut(), &[1], false);
 				}
-				let (parent, name) = separate_parent_file(file);
+				let (parent, name) = parent_file(file);
 				let old_volume = match app.config.files.get(&parent) {
 					Some(map) => match map.get(&name) {
 						Some(entry) => entry.volume,

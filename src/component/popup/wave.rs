@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 use std::cmp::max;
 
-use crate::{component::popup::{confirm::{ConfirmAction, ConfirmPopup}, defer_exit_popup, defer_set_popup, input::{AwaitInput, InputPopup}, PopupComponent, PopupHandleKey, PopupRender}, state::acquire, util::waveform::{Wave, WaveType, Waveform}};
+use crate::{component::popup::{confirm::{ConfirmAction, ConfirmPopup}, defer_exit_popup, defer_set_popup, input::{AwaitInput, InputPopup}, PopupComponent, PopupHandleKey, PopupRender}, state::acquire, util::wave::{Wave, WaveType, Waveform}};
 
 pub struct WavePopup {
 	index: usize,

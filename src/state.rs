@@ -5,7 +5,7 @@ use mki::Keyboard;
 use ratatui::{style::{Color, Style}, widgets::BorderType};
 use uuid::Uuid;
 
-use crate::{component::block::{BlockNavigation, dialogs::DialogBlock, files::FilesBlock, waves::WavesBlock}, config::{SoundboardConfig, load}, util::{dialog::Dialog, global_input::string_to_keyboard, pulseaudio::unload_module, waveform::Waveform}};
+use crate::{component::block::{BlockNavigation, dialogs::DialogBlock, files::FilesBlock, waves::WavesBlock}, config::{SoundboardConfig, load}, util::{dialog::Dialog, keyboard::string_to_keyboard, pulseaudio::unload_module, wave::Waveform}};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum SelectionLayer {

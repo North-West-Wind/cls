@@ -9,7 +9,7 @@ use substring::Substring;
 use crate::{component::{block::{loop_index, BlockSingleton}, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}}};
 use crate::component::popup::wave::WavePopup;
 use crate::component::popup::{set_popup, PopupComponent};
-use crate::{component::block::{settings::SettingsBlock, tabs::TabsBlock, BlockHandleKey, BlockNavigation, BlockRenderArea}, state::acquire, util::waveform::Waveform};
+use crate::{component::block::{settings::SettingsBlock, tabs::TabsBlock, BlockHandleKey, BlockNavigation, BlockRenderArea}, state::acquire, util::wave::Waveform};
 
 pub struct WavesBlock {
 	range: (i32, i32),

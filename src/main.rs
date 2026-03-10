@@ -1,10 +1,9 @@
 use socket::{send_exit, send_socket};
 use util::pulseaudio::{load_null_sink, loopback, set_volume_percentage};
 use state::Scanning;
-use util::threads::spawn_scan_thread;
 use clap::{command, Arg, ArgAction, Command};
 
-use crate::{listener::{listen_signals, program_loop}, renderer::draw_loop, state::acquire, util::{audio::{PlayerType, create_audio_player}, threads::spawn_socket_thread}};
+use crate::{listener::{listen_signals, program_loop}, renderer::draw_loop, socket::start_socket, state::acquire, util::{audio::{PlayerType, create_audio_player}, tab::scan}};
 mod component;
 mod config;
 mod constant;
@@ -102,8 +101,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	// Create threads for all background listeners
 	listen_signals();
-	spawn_scan_thread(Scanning::All);
-	let socket_thread = spawn_socket_thread();
+	scan(Scanning::All);
+	let socket_thread = start_socket();
 	// Audio players
 	if !is_edit {
 		create_audio_player(PlayerType::File);

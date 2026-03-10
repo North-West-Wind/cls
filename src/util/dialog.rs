@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::{Arc, Mutex}, thread, time::{Duration, Sys
 use mki::Keyboard;
 use rand::Rng;
 
-use crate::{config::DialogEntry, state::{acquire, notify_redraw}, util::{file::play_file, global_input::keyboard_to_string}};
+use crate::{config::DialogEntry, state::{acquire, notify_redraw}, util::{file::play_file, keyboard::keyboard_to_string}};
 
 #[derive(Clone)]
 pub struct Dialog {

@@ -4,7 +4,7 @@ use mki::Keyboard;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{config::WaveformEntry, state::{acquire, notify_redraw}, util::global_input::keyboard_to_string};
+use crate::{config::WaveformEntry, state::{acquire, notify_redraw}, util::keyboard::keyboard_to_string};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone, Copy)]
 #[serde(rename_all = "lowercase")]

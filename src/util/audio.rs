@@ -1,6 +1,6 @@
 use std::{f32::consts::PI, io::{self, BufWriter, Write}, process::{Child, ChildStdin, Command, Stdio}, sync::{LazyLock, Mutex, MutexGuard}, thread, time::{Duration, SystemTime}};
 
-use crate::{constant::APP_NAME, state::{acquire, is_running, notify_redraw}, util::{file::acquire_playing_files, waveform::{WaveType, acquire_playing_waves}}};
+use crate::{constant::APP_NAME, state::{acquire, is_running, notify_redraw}, util::{file::acquire_playing_files, wave::{WaveType, acquire_playing_waves}}};
 
 const CHUNK_SIZE: usize = 1024;
 

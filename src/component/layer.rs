@@ -1,6 +1,8 @@
+use std::thread;
+
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::{component::{block::{self, BlockNavigation, dialogs::DialogBlock, files::FilesBlock, settings::SettingsBlock, waves::WavesBlock}, popup::confirm::{ConfirmAction, ConfirmPopup}}, state::{MainOpened, SelectionLayer, acquire}, util::threads::spawn_save_thread};
+use crate::{component::{block::{self, BlockNavigation, dialogs::DialogBlock, files::FilesBlock, settings::SettingsBlock, waves::WavesBlock}, popup::{confirm::{ConfirmAction, ConfirmPopup}, exit_popup, save::SavePopup}}, config, state::{MainOpened, SelectionLayer, acquire, notify_redraw}};
 
 use super::{popup::{help::HelpPopup, set_popup, PopupComponent}};
 
@@ -17,7 +19,7 @@ pub fn handle_key(event: KeyEvent) -> bool {
 			return true;
 		},
 		KeyCode::Char('s') => {
-			spawn_save_thread();
+			save();
 			return true;
 		},
 		KeyCode::Char('c') => {
@@ -96,6 +98,17 @@ pub fn navigate_layer(escape: bool) -> bool {
 			SelectionLayer::Content => return false,
 		}
 	}
+}
+
+fn save() {
+	thread::spawn(move || {
+		set_popup(PopupComponent::Save(SavePopup::new(false)));
+		notify_redraw();
+		config::save();
+		exit_popup();
+		set_popup(PopupComponent::Save(SavePopup::new(true)));
+		notify_redraw();
+	});
 }
 
 fn toggle_main_opened(main_opened: MainOpened) {

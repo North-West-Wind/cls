@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use config::Config;
 use serde::{Deserialize, Serialize};
 
-use crate::util::{fs::separate_parent_file, waveform::Wave};
+use crate::util::{file::parent_file, wave::Wave};
 
 use super::{get_config_path, migrate0::ConfigV0};
 
@@ -138,7 +138,7 @@ impl ConfigV1 {
 		}
 
 		for (path, entry) in entries {
-			let (parent, name) = separate_parent_file(path);
+			let (parent, name) = parent_file(path);
 			match cfg.files.get_mut(&parent) {
 				Some(map) => {
 					map.insert(name, entry);
@@ -156,7 +156,7 @@ impl ConfigV1 {
 	}
 
 	pub fn get_file_entry(&self, path: String) -> Option<&FileEntry> {
-		let (parent, name) = separate_parent_file(path);
+		let (parent, name) = parent_file(path);
 		match self.files.get(&parent) {
 			Some(map) => match map.get(&name) {
 				Some(entry) => Some(entry),
@@ -167,7 +167,7 @@ impl ConfigV1 {
 	}
 
 	pub fn get_file_entry_mut(&mut self, path: String) -> Option<&mut FileEntry> {
-		let (parent, name) = separate_parent_file(path);
+		let (parent, name) = parent_file(path);
 		match self.files.get_mut(&parent) {
 			Some(map) => match map.get_mut(&name) {
 				Some(entry) => Some(entry),
@@ -178,7 +178,7 @@ impl ConfigV1 {
 	}
 
 	pub fn insert_file_entry(&mut self, path: String, entry: FileEntry) {
-		let (parent, name) = separate_parent_file(path);
+		let (parent, name) = parent_file(path);
 		match self.files.get_mut(&parent) {
 			Some(map) => {
 				map.insert(name, entry);
@@ -192,7 +192,7 @@ impl ConfigV1 {
 	}
 
 	pub fn remove_file_entry(&mut self, path: String) -> bool {
-		let (parent, name) = separate_parent_file(path);
+		let (parent, name) = parent_file(path);
 		match self.files.get_mut(&parent) {
 			Some(map) => {
 				let removed = map.remove(&name);

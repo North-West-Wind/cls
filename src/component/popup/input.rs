@@ -5,7 +5,7 @@ use normpath::PathExt;
 use ratatui::{style::{Color, Style}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 use tui_input::{Input, InputRequest, backend::crossterm::EventHandler};
 
-use crate::{component::{block::{BlockSingleton, dialogs::DialogBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupComponent, defer_exit_popup, popups}}, config::FileEntry, state::{Scanning, acquire, notify_redraw}, util::{pulseaudio::{loopback, unload_module}, selected_file_path, threads::spawn_scan_thread}};
+use crate::{component::{block::{BlockSingleton, dialogs::DialogBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupComponent, defer_exit_popup, popups}}, config::FileEntry, state::{Scanning, acquire, notify_redraw}, util::{pulseaudio::{loopback, unload_module}, tab::{scan, selected_file_path}}};
 
 use super::{safe_centered_rect, PopupHandleKey, PopupHandlePaste, PopupRender};
 
@@ -240,7 +240,7 @@ impl InputPopup {
 		app.config.tabs.push(norm.clone().into_os_string().into_string().unwrap());
 		let len = app.config.tabs.len() - 1;
 		{ TabsBlock::instance().selected = len; }
-		spawn_scan_thread(Scanning::One(len));
+		scan(Scanning::One(len));
 	}
 
 	fn send_add_dialog_file(&self) {
