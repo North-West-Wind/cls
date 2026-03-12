@@ -103,7 +103,8 @@ impl Waveform {
 					wave_type: w.wave_type,
 					period: (1.0 * 48000.0 / w.frequency) as u32,
 					samples: (48000.0 * w.phase) as u32,
-					amplitude: w.amplitude * (wave.volume as f32) / 100.0
+					amplitude: w.amplitude,
+					volume: wave.volume as f32 / 100.0
 				}
 			}).collect::<Vec<PlayableWave>>();
 			app.playing_wave.insert(uuid, format!("{} ({})", wave.label, wave.details()));
@@ -135,6 +136,7 @@ pub struct PlayableWave {
 	pub period: u32,
 	pub samples: u32,
 	pub amplitude: f32,
+	pub volume: f32,
 }
 
 static PLAYING_WAVES: LazyLock<Mutex<HashMap<Uuid, Vec<PlayableWave>>>> = LazyLock::new(|| { Mutex::new(HashMap::new()) });

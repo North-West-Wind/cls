@@ -149,7 +149,7 @@ fn get_file_data(buf: &mut [f32]) -> bool {
 		for (uuid, playable) in playing_files.iter_mut() {
 			let max_read = buf.len().min(playable.data.len() - playable.position);
 			for ii in 0..max_read {
-				buf[ii] += playable.data[ii + playable.position] * playable.volume * volume;
+				buf[ii] += playable.data[ii + playable.position] * linear_to_logarithmic(playable.volume * volume);
 			}
 			playable.position += max_read;
 			if playable.position == playable.data.len() {
@@ -195,7 +195,7 @@ fn get_wave_data(buf: &mut [f32]) -> bool {
 							}
 						},
 						WaveType::Saw => -1.0 + (wave.samples as f32 / wave.period as f32) * 2.0,
-					} * wave.amplitude * volume;
+					} * wave.amplitude * linear_to_logarithmic(wave.volume * volume);
 					playable_bytes[ii * 2] = sample;
 					playable_bytes[ii * 2 + 1] = sample;
 					wave.samples = (wave.samples + 1) % wave.period;
@@ -208,4 +208,8 @@ fn get_wave_data(buf: &mut [f32]) -> bool {
 		return true;
 	}
 	false
+}
+
+fn linear_to_logarithmic(volume: f32) -> f32 {
+	20.0 * volume.log10()
 }

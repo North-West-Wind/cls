@@ -157,7 +157,7 @@ impl InfoBlock {
 		false
 	}
 
-	fn change_volume(&self, delta: i16) -> bool {
+	fn change_volume(&self, delta: i64) -> bool {
 		if self.selected == 1 {
 			return match acquire().main_opened {
 				MainOpened::File => change_file_volume(delta),
@@ -167,8 +167,8 @@ impl InfoBlock {
 			};
 		}
 		let mut app = acquire();
-		let old_volume = app.config.volume as i16;
-		let new_volume = min(200, max(0, old_volume + delta));
+		let old_volume = app.config.volume as i64;
+		let new_volume = max(0, old_volume + delta);
 		if new_volume != old_volume {
 			app.config.volume = new_volume as u32;
 			return true
@@ -206,7 +206,7 @@ fn volume_line(title: String, volume: u32, width: u16, highlight: bool) -> Line<
 	Line::from(spans)
 }
 
-fn change_file_volume(delta: i16) -> bool {
+fn change_file_volume(delta: i64) -> bool {
 	let mut app = acquire();
 	let path = selected_file_path(&app.config.tabs, &app.files, None);
 	if path.is_empty() {
@@ -215,7 +215,7 @@ fn change_file_volume(delta: i16) -> bool {
 	match app.config.get_file_entry_mut(path.clone()) {
 		Some(entry) => {
 			let old_volume = entry.volume;
-			let new_volume = min(100, max(0, old_volume as i16 + delta)) as u32;
+			let new_volume = max(0, old_volume as i64 + delta) as u32;
 			if new_volume != old_volume {
 				entry.volume = new_volume;
 				if entry.is_default() {
@@ -234,14 +234,14 @@ fn change_file_volume(delta: i16) -> bool {
 	false
 }
 
-fn change_wave_volume(delta: i16) -> bool {
+fn change_wave_volume(delta: i64) -> bool {
 	let mut app = acquire();
 	let index = { WavesBlock::instance().selected };
 	if index >= app.waves.len() {
 		return false;
 	}
 	let wave = &mut app.waves[index];
-	let new_volume = min(100, max(0, wave.volume as i16 + delta)) as u32;
+	let new_volume = max(0, wave.volume as i64 + delta) as u32;
 	if new_volume != wave.volume {
 		wave.volume = new_volume;
 		app.config.waves[index].volume = new_volume;
@@ -250,14 +250,14 @@ fn change_wave_volume(delta: i16) -> bool {
 	false
 }
 
-fn change_dialog_volume(delta: i16) -> bool {
+fn change_dialog_volume(delta: i64) -> bool {
 	let mut app = acquire();
 	let index = { DialogBlock::instance().selected };
 	if index >= app.dialogs.len() {
 		return false;
 	}
 	let dialog = &mut app.dialogs[index];
-	let new_volume = min(100, max(0, dialog.volume as i16 + delta)) as u32;
+	let new_volume = max(0, dialog.volume as i64 + delta) as u32;
 	if new_volume != dialog.volume {
 		dialog.volume = new_volume;
 		app.config.dialogs[index].volume = new_volume;
