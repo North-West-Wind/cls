@@ -211,7 +211,7 @@ impl FilesBlock {
 	}
 
 	fn reload_tab(&self) -> bool {
-		if self.selected < acquire().config.tabs.len() {
+		if self.selected < { acquire().config.tabs.len() } {
 			scan(Scanning::One(self.selected));
 			return true;
 		}

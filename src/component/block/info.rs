@@ -159,7 +159,7 @@ impl InfoBlock {
 
 	fn change_volume(&self, delta: i64) -> bool {
 		if self.selected == 1 {
-			return match acquire().main_opened {
+			return match { acquire().main_opened } {
 				MainOpened::File => change_file_volume(delta),
 				MainOpened::Wave => change_wave_volume(delta),
 				MainOpened::Dialog => change_dialog_volume(delta),

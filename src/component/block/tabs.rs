@@ -102,7 +102,7 @@ impl BlockNavigation for TabsBlock {
 
 impl TabsBlock {
 	fn handle_remove(&self) -> bool {
-		if self.selected < acquire().config.tabs.len() {
+		if self.selected < { acquire().config.tabs.len() } {
 			set_popup(PopupComponent::Confirm(ConfirmPopup::new(ConfirmAction::DeleteTab)));
 			return true;
 		}
