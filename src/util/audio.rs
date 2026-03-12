@@ -145,7 +145,7 @@ fn get_file_data(buf: &mut [f32]) -> bool {
 	let mut playing_files = acquire_playing_files();
 	let mut eofs = vec![];
 	if playing_files.len() > 0 {
-		let volume = acquire().config.volume as f32 / 100.0;
+		let volume = { acquire().config.volume as f32 / 100.0 };
 		for (uuid, playable) in playing_files.iter_mut() {
 			let max_read = buf.len().min(playable.data.len() - playable.position);
 			for ii in 0..max_read {
@@ -177,7 +177,7 @@ fn get_file_data(buf: &mut [f32]) -> bool {
 fn get_wave_data(buf: &mut [f32]) -> bool {
 	let mut playing_waves = acquire_playing_waves();
 	if playing_waves.len() > 0 {
-		let volume = acquire().config.volume as f32 / 100.0;
+		let volume = { acquire().config.volume as f32 / 100.0 };
 		for (_uuid, playable) in playing_waves.iter_mut() {
 			let len = playable.len() as f32;
 			let mut playable_bytes = [0_f32; CHUNK_SIZE];
@@ -211,5 +211,9 @@ fn get_wave_data(buf: &mut [f32]) -> bool {
 }
 
 fn linear_to_logarithmic(volume: f32) -> f32 {
-	20.0 * volume.log10()
+	if volume <= 0.0 {
+		0.0
+	} else {
+		0.001 * (1000_f32).powf(volume)
+	}
 }
