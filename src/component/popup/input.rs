@@ -285,7 +285,7 @@ impl InputPopup {
 					.map_or(app.module_loopback_1.clone(), |_| { String::new() });
 
 				if !app.config.loopback_1.is_empty() {
-					app.module_loopback_1 = loopback(app.config.loopback_1.clone()).unwrap_or(String::new());
+					app.module_loopback_1 = loopback(app.config.loopback_1.clone());
 				}
 			}
 		} else {
@@ -296,7 +296,7 @@ impl InputPopup {
 					.map_or(app.module_loopback_2.clone(), |_| { String::new() });
 
 				if !app.config.loopback_2.is_empty() {
-					app.module_loopback_2 = loopback(app.config.loopback_2.clone()).unwrap_or(String::new());
+					app.module_loopback_2 = loopback(app.config.loopback_2.clone());
 				}
 			}
 		}

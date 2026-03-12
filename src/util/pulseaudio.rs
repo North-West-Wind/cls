@@ -2,21 +2,29 @@ use std::process::Command;
 
 use crate::constant::APP_NAME;
 
-pub fn load_null_sink() -> Result<String, Box<dyn std::error::Error>> {
+pub fn load_null_sink() -> String {
 	let appname = APP_NAME;
-	let output = Command::new("pactl").args([
+	let result = Command::new("pactl").args([
 		"load-module",
 		"module-null-sink",
 		format!("sink_name={appname}").as_str(),
 		"formats=s32le"
-	]).output()?;
+	]).output();
 
-	if !output.status.success() {
-		return Ok(String::new());
+	if result.is_err() {
+		return String::new();
 	}
 
-	let index = String::from_utf8(output.stdout)?;
-	Ok(index)
+	let output = result.unwrap();
+	if !output.status.success() {
+		return String::new();
+	}
+
+	let result = String::from_utf8(output.stdout);
+	if result.is_err() {
+		return String::new();
+	}
+	result.unwrap()
 }
 
 pub fn unload_module(module: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -34,26 +42,26 @@ pub fn unload_module(module: &str) -> Result<(), Box<dyn std::error::Error>> {
 	Ok(())
 }
 
-pub fn set_volume_percentage(percentage: u32) {
-	Command::new("pactl").args([
-		"set-sink-volume",
-		APP_NAME,
-		format!("{}%", percentage).as_str(),
-	]).spawn().ok();
-}
-
-pub fn loopback(sink: String) -> Result<String, Box<dyn std::error::Error>> {
-	let output = Command::new("pactl").args([
+pub fn loopback(sink: String) -> String {
+	let result = Command::new("pactl").args([
 		"load-module",
 		"module-loopback",
 		"source=cls.monitor",
 		format!("sink={sink}").as_str(),
-	]).output()?;
+	]).output();
 
-	if !output.status.success() {
-		return Ok(String::new());
+	if result.is_err() {
+		return String::new();
 	}
 
-	let index = String::from_utf8(output.stdout)?;
-	Ok(index)
+	let output = result.unwrap();
+	if !output.status.success() {
+		return String::new();
+	}
+
+	let result = String::from_utf8(output.stdout);
+	if result.is_err() {
+		return String::new();
+	}
+	result.unwrap()
 }

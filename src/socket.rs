@@ -5,7 +5,7 @@ use code::SocketCode;
 use interprocess::local_socket::{traits::{ListenerExt, Stream as _}, GenericFilePath, GenericNamespaced, Listener, ListenerOptions, Name, NameType, Stream, ToFsName, ToNsName};
 use normpath::PathExt;
 
-use crate::{component::block::{BlockSingleton, log, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, is_running, load_app_config, notify_redraw, stop_running}, util::{file::{parent_file, play_file_auto_volume, stop_all}, pulseaudio::set_volume_percentage, tab::scan, wave::stop_all_waves}};
+use crate::{component::block::{BlockSingleton, log, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, is_running, load_app_config, notify_redraw, stop_running}, util::{file::{parent_file, play_file_auto_volume, stop_all}, tab::scan, wave::stop_all_waves}};
 
 pub mod code;
 
@@ -297,7 +297,6 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 				let old_volume = app.config.volume as i16;
 				let new_volume = min(200, max(0, if increment { old_volume + volume } else { volume }));
 				if new_volume != old_volume {
-					set_volume_percentage(new_volume as u32);
 					app.config.volume = new_volume as u32;
 				}
 				notify_redraw();

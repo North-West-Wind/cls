@@ -1,5 +1,5 @@
 use socket::{send_exit, send_socket};
-use util::pulseaudio::{load_null_sink, loopback, set_volume_percentage};
+use util::pulseaudio::{load_null_sink, loopback};
 use state::Scanning;
 use clap::{command, Arg, ArgAction, Command};
 
@@ -83,18 +83,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	// PulseAudio setup
 	if !app.edit {
-		app.module_null_sink = load_null_sink()?;
+		app.module_null_sink = load_null_sink();
 		if app.config.loopback_default {
-			app.module_loopback_default = loopback("@DEFAULT_SINK@".to_string())?;
+			app.module_loopback_default = loopback("@DEFAULT_SINK@".to_string());
 		}
 		if !app.config.loopback_1.is_empty() {
-			app.module_loopback_1 = loopback(app.config.loopback_1.clone())?;
+			app.module_loopback_1 = loopback(app.config.loopback_1.clone());
 		}
 		if !app.config.loopback_2.is_empty() {
-			app.module_loopback_2 = loopback(app.config.loopback_2.clone())?;
+			app.module_loopback_2 = loopback(app.config.loopback_2.clone());
 		}
 	}
-	set_volume_percentage(app.config.volume);
 
 	let (is_edit, is_hidden) = (app.edit, app.hidden);
 	drop(app);

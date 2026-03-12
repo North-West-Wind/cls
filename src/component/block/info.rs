@@ -3,7 +3,7 @@ use std::{cmp::{max, min}, sync::{LazyLock, Mutex, MutexGuard}};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 
-use crate::{component::block::{BlockNavigation, BlockSingleton, dialogs::DialogBlock, tabs::TabsBlock, waves::WavesBlock}, config::FileEntry, state::{MainOpened, acquire}, util::{keyboard::{keyboard_to_string, sort_keys}, pulseaudio::set_volume_percentage, tab::selected_file_path}};
+use crate::{component::block::{BlockNavigation, BlockSingleton, dialogs::DialogBlock, tabs::TabsBlock, waves::WavesBlock}, config::FileEntry, state::{MainOpened, acquire}, util::{keyboard::{keyboard_to_string, sort_keys}, tab::selected_file_path}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -170,7 +170,6 @@ impl InfoBlock {
 		let old_volume = app.config.volume as i16;
 		let new_volume = min(200, max(0, old_volume + delta));
 		if new_volume != old_volume {
-			set_volume_percentage(new_volume as u32);
 			app.config.volume = new_volume as u32;
 			return true
 		}

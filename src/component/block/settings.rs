@@ -125,7 +125,7 @@ impl SettingsBlock {
 				let mut app = acquire();
 				app.config.loopback_default = !app.config.loopback_default;
 				if app.config.loopback_default && app.module_loopback_default.is_empty() {
-					app.module_loopback_default = loopback("@DEFAULT_SINK@".to_string()).unwrap_or(String::new());
+					app.module_loopback_default = loopback("@DEFAULT_SINK@".to_string());
 				} else if !app.config.loopback_default && !app.module_loopback_default.is_empty() {
 					app.module_loopback_default = unload_module(&app.module_loopback_default)
 						.map_or(app.module_loopback_default.clone(), |_| { String::new() });
@@ -170,7 +170,7 @@ impl SettingsBlock {
 			1 => {
 				app.config.loopback_default = true;
 				if app.module_loopback_default.is_empty() {
-					app.module_loopback_default = loopback("@DEFAULT_SINK@".to_string()).unwrap_or(String::new());
+					app.module_loopback_default = loopback("@DEFAULT_SINK@".to_string());
 				}
 				return true;
 			},
