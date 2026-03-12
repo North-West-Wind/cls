@@ -236,7 +236,6 @@ dependencies = [
  "ffprobe",
  "file-format",
  "interprocess",
- "lazy_static",
  "linked-hash-map",
  "linked_hash_set",
  "mime_guess",

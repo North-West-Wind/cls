@@ -1,10 +1,9 @@
-use std::{f32::consts::PI, io::{self, BufWriter, Write}, process::{Child, ChildStdin, Command, Stdio}, sync::{LazyLock, Mutex, MutexGuard}, thread, time::{Duration, SystemTime}};
+use std::{f32::consts::PI, io::{self, BufWriter, Write}, process::{Child, ChildStdin, Command, Stdio}, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard}, thread, time::{Duration, SystemTime}};
 
 use cmd_exists::cmd_exists;
 use cpal::{SampleFormat, traits::{DeviceTrait, HostTrait, StreamTrait}};
-use lazy_static::lazy_static;
 
-use crate::{constant::{APP_NAME, ENDIANESS}, state::{acquire, is_running, notify_redraw}, util::{file::acquire_playing_files, wave::{WaveType, acquire_playing_waves}}};
+use crate::{component::block::log, constant::{APP_NAME, ENDIANESS}, state::{acquire, is_running, notify_redraw}, util::{file::acquire_playing_files, wave::{WaveType, acquire_playing_waves}}};
 
 const CHUNK_SIZE: usize = 1024;
 
@@ -19,10 +18,6 @@ struct Pacat {
 pub enum PlayerType {
 	File,
 	Wave
-}
-
-lazy_static! {
-	static ref USE_PACAT: bool = cmd_exists("pacat").is_ok();
 }
 
 fn spawn_pacat(player_type: PlayerType) -> Pacat {
@@ -63,9 +58,51 @@ fn get_pacat(player_type: PlayerType) -> MutexGuard<'static, Pacat> {
 pub fn create_audio_player(player_type: PlayerType) {
 	thread::spawn(move || {
 		use PlayerType::*;
-		let mut buf = [0_f32; CHUNK_SIZE];
-		while is_running() {
-			if *USE_PACAT {
+		if acquire().no_pacat || cmd_exists("pacat").is_err() {
+			// No pacat. Use cpal
+			let host = cpal::default_host();
+			let device = host.default_output_device().expect("Failed to get default output device");
+			let config = device.supported_output_configs().unwrap()
+				.find(|config| {
+					config.sample_format() == SampleFormat::F32 && config.channels() == 2
+				})
+				.expect("Host does not have output device that supports F32")
+				.with_sample_rate(48000)
+				.into();
+			let pair = Arc::new((Mutex::new(false), Condvar::new()));
+			let pair2 = pair.clone();
+			let stream = device.build_output_stream(
+				&config,
+				move |data: &mut [f32], _| {
+					if !is_running() {
+						let (lock, cvar) = &*pair2;
+						let mut shared = lock.lock().expect("Failed to get shared mutex");
+						*shared = true;
+						cvar.notify_one();
+						return;
+					}
+					match player_type {
+						File => get_file_data(data),
+						Wave => get_wave_data(data),
+					};
+				},
+				|err| {
+					log::error(format!("{:?}", err).as_str());
+				},
+				None
+			).expect("Failed to create stream");
+			stream.play().unwrap();
+			// cpal will block when playing
+			let (lock, cvar) = &*pair;
+			let mut shared = lock.lock().expect("Failed to get shared mutex");
+			// Wait for redraw notice
+			while !(*shared) {
+				shared = cvar.wait(shared).expect("Failed to get shared mutex");
+			}
+			*shared = false;
+		} else {
+			let mut buf = [0_f32; CHUNK_SIZE];
+			while is_running() {
 				let available = match player_type {
 					File => get_file_data(&mut buf),
 					Wave => get_wave_data(&mut buf),
@@ -101,38 +138,7 @@ pub fn create_audio_player(player_type: PlayerType) {
 					drop(pacat);
 				}
 				thread::sleep(Duration::from_millis(10));
-			} else {
-				let host = cpal::default_host();
-				let device = host.default_output_device().expect("Failed to get default output device");
-				let config = device.supported_output_configs().unwrap()
-					.find(|config| {
-						config.sample_format() == SampleFormat::F32 && config.channels() == 2
-					})
-					.expect("Host does not have output device that supports F32")
-					.with_sample_rate(48000)
-					.into();
-				let stream = device.build_output_stream(
-					&config,
-					move |data: &mut [f32], _| {
-						let available = if is_running() {
-							match player_type {
-								File => get_file_data(data),
-								Wave => get_wave_data(data),
-							}
-						} else { false };
-						if !available {
-							data.fill(0.0);
-							return;
-						}
-					},
-					|_| {},
-					Some(Duration::from_secs(5))
-				).expect("Failed to create stream");
-				// cpal will block when playing
-				stream.play().unwrap();
 			}
-		}
-		if *USE_PACAT {
 			let mut pacat = get_pacat(player_type);
 			if !pacat.discarded {
 				pacat.child.kill().expect("Failed to kill pacat");

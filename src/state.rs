@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, path::Path, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard, OnceLock}};
+use std::{collections::{HashMap, HashSet}, path::Path, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard}};
 
 use linked_hash_map::LinkedHashMap;
 use mki::Keyboard;
@@ -50,6 +50,7 @@ pub struct App {
 	pub socket_holder: bool,
 	pub hidden: bool,
 	pub edit: bool,
+	pub no_pacat: bool,
 	pub playlist_lock: Arc<Mutex<()>>,
 	// render states: root
 	pub block_selected: u8,
@@ -179,9 +180,8 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 	(config, stopkey, hotkey, file_ids, waves, dialogs)
 }
 
-fn static_app(hidden: bool, edit: bool) -> &'static Mutex<App> {
-	static APP: OnceLock<Mutex<App>> = OnceLock::new();
-	APP.get_or_init(|| {
+pub fn acquire() -> MutexGuard<'static, App> {
+	static APP: LazyLock<Mutex<App>> = LazyLock::new(|| {
 		let (config, stopkey, hotkey, file_ids, waves, dialogs) = load_app_config();
 		let app = App {
 			// config
@@ -192,8 +192,9 @@ fn static_app(hidden: bool, edit: bool) -> &'static Mutex<App> {
 			error: String::new(),
 			error_important: false,
 			socket_holder: false,
-			hidden,
-			edit,
+			hidden: true,
+			edit: true,
+			no_pacat: false,
 			playlist_lock: Arc::new(Mutex::new(())),
 			// render states: root
 			block_selected: 0,
@@ -218,17 +219,8 @@ fn static_app(hidden: bool, edit: bool) -> &'static Mutex<App> {
 			dialogs,
 		};
 		Mutex::new(app)
-	})
-}
-
-pub fn init_app(hidden: bool, edit: bool) -> MutexGuard<'static, App> {
-	static_app(hidden, edit).lock().unwrap()
-}
-
-pub fn acquire() -> MutexGuard<'static, App> {
-	let app = static_app(false, false).lock().unwrap();
-	//println!("acquire: {}", Backtrace::capture());
-	app
+	});
+	APP.lock().unwrap()
 }
 
 static REDRAW: LazyLock<(Mutex<bool>, Condvar)> = LazyLock::new(|| (Mutex::new(true), Condvar::new()));

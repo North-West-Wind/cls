@@ -25,6 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		.arg(Arg::new("hidden").long("hidden").help("run the soundboard in the background, basically read-only").action(ArgAction::SetTrue))
 		.arg(Arg::new("no-save").long("no-save").help("disable auto-save of config when the program exits").action(ArgAction::SetTrue))
 		.arg(Arg::new("fast-scan").long("fast-scan").help("scan files by extensions instead of header").action(ArgAction::SetTrue))
+		.arg(Arg::new("no-pacat").long("no-pacat").help("avoid using pacat for playback").action(ArgAction::SetTrue))
 		.subcommand(Command::new("exit").about("exit another instance"))
 		.subcommand(Command::new("reload-config").about("reload config for another instance"))
 		.subcommand(Command::new("add-tab").about("add a directory tab").arg(Arg::new("dir").required(true)))
@@ -72,7 +73,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		}
 	}
 	// Initialize global app object
-	let mut app = state::init_app(matches.get_flag("hidden"), matches.get_flag("edit"));
+	let mut app = acquire();
+	(app.hidden, app.edit, app.no_pacat) = (matches.get_flag("hidden"), matches.get_flag("edit"), matches.get_flag("no-pacat"));
 
 	if app.hidden && app.edit {
 		// Mutually exclusive options
