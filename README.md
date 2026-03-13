@@ -9,19 +9,29 @@ It's just a file manager and command runner.
 
 ## Features
 - Global Hotkey (also works on Wayland)
-- Play any file that `ffmpeg` supports
+- Play a wide range of audio files
+	- If `ffmpeg` is available, it can play any file `ffmpeg` supports
+	- Default audio file decoding is provided by `symphonium` (`symphonia`)
 - Directory tabs
-- Waveforms (>=2.0.0)
+- Waves (>=2.0.0)
+	- Create waveforms consisting of multiple waves
+	- Play for a dynamic length
+- Dialogs (>=3.0.0)
+	- Create a list of audio files that plays in quick succession, simulating dialogs in video games
+	- Play for a dynamic length
+- Cross-platform (>=3.1.0)
+	- If `pacat` is available, it will play sound to a virtual sink for easy routing
+	- Otherwise, it will just play to the default output
 
 ## Usage
 As I told you, this is just a file manager and command runner.  
-This only works on Linux with a PulseAudio provider. If you want a soundboard for other platforms or providers similar to this, I recommend [Soundux](https://github.com/Soundux/Soundux).
+It only supports terminal user interface (TUI). If you want a soundboard for other platforms or providers similar to this, I recommend [Soundux](https://github.com/Soundux/Soundux).
 
-The features of this program is now weird enough that I am considering making it cross-platform.
-
-### Dependencies
-- `ffmpeg` (Optional)
+### Optional Dependencies
+- `ffmpeg`
+	- If installed, the program will play any file it supports
 - `pulseaudio` / `pipewire-pulse` / anything to provides `pactl` and `pacat`
+	- If installed, the program will create a virtual sink and loopback for easy audio routing
 
 ### Install
 If you are using an Arch Linux-based distro, it's already available on the AUR as [`cls-rs`](https://aur.archlinux.org/packages/cls-rs).  
@@ -129,8 +139,10 @@ Here's the current list of subcommands implemented:
 - `cls play <path>`: Plays a file.
 - `cls play-id <id>`: Plays a file by its user-defined ID.
 - `cls play-wave <id>`: Plays a waveform by its user-defined ID.
+- `cls play-dialog <id>`: Plays a dialog by its user-defined ID.
 - `cls stop`: Stops all the audio files that are playing.
 - `cls stop-wave <id>`: Stops a waveform by its user-defined ID.
+- `cls stop-dialog <id>`: Stops a dialog by its user-defined ID.
 - `cls set-volume <volume> [--increment] [--path <path>]`: Set the volume for the `cls` sink or a specific file.
 	- If `--increment` is **NOT** set, the volume is set to `<volume>` provided.
 	- If `--increment` is **SET**, the volume is incremented by `<volume>` (can be negative).
