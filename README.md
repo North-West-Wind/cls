@@ -21,7 +21,8 @@ It's just a file manager and command runner.
 	- Play for a dynamic length
 - Cross-platform (>=3.1.0)
 	- If `pacat` is available, it will play sound to a virtual sink for easy routing
-	- Otherwise, it will just play to the default output
+	- If `audio-device` is supplied, it will play sound into the specified audio device (a bit janky)
+	- Otherwise, it will play to the default output
 
 ## Usage
 As I told you, this is just a file manager and command runner.  

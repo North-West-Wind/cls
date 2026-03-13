@@ -3,7 +3,7 @@ use util::pulseaudio::{load_null_sink, loopback};
 use state::Scanning;
 use clap::{command, Arg, ArgAction, Command};
 
-use crate::{listener::{listen_signals, program_loop}, renderer::draw_loop, socket::start_socket, state::acquire, util::{audio::{PlayerType, create_audio_player}, file::audio_cache_invalidator, tab::scan}};
+use crate::{listener::{listen_signals, program_loop}, renderer::draw_loop, socket::start_socket, state::acquire, util::{audio::{PlayerType, create_audio_player, list_audio_devices}, file::audio_cache_invalidator, tab::scan}};
 mod component;
 mod config;
 mod constant;
@@ -26,7 +26,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		.arg(Arg::new("no-save").long("no-save").help("disable auto-save of config when the program exits").action(ArgAction::SetTrue))
 		.arg(Arg::new("fast-scan").long("fast-scan").help("scan files by extensions instead of header").action(ArgAction::SetTrue))
 		.arg(Arg::new("no-pacat").long("no-pacat").help("avoid using pacat for playback").action(ArgAction::SetTrue))
+		.arg(Arg::new("audio-device").long("audio-device").help("output audio device to use (ignored with pacat)").action(ArgAction::Set))
 		.subcommand(Command::new("exit").about("exit another instance"))
+		.subcommand(Command::new("audio-devices").about("list available audio devices"))
 		.subcommand(Command::new("reload-config").about("reload config for another instance"))
 		.subcommand(Command::new("add-tab").about("add a directory tab").arg(Arg::new("dir").required(true)))
 		.subcommand(Command::new("delete-tab").about("delete a tab, defaults to the selected one")
@@ -64,17 +66,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// All subcommands are currently used for IPC
 	let subcommand = matches.subcommand();
 	if subcommand.is_some() {
-		let response = send_socket(subcommand.unwrap())?;
-		if response.starts_with("Success") {
-			println!("{}", response);
-			return Ok(());
-		} else {
-			panic!("{}", response);
+		let (subcommand, matches) = subcommand.unwrap();
+		match subcommand {
+			"audio-devices" => {
+				list_audio_devices()?;
+				return Ok(())
+			},
+			_ => {
+				let response = send_socket((subcommand, matches))?;
+				if response.starts_with("Success") {
+					println!("{}", response);
+					return Ok(());
+				} else {
+					panic!("{}", response);
+				}
+			}
 		}
 	}
 	// Initialize global app object
 	let mut app = acquire();
 	(app.hidden, app.edit, app.no_pacat) = (matches.get_flag("hidden"), matches.get_flag("edit"), matches.get_flag("no-pacat"));
+	app.cpal_device = matches.get_one::<String>("audio-device").unwrap_or(&String::new()).clone();
 
 	if app.hidden && app.edit {
 		// Mutually exclusive options

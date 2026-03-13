@@ -51,6 +51,7 @@ pub struct App {
 	pub hidden: bool,
 	pub edit: bool,
 	pub no_pacat: bool,
+	pub cpal_device: String,
 	pub playlist_lock: Arc<Mutex<()>>,
 	// render states: root
 	pub block_selected: u8,
@@ -195,6 +196,7 @@ pub fn acquire() -> MutexGuard<'static, App> {
 			hidden: true,
 			edit: true,
 			no_pacat: false,
+			cpal_device: String::new(),
 			playlist_lock: Arc::new(Mutex::new(())),
 			// render states: root
 			block_selected: 0,

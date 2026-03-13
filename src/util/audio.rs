@@ -1,7 +1,7 @@
-use std::{f32::consts::PI, io::{self, BufWriter, Write}, process::{Child, ChildStdin, Command, Stdio}, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard}, thread, time::{Duration, SystemTime}};
+use std::{f32::consts::PI, io::{self, BufWriter, Write}, process::{Child, ChildStdin, Command, Stdio}, str::FromStr, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard}, thread, time::{Duration, SystemTime}};
 
 use cmd_exists::cmd_exists;
-use cpal::{SampleFormat, traits::{DeviceTrait, HostTrait, StreamTrait}};
+use cpal::{DeviceId, FromSample, Sample, SampleFormat, traits::{DeviceTrait, HostTrait, StreamTrait}};
 
 use crate::{component::block::log, constant::{APP_NAME, ENDIANESS}, state::{acquire, is_running, notify_redraw}, util::{file::acquire_playing_files, wave::{WaveType, acquire_playing_waves}}};
 
@@ -58,39 +58,37 @@ fn get_pacat(player_type: PlayerType) -> MutexGuard<'static, Pacat> {
 pub fn create_audio_player(player_type: PlayerType) {
 	thread::spawn(move || {
 		use PlayerType::*;
-		if acquire().no_pacat || cmd_exists("pacat").is_err() {
+		if { acquire().no_pacat } || cmd_exists("pacat").is_err() {
 			// No pacat. Use cpal
-			let host = cpal::default_host();
-			let device = host.default_output_device().expect("Failed to get default output device");
-			let config = device.supported_output_configs().unwrap()
+			let target_device = { acquire().cpal_device.clone() };
+			let device = if target_device.is_empty() {
+				cpal::default_host().default_output_device().expect("Failed to get default output device")
+			} else {
+				let device_id = DeviceId::from_str(&target_device).expect("Failed to create device ID");
+				let host = cpal::host_from_id(device_id.0).expect("Failed to get host");
+				host.device_by_id(&device_id).expect("Failed to find target device")
+			};
+			let (sample_format, config) = {
+				let mut config_range = device.supported_output_configs().unwrap().cycle();
+				let config = config_range
 				.find(|config| {
 					config.sample_format() == SampleFormat::F32 && config.channels() == 2
 				})
-				.expect("Host does not have output device that supports F32")
-				.with_sample_rate(48000)
-				.into();
+				.unwrap_or(config_range.next().expect("No output device"))
+				.with_sample_rate(48000);
+				(config.sample_format(), config.into())
+			};
+			let err_callback = |err| {
+				log::error(format!("{:?}", err).as_str());
+			};
 			let pair = Arc::new((Mutex::new(false), Condvar::new()));
 			let pair2 = pair.clone();
-			let stream = device.build_output_stream(
-				&config,
-				move |data: &mut [f32], _| {
-					if !is_running() {
-						let (lock, cvar) = &*pair2;
-						let mut shared = lock.lock().expect("Failed to get shared mutex");
-						*shared = true;
-						cvar.notify_one();
-						return;
-					}
-					match player_type {
-						File => get_file_data(data),
-						Wave => get_wave_data(data),
-					};
-				},
-				|err| {
-					log::error(format!("{:?}", err).as_str());
-				},
-				None
-			).expect("Failed to create stream");
+			let stream = match sample_format {
+				SampleFormat::F32 => device.build_output_stream(&config, move |data: &mut [f32], _| cpal_data_callback(data, player_type, &pair2), err_callback, None),
+				SampleFormat::I16 => device.build_output_stream(&config, move |data: &mut [i16], _| cpal_data_callback(data, player_type, &pair2), err_callback, None),
+				SampleFormat::U16 => device.build_output_stream(&config, move |data: &mut [u16], _| cpal_data_callback(data, player_type, &pair2), err_callback, None),
+				_ => panic!("Unsupported sample format")
+			}.expect("Failed to create stream");
 			stream.play().unwrap();
 			// cpal will block when playing
 			let (lock, cvar) = &*pair;
@@ -145,6 +143,28 @@ pub fn create_audio_player(player_type: PlayerType) {
 			}
 		}
 	});
+}
+
+fn cpal_data_callback<T: Sample + FromSample<f32>>(data: &mut [T], player_type: PlayerType, pair: &Arc<(Mutex<bool>, Condvar)>) {
+	let pair = pair.clone();
+	if !is_running() {
+		let (lock, cvar) = &*pair;
+		let mut shared = lock.lock().expect("Failed to get shared mutex");
+		*shared = true;
+		cvar.notify_one();
+		return;
+	}
+
+	use PlayerType::*;
+	let mut buf = vec![0.0; data.len()];
+	match player_type {
+		File => get_file_data(&mut buf),
+		Wave => get_wave_data(&mut buf),
+	};
+
+	for (ii, sample) in buf.iter().enumerate() {
+		data[ii] = T::from_sample(*sample);
+	}
 }
 
 fn get_file_data(buf: &mut [f32]) -> bool {
@@ -222,4 +242,15 @@ fn linear_to_logarithmic(volume: f32) -> f32 {
 	} else {
 		0.001 * (1000_f32).powf(volume)
 	}
+}
+
+pub fn list_audio_devices() -> Result<(), Box<dyn std::error::Error>> {
+	for id in cpal::available_hosts() {
+		let host = cpal::host_from_id(id)?;
+		let devices = host.output_devices()?;
+		for device in devices {
+			println!("{}", device.id()?);
+		}
+	}
+	Ok(())
 }
