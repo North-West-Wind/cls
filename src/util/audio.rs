@@ -222,8 +222,8 @@ fn get_wave_data(buf: &mut [f32]) -> bool {
 						},
 						WaveType::Saw => -1.0 + (wave.samples as f32 / wave.period as f32) * 2.0,
 					} * wave.amplitude * linear_to_logarithmic(wave.volume * volume);
-					playable_bytes[ii * 2] = sample;
-					playable_bytes[ii * 2 + 1] = sample;
+					playable_bytes[ii * 2] += sample;
+					playable_bytes[ii * 2 + 1] += sample;
 					wave.samples = (wave.samples + 1) % wave.period;
 				}
 			}
