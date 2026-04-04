@@ -28,6 +28,8 @@ It's just a file manager and command runner.
 As I told you, this is just a file manager and command runner.  
 It only supports terminal user interface (TUI). If you want a soundboard for other platforms or providers similar to this, I recommend [Soundux](https://github.com/Soundux/Soundux).
 
+For Windows users, only PowerShell works with `cls`.
+
 ### Optional Dependencies
 - `ffmpeg`
 	- If installed, the program will play any file it supports
@@ -38,10 +40,13 @@ It only supports terminal user interface (TUI). If you want a soundboard for oth
 If you are using an Arch Linux-based distro, it's already available on the AUR as [`cls-rs`](https://aur.archlinux.org/packages/cls-rs).  
 For other distros, the binary file is provided in release, or you can build it yourself.
 
+Binary files are also available for Windows user under x86_64 architecture.
+For any other operating system or architecture, please build it yourself.
+
 ### Building
 You'll need `cargo` for this.
 ```bash
-git clone https://github.com/North-West-Wind/cls
+git clone https://codeberg.org/NorthWestWind/cls
 cd cls
 cargo build --release
 ```
