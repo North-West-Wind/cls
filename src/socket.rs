@@ -1,4 +1,4 @@
-use std::{cmp::{max, min}, collections::HashMap, io::{self, BufReader, Error, Read, Write}, os::unix::ffi::OsStrExt, path::Path, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
+use std::{cmp::{max, min}, collections::HashMap, io::{self, BufReader, Error, Read, Write}, path::Path, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
 
 use clap::ArgMatches;
 use code::SocketCode;
@@ -105,7 +105,7 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 				{ TabsBlock::instance().selected = len; }
 				scan(Scanning::One(len));
 				notify_redraw();
-				let mut bytes = norm.as_os_str().as_bytes().to_vec();
+				let mut bytes = norm.as_os_str().to_os_string().as_encoded_bytes().to_vec();
 				bytes.insert(0, 0);
 				return send_response(reader.get_mut(), &bytes, true);
 			}

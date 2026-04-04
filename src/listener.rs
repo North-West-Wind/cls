@@ -1,7 +1,6 @@
-use std::{io, sync::{Arc, Mutex}, thread, time::Duration};
-use crossterm::event::{poll, read, Event, KeyEvent};
+use std::{io, sync::{Arc, Mutex}, time::Duration};
+use crossterm::event::{Event, KeyEvent, KeyEventKind, poll, read};
 use mki::Action;
-use signal_hook::iterator::Signals;
 
 use crate::{component::{block::{self, log}, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste, popups}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{SelectionLayer, acquire, is_running, notify_redraw, stop_running}, util::file::{play_file_auto_volume, stop_all}};
 
@@ -82,7 +81,11 @@ pub fn program_loop() -> io::Result<()> {
 				match read()? {
 					//Event::FocusGained => on_focus(true),
 					//Event::FocusLost => on_focus(false),
-					Event::Key(event) => on_key(event),
+					Event::Key(event) => {
+						if event.kind != KeyEventKind::Release {
+							on_key(event);
+						}
+					},
 					//Event::Mouse(event) => println!("{:?}", event),
 					Event::Paste(data) => on_paste(data),
 					Event::Resize(width, height) => on_resize(width, height),
@@ -152,17 +155,7 @@ fn on_paste(data: String) {
 
 pub fn listen_signals() {
 	log::info("Starting signal listener...");
-	use signal_hook::consts::*;
-	let mut signals = Signals::new([SIGINT, SIGTERM]).expect("Failed to create signals");
-	thread::spawn(move || {
-		for sig in signals.forever() {
-			match sig {
-				SIGINT|SIGTERM => {
-					stop_running();
-					break;
-				},
-				_ => (),
-			}
-		}
-	});
+	ctrlc::set_handler(move || {
+		stop_running();
+	}).expect("Failed to set Ctrl+C handler");
 }
