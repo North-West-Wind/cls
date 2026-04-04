@@ -64,6 +64,7 @@ pub fn play_file(path: &String, volume: f32, lock: Arc<Mutex<()>>) {
 			notify_redraw();
 			return;
 		}
+		let sample_rate = app.sample_rate;
 		drop(app);
 
 		let mut cache = AUDIO_CACHE.lock().unwrap();
@@ -76,13 +77,13 @@ pub fn play_file(path: &String, volume: f32, lock: Arc<Mutex<()>>) {
 		} else {
 			drop(cache);
 			let mut loader = SYMPHONIUM_LOADER.lock().unwrap();
-			let result = loader.load_f32(&string, NonZero::new(48000), ResampleQuality::Low, None);
+			let result = loader.load_f32(&string, NonZero::new(sample_rate), ResampleQuality::Low, None);
 			drop(loader);
 			let data = if result.is_err() {
 				log::error(format!("File {} cannot be decoded with symphonium", string).as_str());
 				log::error(format!("{:?}", result.unwrap_err()).as_str());
 
-				let result = read_file_ffmpeg(&string);
+				let result = read_file_ffmpeg(&string, sample_rate);
 				if result.is_err() {
 					log::error(format!("File {} cannot be decoded with ffmpeg", string).as_str());
 					log::error(format!("{:?}", result.unwrap_err()).as_str());
@@ -124,13 +125,13 @@ pub fn stop_all() {
 	});
 }
 
-pub fn read_file_ffmpeg(path: &str) -> Result<Vec<f32>, Error> {
+pub fn read_file_ffmpeg(path: &str, sample_rate: u32) -> Result<Vec<f32>, Error> {
 	let result = Command::new("ffmpeg").args([
 		"-loglevel", "-8",
 		"-i", path,
 		"-f", format!("f32{}", ENDIANESS).as_str(),
 		"-ac", "2",
-		"-ar", "48000",
+		"-ar", sample_rate.to_string().as_str(),
 		"-"
 	]).stdout(Stdio::piped()).spawn();
 	if result.is_err() {

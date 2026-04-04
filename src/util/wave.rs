@@ -101,8 +101,8 @@ impl Waveform {
 			let playable = wave.waves.iter().map(|w| {
 				PlayableWave {
 					wave_type: w.wave_type,
-					period: (1.0 * 48000.0 / w.frequency) as u32,
-					samples: (48000.0 * w.phase) as u32,
+					period: 1.0 / w.frequency,
+					phase: w.phase / w.frequency,
 					amplitude: w.amplitude,
 					volume: wave.volume as f32 / 100.0
 				}
@@ -133,8 +133,8 @@ impl Waveform {
 
 pub struct PlayableWave {
 	pub wave_type: WaveType,
-	pub period: u32,
-	pub samples: u32,
+	pub period: f32,
+	pub phase: f32,
 	pub amplitude: f32,
 	pub volume: f32,
 }

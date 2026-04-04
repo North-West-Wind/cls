@@ -192,6 +192,9 @@ impl FilesBlock {
 
 	fn navigate_file(&mut self, dy: i32) -> bool {
 		let app = acquire();
+		if app.config.tabs.is_empty() {
+			return false;
+		}
 		let tab_selected = { TabsBlock::instance().selected };
 		let files = app.files.get(&app.config.tabs[tab_selected]);
 		return files.map_or(false, |files| {

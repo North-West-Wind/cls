@@ -20,7 +20,7 @@ pub enum PlayerType {
 	Wave
 }
 
-fn spawn_pacat(player_type: PlayerType) -> Pacat {
+fn spawn_pacat(player_type: PlayerType, sample_rate: u32) -> Pacat {
 	use PlayerType::*;
 	let channels: u8 = match player_type {
 		File => 2,
@@ -30,7 +30,7 @@ fn spawn_pacat(player_type: PlayerType) -> Pacat {
 		"-d",
 		APP_NAME,
 		format!("--channels={}", channels).as_str(),
-		"--rate=48000",
+		format!("--rate={}", sample_rate).as_str(),
 		format!("--format=float32{}", ENDIANESS).as_str(),
 		format!("--latency={}", CHUNK_SIZE).as_str()
 	])
@@ -46,8 +46,8 @@ fn spawn_pacat(player_type: PlayerType) -> Pacat {
 }
 
 fn get_pacat(player_type: PlayerType) -> MutexGuard<'static, Pacat> {
-	static FILES: LazyLock<Mutex<Pacat>> = LazyLock::new(|| Mutex::new(spawn_pacat(PlayerType::File)));
-	static WAVES: LazyLock<Mutex<Pacat>> = LazyLock::new(|| Mutex::new(spawn_pacat(PlayerType::Wave)));
+	static FILES: LazyLock<Mutex<Pacat>> = LazyLock::new(|| Mutex::new(spawn_pacat(PlayerType::File, 48000)));
+	static WAVES: LazyLock<Mutex<Pacat>> = LazyLock::new(|| Mutex::new(spawn_pacat(PlayerType::Wave, 48000)));
 	use PlayerType::*;
 	match player_type {
 		File => FILES.lock().unwrap(),
@@ -68,25 +68,28 @@ pub fn create_audio_player(player_type: PlayerType) {
 				let host = cpal::host_from_id(device_id.0).expect("Failed to get host");
 				host.device_by_id(&device_id).expect("Failed to find target device")
 			};
-			let (sample_format, config) = {
+			let (sample_rate, sample_format, config) = {
 				let mut config_range = device.supported_output_configs().unwrap().cycle();
 				let config = config_range
 				.find(|config| {
 					config.sample_format() == SampleFormat::F32 && config.channels() == 2
 				})
-				.unwrap_or(config_range.next().expect("No output device"))
-				.with_sample_rate(48000);
-				(config.sample_format(), config.into())
+				.unwrap_or(config_range.next().expect("No output device"));
+				let sample_rate = config.max_sample_rate().min(48000);
+				let config = config.with_sample_rate(sample_rate);
+				(sample_rate, config.sample_format(), config.into())
 			};
+			{ acquire().sample_rate = sample_rate; }
+			log::info(format!("Sample rate: {}", sample_rate).as_str());
 			let err_callback = |err| {
 				log::error(format!("{:?}", err).as_str());
 			};
 			let pair = Arc::new((Mutex::new(false), Condvar::new()));
 			let pair2 = pair.clone();
 			let stream = match sample_format {
-				SampleFormat::F32 => device.build_output_stream(&config, move |data: &mut [f32], _| cpal_data_callback(data, player_type, &pair2), err_callback, None),
-				SampleFormat::I16 => device.build_output_stream(&config, move |data: &mut [i16], _| cpal_data_callback(data, player_type, &pair2), err_callback, None),
-				SampleFormat::U16 => device.build_output_stream(&config, move |data: &mut [u16], _| cpal_data_callback(data, player_type, &pair2), err_callback, None),
+				SampleFormat::F32 => device.build_output_stream(&config, move |data: &mut [f32], _| cpal_data_callback(data, sample_rate, player_type, &pair2), err_callback, None),
+				SampleFormat::I16 => device.build_output_stream(&config, move |data: &mut [i16], _| cpal_data_callback(data, sample_rate, player_type, &pair2), err_callback, None),
+				SampleFormat::U16 => device.build_output_stream(&config, move |data: &mut [u16], _| cpal_data_callback(data, sample_rate, player_type, &pair2), err_callback, None),
 				_ => panic!("Unsupported sample format")
 			}.expect("Failed to create stream");
 			stream.play().unwrap();
@@ -101,15 +104,16 @@ pub fn create_audio_player(player_type: PlayerType) {
 		} else {
 			let mut buf = [0_f32; CHUNK_SIZE];
 			while is_running() {
+				let sample_rate = { acquire().sample_rate };
 				let available = match player_type {
 					File => get_file_data(&mut buf),
-					Wave => get_wave_data(&mut buf),
+					Wave => get_wave_data(&mut buf, sample_rate),
 				};
 				let mut pacat = get_pacat(player_type);
 				if available {
 					if pacat.discarded {
 						// Pacat is killed. Needs respawn
-						*pacat = spawn_pacat(player_type);
+						*pacat = spawn_pacat(player_type, acquire().sample_rate);
 					}
 
 					pacat.writer.write_all(&bytemuck::cast_slice(&buf)).expect("Failed to write to pacat stdin");
@@ -145,7 +149,7 @@ pub fn create_audio_player(player_type: PlayerType) {
 	});
 }
 
-fn cpal_data_callback<T: Sample + FromSample<f32>>(data: &mut [T], player_type: PlayerType, pair: &Arc<(Mutex<bool>, Condvar)>) {
+fn cpal_data_callback<T: Sample + FromSample<f32>>(data: &mut [T], sample_rate: u32, player_type: PlayerType, pair: &Arc<(Mutex<bool>, Condvar)>) {
 	let pair = pair.clone();
 	if !is_running() {
 		let (lock, cvar) = &*pair;
@@ -159,7 +163,7 @@ fn cpal_data_callback<T: Sample + FromSample<f32>>(data: &mut [T], player_type: 
 	let mut buf = vec![0.0; data.len()];
 	match player_type {
 		File => get_file_data(&mut buf),
-		Wave => get_wave_data(&mut buf),
+		Wave => get_wave_data(&mut buf, sample_rate),
 	};
 
 	for (ii, sample) in buf.iter().enumerate() {
@@ -200,31 +204,34 @@ fn get_file_data(buf: &mut [f32]) -> bool {
 	false
 }
 
-fn get_wave_data(buf: &mut [f32]) -> bool {
+fn get_wave_data(buf: &mut [f32], sample_rate: u32) -> bool {
 	let mut playing_waves = acquire_playing_waves();
 	if playing_waves.len() > 0 {
 		let volume = { acquire().config.volume as f32 / 100.0 };
 		for (_uuid, playable) in playing_waves.iter_mut() {
 			let len = playable.len() as f32;
-			let mut playable_bytes = [0_f32; CHUNK_SIZE];
+			let mut playable_bytes = vec![0_f32; buf.len()];
 			for wave in playable {
 				for ii in 0..buf.len() / 2 {
 					let sample = match wave.wave_type {
-						WaveType::Sine => (PI * 2.0 * wave.samples as f32 / wave.period as f32).sin(),
-						WaveType::Square => if wave.samples as f32 / wave.period as f32 > 0.5 { 1.0 } else { -1.0 },
+						WaveType::Sine => (PI * 2.0 * wave.phase).sin(),
+						WaveType::Square => if wave.phase > 0.5 { 1.0 } else { -1.0 },
 						WaveType::Triangle => {
-							let portion = wave.samples as f32 / wave.period as f32;
+							let portion = wave.phase;
 							if portion > 0.5 {
 								-1.0 + (portion - 0.5) * 4.0
 							} else {
 								1.0 - portion * 4.0
 							}
 						},
-						WaveType::Saw => -1.0 + (wave.samples as f32 / wave.period as f32) * 2.0,
+						WaveType::Saw => -1.0 + wave.phase * 2.0,
 					} * wave.amplitude * linear_to_logarithmic(wave.volume * volume);
 					playable_bytes[ii * 2] += sample;
 					playable_bytes[ii * 2 + 1] += sample;
-					wave.samples = (wave.samples + 1) % wave.period;
+					wave.phase = wave.phase + (1.0 / sample_rate as f32) / wave.period;
+					if wave.phase >= 1.0 {
+						wave.phase -= 1.0;
+					}
 				}
 			}
 			for ii in 0..CHUNK_SIZE {

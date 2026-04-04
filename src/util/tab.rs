@@ -27,6 +27,7 @@ fn add_duration(tab: String) {
 			return;
 		}
 		let files = files.unwrap().clone();
+		let sample_rate = app.sample_rate;
 		drop(app);
 		let mut loader = SymphoniumLoader::new();
 		let mut new_files = vec![];
@@ -38,7 +39,7 @@ fn add_duration(tab: String) {
 			let millis: u128 = if result.is_none() {
 				let result = loader.load(&filepath, None, ResampleQuality::Low, None);
 				if result.is_err() {
-					let result = read_file_ffmpeg(&filepath);
+					let result = read_file_ffmpeg(&filepath, sample_rate);
 					if result.is_err() {
 						new_files.push((filename.clone(), String::new()));
 						continue;

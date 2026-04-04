@@ -53,6 +53,7 @@ pub struct App {
 	pub no_pacat: bool,
 	pub cpal_device: String,
 	pub playlist_lock: Arc<Mutex<()>>,
+	pub sample_rate: u32,
 	// render states: root
 	pub block_selected: u8,
 	pub selection_layer: SelectionLayer,
@@ -198,6 +199,7 @@ pub fn acquire() -> MutexGuard<'static, App> {
 			no_pacat: false,
 			cpal_device: String::new(),
 			playlist_lock: Arc::new(Mutex::new(())),
+			sample_rate: 48000,
 			// render states: root
 			block_selected: 0,
 			selection_layer: SelectionLayer::Block,
