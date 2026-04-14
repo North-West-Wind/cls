@@ -81,7 +81,7 @@ impl PopupRender for HelpPopup {
 			}
 			3 => {
 				lines.extend(vec![
-					Line::from("Waveforms Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
+					Line::from("Waveforms/Dialog Key Binds").style(Style::default().add_modifier(Modifier::BOLD)).centered(),
 					Line::from("a - Add waveform"),
 					Line::from("e - Edit waveform"),
 					Line::from("r - Rename waveform"),
