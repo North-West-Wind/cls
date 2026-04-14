@@ -1,5 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{Frame, layout::Rect, style::{Color, Modifier, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}};
+use substring::Substring;
 
 use crate::{component::popup::{PopupComponent, PopupHandleKey, PopupRender, confirm::{ConfirmAction, ConfirmPopup}, defer_exit_popup, defer_set_popup, input::{AwaitInput, InputPopup}}, state::acquire, util::dialog::Dialog};
 
@@ -39,6 +40,7 @@ impl PopupRender for DialogPopup {
 		let area = f.area();
 		let page_size = area.height as usize - 3 - lines.len();
 		let page = self.selected / page_size;
+		let max_width = area.width as usize - 4;
 
 		lines.push(Line::from(if self.dialog.files.len() > page_size {
 			format!("File List (Page {} / {})", page + 1, (self.dialog.files.len() + page_size - 1) / page_size)
@@ -47,7 +49,11 @@ impl PopupRender for DialogPopup {
 		}).style(Style::default().add_modifier(Modifier::BOLD)).centered());
 
 		for ii in (page * page_size)..((page + 1) * page_size).min(self.dialog.files.len()) {
-			lines.push(Line::from(self.dialog.files[ii].clone())
+			let mut file =  self.dialog.files[ii].clone();
+			if file.len() > max_width {
+				file = format!("{}...", file.substring(0, max_width - 3));
+			}
+			lines.push(Line::from(file)
 				.style(if self.selected == ii {
 					Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)
 				} else {

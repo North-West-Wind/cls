@@ -34,7 +34,7 @@ impl PopupRender for WavePopup {
 			Line::from(""),
 		];
 
-		let page_size = f.area().height as usize - 2 - lines.len();
+		let page_size = f.area().height as usize - 3 - lines.len();
 		let page = self.selected / page_size;
 
 		lines.push(Line::from(if self.waveform.waves.len() > page_size {
