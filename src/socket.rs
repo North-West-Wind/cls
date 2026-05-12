@@ -1,7 +1,8 @@
-use std::{cmp::{max, min}, collections::HashMap, io::{self, BufReader, Error, Read, Write}, path::Path, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
+use std::{cmp::{max, min}, collections::HashMap, io::{self, BufRead, BufReader, Error, Read, Write}, path::Path, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
 
 use clap::ArgMatches;
 use code::SocketCode;
+use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use interprocess::local_socket::{traits::{ListenerExt, Stream as _}, GenericFilePath, GenericNamespaced, Listener, ListenerOptions, Name, NameType, Stream, ToFsName, ToNsName};
 use normpath::PathExt;
 
@@ -96,8 +97,10 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 			return send_response(reader.get_mut(), &[0], true);
 		},
 		AddTab => {
-			let mut path = String::new();
-			reader.read_to_string(&mut path)?;
+			let mut chars = vec![];
+			reader.read_until(0, &mut chars)?;
+			chars.pop();
+			let path = str::from_utf8(&chars).unwrap_or("");
 			if !path.is_empty() {
 				let Ok(norm) = Path::new(&path).normalize() else { return send_response(reader.get_mut(), &[2], false); };
 				let len = app.config.tabs.len();
@@ -174,15 +177,17 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 			}
 		},
 		Play => {
-			let mut path = String::new();
-			reader.read_to_string(&mut path)?;
+			let mut chars = vec![];
+			reader.read_until(0, &mut chars)?;
+			chars.pop();
+			let path = str::from_utf8(&chars).unwrap_or("");
 			if !path.is_empty() {
 				let lock = if app.config.playlist_mode {
 					app.playlist_lock.clone()
 				} else {
 					Arc::new(Mutex::new(()))
 				};
-				play_file_auto_volume(&path, lock);
+				play_file_auto_volume(&path.to_string(), lock);
 				notify_redraw();
 				let mut bytes = path.as_bytes().to_vec();
 				bytes.insert(0, 0);
@@ -243,6 +248,42 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 				return send_response(reader.get_mut(), &bytes, true);
 			}
 			return send_response(reader.get_mut(), &[1], false);
+		},
+		PlaySearch => {
+			// Read query
+			let mut chars = vec![];
+			reader.read_until(0, &mut chars)?;
+			chars.pop();
+			let query = str::from_utf8(&chars).unwrap_or("");
+			if query.is_empty() {
+				return send_response(reader.get_mut(), &[1], false);
+			}
+			// Search
+			let mut best_match = (70, String::new());
+			let matcher = SkimMatcherV2::default();
+			for (tab, files) in &app.files {
+				for file in files {
+					if let Some(score) = matcher.fuzzy_match(&file.0, &query) && score > best_match.0 {
+						best_match = (score, Path::new(tab).join(&file.0).into_os_string().into_string().unwrap());
+					}
+				}
+			}
+			if best_match.1.is_empty() {
+				return send_response(reader.get_mut(), &[1], false);
+			}
+			// Play it
+			log::info(&format!("{}: {}", best_match.0, best_match.1));
+			let lock = if app.config.playlist_mode {
+				app.playlist_lock.clone()
+			} else {
+				Arc::new(Mutex::new(()))
+			};
+			play_file_auto_volume(&best_match.1, lock);
+			notify_redraw();
+			// Send response
+			let mut bytes = best_match.1.as_bytes().to_vec();
+			bytes.insert(0, 0);
+			return send_response(reader.get_mut(), &bytes, true);
 		},
 		StopWaveId => {
 			let mut bytes = [0; 4];

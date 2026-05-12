@@ -15,6 +15,7 @@ pub enum SocketCode {
 	PlayId,
 	PlayWaveId,
 	PlayDialogId,
+	PlaySearch,
 	Stop,
 	StopWaveId,
 	StopDialogId,
@@ -36,6 +37,7 @@ impl SocketCode {
 			"play-id" => Some(PlayId),
 			"play-wave" => Some(PlayWaveId),
 			"play-dialog" => Some(PlayDialogId),
+			"play-search" => Some(PlaySearch),
 			"stop" => Some(Stop),
 			"stop-wave" => Some(StopWaveId),
 			"stop-dialog" => Some(StopDialogId),
@@ -56,8 +58,11 @@ impl SocketCode {
 			6 => Some(Play),
 			9 => Some(PlayId),
 			10 => Some(PlayWaveId),
+			12 => Some(PlayDialogId),
+			14 => Some(PlaySearch),
 			7 => Some(Stop),
 			11 => Some(StopWaveId),
+			13 => Some(StopDialogId),
 			8 => Some(SetVolume),
 			_ => None,
 		}
@@ -75,6 +80,7 @@ impl SocketCode {
 			PlayId => 9,
 			PlayWaveId => 10,
 			PlayDialogId => 12,
+			PlaySearch => 14,
 			Stop => 7,
 			StopWaveId => 11,
 			StopDialogId => 13,
@@ -90,6 +96,7 @@ impl SocketCode {
 				let path = matches.get_one::<String>("dir");
 				buf.extend(path.expect("Missing `dir` argument").as_bytes());
 				stream.write_all(&buf)?;
+				buf.push(0);
 				let mut res = [0u8; 256];
 				stream.read(&mut res)?;
 				return match res[0] {
@@ -149,6 +156,7 @@ impl SocketCode {
 			Play => {
 				let path = matches.get_one::<String>("path");
 				buf.extend(path.expect("Missing `path` argument").as_bytes());
+				buf.push(0);
 				stream.write_all(&buf)?;
 				let mut res = [0u8; 256];
 				stream.read(&mut res)?;
@@ -177,6 +185,24 @@ impl SocketCode {
 						})))
 					},
 					1 => Ok(format!("Failed\nID {} does not exist", id)),
+					_ => Ok("Failed\nResponse code is unknown".to_string())
+				}
+			},
+			PlaySearch => {
+				let query = matches.get_one::<String>("query").expect("Missing `query` argument");
+				buf.extend(query.as_bytes());
+				buf.push(0);
+				stream.write_all(&buf)?;
+				let mut res = [0u8; 256];
+				stream.read(&mut res)?;
+				return match res[0] {
+					0 => {
+						let label = String::from_utf8(res[1..256].to_vec());
+						Ok(format!("Success\n{}", label.map_or("Path unknown".to_string(), |path| {
+							format!("Playing {}", path)
+						})))
+					},
+					1 => Ok(format!("Failed\nCould not find any file with query {}", query)),
 					_ => Ok("Failed\nResponse code is unknown".to_string())
 				}
 			},

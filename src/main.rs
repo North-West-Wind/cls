@@ -46,6 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		.subcommand(Command::new("play-id").about("play a file by user-defined ID").arg(Arg::new("id").required(true)))
 		.subcommand(Command::new("play-wave").about("play a waveform by user-defined ID").arg(Arg::new("id").required(true)))
 		.subcommand(Command::new("play-dialog").about("play a dialog by user-defined ID").arg(Arg::new("id").required(true)))
+		.subcommand(Command::new("play-search").about("play a searched audio file").arg(Arg::new("query").required(true)))
 		.subcommand(Command::new("stop").about("stop all playing files"))
 		.subcommand(Command::new("stop-wave").about("stop a waveform by user-defined ID").arg(Arg::new("id").required(true)))
 		.subcommand(Command::new("stop-dialog").about("stop a dialog by user-defined ID").arg(Arg::new("id").required(true)))
