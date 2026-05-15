@@ -1,6 +1,6 @@
 use std::{path::Path, sync::{Mutex, MutexGuard, OnceLock}};
 
-use crate::{component::{block::{BlockNavigation, BlockSingleton, files::FilesBlock, info::InfoBlock}, popup::{PopupComponent, confirm::{ConfirmAction, ConfirmPopup}, input::{FLAG_DIR, InputPopup}, set_popup}}, state::{Scanning, acquire}, util::tab::scan};
+use crate::{component::{block::{BlockNavigation, BlockSingleton, files::FilesBlock, info::InfoBlock}, popup::{PopupComponent, confirm::ConfirmPopup, input::{FLAG_DIR, InputPopup}, set_popup}}, state::{Scanning, acquire}, util::tab::scan};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -104,7 +104,19 @@ impl BlockNavigation for TabsBlock {
 impl TabsBlock {
 	fn handle_remove(&self) -> bool {
 		if self.selected < { acquire().config.tabs.len() } {
-			set_popup(PopupComponent::Confirm(ConfirmPopup::new(ConfirmAction::DeleteTab)));
+			set_popup(PopupComponent::Confirm(ConfirmPopup::new("Delete tab?", "delete", || {
+				let mut app = acquire();
+				let mut tabs_block = TabsBlock::instance();
+				let selected = tabs_block.selected;
+				let tab = app.config.tabs[selected].clone();
+				app.files.remove(&tab);
+				app.config.tabs.remove(selected);
+				let len = app.config.tabs.len();
+				if selected >= len && len != 0 {
+					tabs_block.selected = len - 1;
+				}
+				true
+			})));
 			return true;
 		}
 		false

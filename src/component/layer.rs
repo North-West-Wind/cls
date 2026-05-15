@@ -2,7 +2,7 @@ use std::thread;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::{component::{block::{self, BlockNavigation, dialogs::DialogBlock, files::FilesBlock, settings::SettingsBlock, waves::WavesBlock}, popup::{confirm::{ConfirmAction, ConfirmPopup}, exit_popup, save::SavePopup}}, config, state::{MainOpened, SelectionLayer, acquire, notify_redraw}};
+use crate::{component::{block::{self, BlockNavigation, dialogs::DialogBlock, files::FilesBlock, settings::SettingsBlock, waves::WavesBlock}, popup::{confirm::ConfirmPopup, exit_popup, save::SavePopup}}, config, state::{MainOpened, SelectionLayer, acquire, notify_redraw, stop_running}};
 
 use super::{popup::{help::HelpPopup, set_popup, PopupComponent}};
 
@@ -81,7 +81,10 @@ pub fn navigate_layer(escape: bool) -> bool {
 	if escape {
 		match app.selection_layer {
 			SelectionLayer::Block => {
-				set_popup(PopupComponent::Confirm(ConfirmPopup::new(ConfirmAction::Quit)));
+				set_popup(PopupComponent::Confirm(ConfirmPopup::new("Quit?", "quit", || {
+					stop_running();
+					false
+				})));
 				return true
 			},
 			SelectionLayer::Content => {

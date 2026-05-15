@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 use std::{cmp::max, thread};
 
-use crate::{component::popup::{PopupComponent, PopupHandleKey, PopupRender, confirm::{ConfirmAction, ConfirmPopup}, defer_exit_popup, defer_set_popup, input::{FLAG_NUM, InputPopup}, popups}, state::acquire, util::wave::{Wave, WaveType, Waveform}};
+use crate::{component::{popup::{PopupComponent, PopupHandleKey, PopupRender, confirm::ConfirmPopup, defer_exit_popup, defer_set_popup, input::{FLAG_NUM, InputPopup}, popups}}, state::acquire, util::wave::{Wave, WaveType, Waveform}};
 
 pub struct WavePopup {
 	index: usize,
@@ -235,7 +235,10 @@ impl WavePopup {
 
 	fn discard_changes(&self) -> bool {
 		if self.changed {
-			defer_set_popup(PopupComponent::Confirm(ConfirmPopup::new(ConfirmAction::DiscardWaveChanges)));
+			defer_set_popup(PopupComponent::Confirm(ConfirmPopup::new("Discard changes?", "discard", || {
+				defer_exit_popup();
+				false
+			})));
 		} else {
 			defer_exit_popup();
 		}

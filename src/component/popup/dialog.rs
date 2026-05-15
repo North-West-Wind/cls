@@ -5,7 +5,7 @@ use normpath::PathExt;
 use ratatui::{Frame, layout::Rect, style::{Color, Modifier, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}};
 use substring::Substring;
 
-use crate::{component::popup::{PopupComponent, PopupHandleKey, PopupRender, confirm::{ConfirmAction, ConfirmPopup}, defer_exit_popup, defer_set_popup, input::{FLAG_FILE, FLAG_NUM, InputPopup}, popups}, state::acquire, util::dialog::Dialog};
+use crate::{component::popup::{PopupComponent, PopupHandleKey, PopupRender, confirm::ConfirmPopup, defer_exit_popup, defer_set_popup, input::{FLAG_FILE, FLAG_NUM, InputPopup}, popups}, state::acquire, util::dialog::Dialog};
 
 pub struct DialogPopup {
 	index: usize,
@@ -151,6 +151,7 @@ impl DialogPopup {
 				}) else { return; };
 
 				popup.dialog.files.append(&mut new_files);
+				popup.changed = true;
 			});
 			false
 		})));
@@ -181,6 +182,7 @@ impl DialogPopup {
 				}) else { return; };
 
 				popup.dialog.delay = delay;
+				popup.changed = true;
 			});
 			false
 		})));
@@ -189,11 +191,13 @@ impl DialogPopup {
 
 	fn toggle_random(&mut self) -> bool {
 		self.dialog.random = !self.dialog.random;
+		self.changed = true;
 		true
 	}
 
 	fn toggle_sequential(&mut self) -> bool {
 		self.dialog.sequential = !self.dialog.sequential;
+		self.changed = true;
 		true
 	}
 
@@ -207,7 +211,10 @@ impl DialogPopup {
 
 	fn discard_changes(&self) -> bool {
 		if self.changed {
-			defer_set_popup(PopupComponent::Confirm(ConfirmPopup::new(ConfirmAction::DiscardDialogChanges)));
+			defer_set_popup(PopupComponent::Confirm(ConfirmPopup::new("Discard changes?", "discard", || {
+				defer_exit_popup();
+				false
+			})));
 		} else {
 			defer_exit_popup();
 		}

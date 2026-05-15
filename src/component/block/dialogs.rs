@@ -5,7 +5,7 @@ use mki::Keyboard;
 use rand::Rng;
 use ratatui::{Frame, layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}};
 
-use crate::{component::{block::{BlockHandleKey, BlockNavigation, BlockRenderArea, BlockSingleton, loop_index, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, confirm::{ConfirmAction, ConfirmPopup}, dialog::DialogPopup, input::{FLAG_NONE, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, state::acquire, util::dialog::Dialog};
+use crate::{component::{block::{BlockHandleKey, BlockNavigation, BlockRenderArea, BlockSingleton, loop_index, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, confirm::ConfirmPopup, dialog::DialogPopup, input::{FLAG_NONE, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, state::acquire, util::dialog::Dialog};
 
 pub struct DialogBlock {
 	range: (i32, i32),
@@ -201,7 +201,18 @@ impl DialogBlock {
 	}
 
 	fn delete_dialog(&self) -> bool {
-		set_popup(PopupComponent::Confirm(ConfirmPopup::new(ConfirmAction::DeleteDialog)));
+		set_popup(PopupComponent::Confirm(ConfirmPopup::new("Delete dialog?", "delete", || {
+			let mut app = acquire();
+			let mut dialog_block = DialogBlock::instance();
+			let selected = dialog_block.selected;
+			app.dialogs.remove(selected);
+			app.config.dialogs.remove(selected);
+			let len = app.config.dialogs.len();
+			if selected >= len && len != 0 {
+				dialog_block.selected = len - 1;
+			}
+			true
+		})));
 		true
 	}
 	

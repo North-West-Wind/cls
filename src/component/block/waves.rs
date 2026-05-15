@@ -6,7 +6,7 @@ use rand::Rng;
 use ratatui::{style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}};
 use substring::Substring;
 
-use crate::component::{block::{BlockSingleton, loop_index}, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{FLAG_NONE, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}};
+use crate::component::{block::{BlockSingleton, loop_index}, popup::{confirm::ConfirmPopup, input::{FLAG_NONE, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}};
 use crate::component::popup::wave::WavePopup;
 use crate::component::popup::{set_popup, PopupComponent};
 use crate::{component::block::{settings::SettingsBlock, tabs::TabsBlock, BlockHandleKey, BlockNavigation, BlockRenderArea}, state::acquire, util::wave::Waveform};
@@ -215,7 +215,18 @@ impl WavesBlock {
 	}
 
 	fn delete_wave(&self) -> bool {
-		set_popup(PopupComponent::Confirm(ConfirmPopup::new(ConfirmAction::DeleteWave)));
+		set_popup(PopupComponent::Confirm(ConfirmPopup::new("Delete wave?", "delete", || {
+			let mut app = acquire();
+			let mut wave_block = WavesBlock::instance();
+			let selected = wave_block.selected;
+			app.waves.remove(selected);
+			app.config.waves.remove(selected);
+			let len = app.config.waves.len();
+			if selected >= len && len != 0 {
+				wave_block.selected = len - 1;
+			}
+			true
+		})));
 		true
 	}
 	
