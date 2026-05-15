@@ -5,7 +5,7 @@ use mki::Keyboard;
 use rand::Rng;
 use ratatui::{Frame, layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}};
 
-use crate::{component::{block::{BlockHandleKey, BlockNavigation, BlockRenderArea, BlockSingleton, loop_index, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, confirm::{ConfirmAction, ConfirmPopup}, dialog::DialogPopup, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, state::acquire, util::dialog::Dialog};
+use crate::{component::{block::{BlockHandleKey, BlockNavigation, BlockRenderArea, BlockSingleton, loop_index, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, confirm::{ConfirmAction, ConfirmPopup}, dialog::DialogPopup, input::{FLAG_NONE, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, state::acquire, util::dialog::Dialog};
 
 pub struct DialogBlock {
 	range: (i32, i32),
@@ -189,7 +189,14 @@ impl DialogBlock {
 	}
 
 	fn rename_dialog(&self) -> bool {
-		set_popup(PopupComponent::Input(InputPopup::new(acquire().dialogs[self.selected].label.clone(), AwaitInput::DialogName)));
+		set_popup(PopupComponent::Input(InputPopup::new(acquire().dialogs[self.selected].label.clone(), "Dialog Label".to_string(), FLAG_NONE, |value| {
+			let name = value.to_string();
+			let mut app = acquire();
+			let selected = { DialogBlock::instance().selected };
+			app.dialogs[selected].label = name.clone();
+			app.config.dialogs[selected].label = name;
+			true
+		})));
 		true
 	}
 
@@ -229,7 +236,14 @@ impl DialogBlock {
 			Some(id) => id.to_string(),
 			None => String::new(),
 		};
-		set_popup(PopupComponent::Input(InputPopup::new(init, AwaitInput::SetDialogId)));
+		set_popup(PopupComponent::Input(InputPopup::new(init, "Dialog ID".to_string(), FLAG_NONE, |value| {
+			let Ok(id) = u32::from_str_radix(&value, 10) else { return false; };
+			let mut app = acquire();
+			let selected = { DialogBlock::instance().selected };
+			app.dialogs[selected].id = Some(id);
+			app.config.dialogs[selected].id = Some(id);
+			true
+		})));
 		true
 	}
 

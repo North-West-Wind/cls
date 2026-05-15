@@ -8,7 +8,7 @@ use mki::Keyboard;
 use ratatui::{layout::Rect, Frame};
 use save::SavePopup;
 
-use crate::component::popup::{confirm::ConfirmPopup, dialog::DialogPopup, wave::WavePopup};
+use crate::{component::popup::{confirm::ConfirmPopup, dialog::DialogPopup, wave::WavePopup}, state::notify_redraw};
 
 pub mod confirm;
 pub mod dialog;
@@ -109,6 +109,7 @@ pub fn popups() -> MutexGuard<'static, Vec<PopupComponent>> {
 
 pub fn exit_popup() {
 	popups().pop();
+	notify_redraw();
 }
 
 pub fn set_popup(popup: PopupComponent) {

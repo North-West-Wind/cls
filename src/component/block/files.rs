@@ -1,6 +1,6 @@
 use std::{cmp::{max, min}, collections::HashSet, i32, path::Path, sync::{Arc, Mutex, MutexGuard, OnceLock}};
 
-use crate::{component::{block::{BlockNavigation, BlockSingleton, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, state::{Scanning, acquire}, util::{file::play_file_auto_volume, tab::{scan, selected_file_path}}};
+use crate::{component::{block::{BlockNavigation, BlockSingleton, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, input::{FLAG_INT, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, config::FileEntry, state::{Scanning, acquire}, util::{file::play_file_auto_volume, tab::{scan, selected_file_path}}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -264,7 +264,33 @@ impl FilesBlock {
 			},
 			None => String::new(),
 		};
-		set_popup(PopupComponent::Input(InputPopup::new(init, AwaitInput::SetFileId)));
+		set_popup(PopupComponent::Input(InputPopup::new(init, "File ID".to_string(), FLAG_INT, |value| {
+			let mut app = acquire();
+			let path = selected_file_path(&app.config.tabs, &app.files, None);
+			if path.is_empty() {
+				return false;
+			}
+			let Ok(id) = u32::from_str_radix(value, 10) else { return false; };
+			let existing = app.file_ids.get(&id);
+			if existing.is_some() {
+				if existing.unwrap() != &path {
+					app.error = "File ID must be unique".to_string();
+				}
+				return false;
+			}
+			app.file_ids.insert(id, path.clone());
+			match app.config.get_file_entry_mut(path.clone()) {
+				Some(entry) => {
+					entry.id = Some(id);
+				},
+				None => {
+					let mut entry = FileEntry::default();
+					entry.id = Some(id);
+					app.config.insert_file_entry(path, entry);
+				}
+			}
+			true
+		})));
 		return true;
 	}
 

@@ -1,10 +1,11 @@
 use std::{path::Path, sync::{Mutex, MutexGuard, OnceLock}};
 
-use crate::{component::{block::{BlockNavigation, BlockSingleton, files::FilesBlock, info::InfoBlock}, popup::{PopupComponent, confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, set_popup}}, state::acquire};
+use crate::{component::{block::{BlockNavigation, BlockSingleton, files::FilesBlock, info::InfoBlock}, popup::{PopupComponent, confirm::{ConfirmAction, ConfirmPopup}, input::{FLAG_DIR, InputPopup}, set_popup}}, state::{Scanning, acquire}, util::tab::scan};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use normpath::PathExt;
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 
 pub struct TabsBlock {
@@ -125,7 +126,15 @@ impl TabsBlock {
 	}
 
 	fn handle_add(&self) -> bool {
-		set_popup(PopupComponent::Input(InputPopup::new(std::env::current_dir().unwrap().to_str().unwrap().to_string(), AwaitInput::AddTab)));
+		set_popup(PopupComponent::Input(InputPopup::new(std::env::current_dir().unwrap().to_str().unwrap().to_string(), "Add Directory as Tab".to_string(), FLAG_DIR, |value| {
+			let mut app = acquire();
+			let Ok(norm) = Path::new(value).normalize() else { return false; };
+			app.config.tabs.push(norm.clone().into_os_string().into_string().unwrap());
+			let len = app.config.tabs.len() - 1;
+			{ TabsBlock::instance().selected = len; }
+			scan(Scanning::One(len));
+			true
+		})));
 		true
 	}
 }

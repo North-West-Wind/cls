@@ -255,11 +255,12 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 			reader.read_until(0, &mut chars)?;
 			chars.pop();
 			let query = str::from_utf8(&chars).unwrap_or("");
+			log::info(&format!("play-search: {}", query));
 			if query.is_empty() {
 				return send_response(reader.get_mut(), &[1], false);
 			}
 			// Search
-			let mut best_match = (70, String::new());
+			let mut best_match = (i64::MIN, String::new());
 			let matcher = SkimMatcherV2::default();
 			for (tab, files) in &app.files {
 				for file in files {
@@ -272,7 +273,6 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 				return send_response(reader.get_mut(), &[1], false);
 			}
 			// Play it
-			log::info(&format!("{}: {}", best_match.0, best_match.1));
 			let lock = if app.config.playlist_mode {
 				app.playlist_lock.clone()
 			} else {

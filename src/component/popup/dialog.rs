@@ -1,8 +1,11 @@
+use std::{path::Path, thread};
+
 use crossterm::event::{KeyCode, KeyEvent};
+use normpath::PathExt;
 use ratatui::{Frame, layout::Rect, style::{Color, Modifier, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}};
 use substring::Substring;
 
-use crate::{component::popup::{PopupComponent, PopupHandleKey, PopupRender, confirm::{ConfirmAction, ConfirmPopup}, defer_exit_popup, defer_set_popup, input::{AwaitInput, InputPopup}}, state::acquire, util::dialog::Dialog};
+use crate::{component::popup::{PopupComponent, PopupHandleKey, PopupRender, confirm::{ConfirmAction, ConfirmPopup}, defer_exit_popup, defer_set_popup, input::{FLAG_FILE, FLAG_NUM, InputPopup}, popups}, state::acquire, util::dialog::Dialog};
 
 pub struct DialogPopup {
 	index: usize,
@@ -120,7 +123,37 @@ impl DialogPopup {
 	}
 
 	fn add_file(&mut self) -> bool {
-		defer_set_popup(PopupComponent::Input(InputPopup::new(String::new(), AwaitInput::AddDialogFile)));
+		defer_set_popup(PopupComponent::Input(InputPopup::new(String::new(), "Add Dialog File".to_string(), FLAG_FILE, |value| {
+			let mut new_files= vec![];
+			let path = Path::new(value);
+			if path.is_dir() {
+				let Ok(read_dir) = path.read_dir() else { return false; };
+				read_dir.for_each(|file| {
+					let Ok(entry) = file else { return; };
+					let Ok(file_type) = entry.file_type() else { return; };
+					if !file_type.is_dir() {
+						let Ok(norm) = entry.path().normalize() else { return; };
+						new_files.push(norm.clone().into_os_string().into_string().unwrap());
+					}
+				});
+			} else {
+				let Ok(norm) = path.normalize() else { return false; };
+				new_files.push(norm.clone().into_os_string().into_string().unwrap());
+			}
+			
+			thread::spawn(move || {
+				let mut popups = popups();
+				let Some(popup) = popups.iter_mut().find_map(|popup| {
+					match popup {
+						PopupComponent::Dialog(popup) => { Option::Some(popup) },
+						_ => Option::None
+					}
+				}) else { return; };
+
+				popup.dialog.files.append(&mut new_files);
+			});
+			false
+		})));
 		true
 	}
 
@@ -136,7 +169,21 @@ impl DialogPopup {
 	}
 
 	fn change_delay(&self) -> bool {
-		defer_set_popup(PopupComponent::Input(InputPopup::new(self.dialog.delay.to_string(), AwaitInput::DialogDelay)));
+		defer_set_popup(PopupComponent::Input(InputPopup::new(self.dialog.delay.to_string(), "Dialog Delay".to_string(), FLAG_NUM, |value| {
+			let Ok(delay) = value.parse::<f32>() else { return false; };
+			thread::spawn(move || {
+				let mut popups = popups();
+				let Some(popup) = popups.iter_mut().find_map(|popup| {
+					match popup {
+						PopupComponent::Dialog(popup) => { Option::Some(popup) },
+						_ => Option::None
+					}
+				}) else { return; };
+
+				popup.dialog.delay = delay;
+			});
+			false
+		})));
 		true
 	}
 

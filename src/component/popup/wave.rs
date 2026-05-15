@@ -1,8 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
-use std::cmp::max;
+use std::{cmp::max, thread};
 
-use crate::{component::popup::{confirm::{ConfirmAction, ConfirmPopup}, defer_exit_popup, defer_set_popup, input::{AwaitInput, InputPopup}, PopupComponent, PopupHandleKey, PopupRender}, state::acquire, util::wave::{Wave, WaveType, Waveform}};
+use crate::{component::popup::{PopupComponent, PopupHandleKey, PopupRender, confirm::{ConfirmAction, ConfirmPopup}, defer_exit_popup, defer_set_popup, input::{FLAG_NUM, InputPopup}, popups}, state::acquire, util::wave::{Wave, WaveType, Waveform}};
 
 pub struct WavePopup {
 	index: usize,
@@ -160,17 +160,68 @@ impl WavePopup {
 	}
 
 	fn popup_frequency(&self) -> bool {
-		defer_set_popup(PopupComponent::Input(InputPopup::new(self.selected_wave().frequency.to_string(), AwaitInput::WaveFrequency)));
+		defer_set_popup(PopupComponent::Input(InputPopup::new(self.selected_wave().frequency.to_string(), "Frequency (Hz)".to_string(), FLAG_NUM, |value| {
+			let Ok(freq) = value.parse::<f32>() else { return false; };
+			thread::spawn(move || {
+				let mut popups = popups();
+				let Some(popup) = popups.iter_mut().find_map(|popup| {
+					match popup {
+						PopupComponent::Wave(popup) => { Option::Some(popup) },
+						_ => Option::None
+					}
+				}) else { return; };
+				let wave = &mut popup.waveform.waves[popup.selected];
+				if wave.frequency != freq {
+					popup.changed = true;
+				}
+				wave.frequency = freq;
+			});
+			false
+		})));
 		true
 	}
 
 	fn popup_amplitude(&self) -> bool {
-		defer_set_popup(PopupComponent::Input(InputPopup::new(self.selected_wave().amplitude.to_string(), AwaitInput::WaveAmplitude)));
+		defer_set_popup(PopupComponent::Input(InputPopup::new(self.selected_wave().amplitude.to_string(), "Amplitude (Default = 1)".to_string(), FLAG_NUM, |value| {
+			let Ok(amplitude) = value.parse::<f32>() else { return false; };
+			thread::spawn(move || {
+				let mut popups = popups();
+				let Some(popup) = popups.iter_mut().find_map(|popup| {
+					match popup {
+						PopupComponent::Wave(popup) => { Option::Some(popup) },
+						_ => Option::None
+					}
+				}) else { return; };
+				let wave = &mut popup.waveform.waves[popup.selected];
+				if wave.amplitude != amplitude {
+					popup.changed = true;
+				}
+				wave.amplitude = amplitude;
+			});
+			false
+		})));
 		true
 	}
 
 	fn popup_phase(&self) -> bool {
-		defer_set_popup(PopupComponent::Input(InputPopup::new(self.selected_wave().phase.to_string(), AwaitInput::WavePhase)));
+		defer_set_popup(PopupComponent::Input(InputPopup::new(self.selected_wave().phase.to_string(), "Phase".to_string(), FLAG_NUM, |value| {
+			let Ok(phase) = value.parse::<f32>() else { return false; };
+			thread::spawn(move || {
+				let mut popups = popups();
+				let Some(popup) = popups.iter_mut().find_map(|popup| {
+					match popup {
+						PopupComponent::Wave(popup) => { Option::Some(popup) },
+						_ => Option::None
+					}
+				}) else { return; };
+				let wave = &mut popup.waveform.waves[popup.selected];
+				if wave.phase != phase {
+					popup.changed = true;
+				}
+				wave.phase = phase;
+			});
+			false
+		})));
 		true
 	}
 

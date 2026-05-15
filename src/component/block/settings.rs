@@ -3,7 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Padding, Paragraph}, Frame};
 use substring::Substring;
 
-use crate::{component::{block::{BlockNavigation, BlockSingleton}, popup::{PopupComponent, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, state::acquire, util::pulseaudio::{loopback, unload_module}};
+use crate::{component::{block::{BlockNavigation, BlockSingleton}, popup::{PopupComponent, input::{FLAG_NONE, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, state::acquire, util::pulseaudio::{loopback, unload_module}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -134,13 +134,38 @@ impl SettingsBlock {
 			},
 			// Additional loopback
 			2|3 => {
-				let await_input;
-				if self.selected == 2 {
-					await_input = AwaitInput::Loopback1;
+				let func = if self.selected == 2 {
+					|value: &str| {
+						let mut app = acquire();
+						app.config.loopback_2 = value.to_string();
+
+						if !app.module_loopback_2.is_empty() {
+							app.module_loopback_2 = unload_module(&app.module_loopback_2)
+								.map_or(app.module_loopback_2.clone(), |_| { String::new() });
+
+							if !app.config.loopback_2.is_empty() {
+								app.module_loopback_2 = loopback(app.config.loopback_2.clone());
+							}
+						}
+						true
+					}
 				} else {
-					await_input = AwaitInput::Loopback2;
-				}
-				set_popup(PopupComponent::Input(InputPopup::new(String::new(), await_input)));
+					|value: &str| {
+						let mut app = acquire();
+						app.config.loopback_1 = value.to_string();
+
+						if !app.module_loopback_1.is_empty() {
+							app.module_loopback_1 = unload_module(&app.module_loopback_1)
+								.map_or(app.module_loopback_1.clone(), |_| { String::new() });
+
+							if !app.config.loopback_1.is_empty() {
+								app.module_loopback_1 = loopback(app.config.loopback_1.clone());
+							}
+						}
+						true
+					}
+				};
+				set_popup(PopupComponent::Input(InputPopup::new(String::new(), if self.selected == 2 { "Loopback 2" } else { "Loopback 1" }.to_string(), FLAG_NONE, func)));
 				return true;
 			},
 			// Playlist mode toggle

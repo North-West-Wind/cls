@@ -6,7 +6,7 @@ use rand::Rng;
 use ratatui::{style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}};
 use substring::Substring;
 
-use crate::{component::{block::{loop_index, BlockSingleton}, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{AwaitInput, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}}};
+use crate::component::{block::{BlockSingleton, loop_index}, popup::{confirm::{ConfirmAction, ConfirmPopup}, input::{FLAG_NONE, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}};
 use crate::component::popup::wave::WavePopup;
 use crate::component::popup::{set_popup, PopupComponent};
 use crate::{component::block::{settings::SettingsBlock, tabs::TabsBlock, BlockHandleKey, BlockNavigation, BlockRenderArea}, state::acquire, util::wave::Waveform};
@@ -203,7 +203,14 @@ impl WavesBlock {
 	}
 
 	fn rename_wave(&self) -> bool {
-		set_popup(PopupComponent::Input(InputPopup::new(acquire().waves[self.selected].label.clone(), AwaitInput::WaveName)));
+		set_popup(PopupComponent::Input(InputPopup::new(acquire().waves[self.selected].label.clone(), "Waveform Label".to_string(), FLAG_NONE, |value| {
+			let name = value.to_string();
+			let mut app = acquire();
+			let selected = { WavesBlock::instance().selected };
+			app.waves[selected].label = name.clone();
+			app.config.waves[selected].label = name;
+			true
+		})));
 		true
 	}
 
@@ -244,7 +251,14 @@ impl WavesBlock {
 			Some(id) => id.to_string(),
 			None => String::new(),
 		};
-		set_popup(PopupComponent::Input(InputPopup::new(init, AwaitInput::SetWaveId)));
+		set_popup(PopupComponent::Input(InputPopup::new(init, "Waveform ID".to_string(), FLAG_NONE, |value| {
+			let Ok(id) = u32::from_str_radix(value, 10) else { return false; };
+			let mut app = acquire();
+			let selected = { WavesBlock::instance().selected };
+			app.waves[selected].id = Some(id);
+			app.config.waves[selected].id = Some(id);
+			true
+		})));
 		true
 	}
 
