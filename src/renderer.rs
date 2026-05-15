@@ -5,7 +5,7 @@ use ratatui::{
 	Frame, Terminal, layout::{Alignment, Constraint, Direction, Layout, Rect}, prelude::CrosstermBackend, style::{Color, Style}, widgets::{Block, BorderType, Borders, Paragraph}
 };
 
-use crate::{component::{block::{BlockRender, BlockRenderArea, BlockSingleton, dialogs::DialogBlock, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::{self, LogBlock}, playing::PlayingBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupRender, popups}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{MainOpened, acquire, is_running, wait_redraw}};
+use crate::{component::{block::{BlockRender, BlockRenderArea, BlockSingleton, dialogs::DialogBlock, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::{self, LogBlock}, playing::PlayingBlock, results::ResultsBlock, search::SearchBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupRender, popups}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{MainOpened, acquire, is_running, wait_redraw}};
 
 pub fn draw_loop() -> JoinHandle<Result<(), io::Error>> {
 	log::info("Spawning drawing thread...");
@@ -73,7 +73,11 @@ pub fn ui(f: &mut Frame) {
 		return;
 	}
 	{ InfoBlock::instance().render_area(f, chunks[0]); }
-	{ TabsBlock::instance().render_area(f, chunks[1]); }
+	if main_opened == MainOpened::Search {
+		SearchBlock::instance().render_area(f, chunks[1]);
+	} else {
+		TabsBlock::instance().render_area(f, chunks[1]);
+	}
 	let files_area: Rect;
 	if settings {
 		let mid_chunks1 = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Fill(1), Constraint::Length(20)].as_ref()).split(chunks[2]);
@@ -94,6 +98,7 @@ pub fn ui(f: &mut Frame) {
 		MainOpened::File => FilesBlock::instance().render_area(f, files_area),
 		MainOpened::Wave => WavesBlock::instance().render_area(f, files_area),
 		MainOpened::Dialog => DialogBlock::instance().render_area(f, files_area),
+		MainOpened::Search => ResultsBlock::instance().render_area(f, files_area),
 		_ => ()
 	}
 	{ HelpBlock::instance().render_area(f, chunks[3]); }

@@ -7,7 +7,7 @@ use settings::SettingsBlock;
 use tabs::TabsBlock;
 use info::InfoBlock;
 
-use crate::component::block::{dialogs::DialogBlock, waves::WavesBlock};
+use crate::component::block::{dialogs::DialogBlock, results::ResultsBlock, search::SearchBlock, waves::WavesBlock};
 
 use super::{layer, popup::{help::HelpPopup, set_popup, PopupComponent}};
 
@@ -15,6 +15,8 @@ pub mod dialogs;
 pub mod files;
 pub mod help;
 pub mod playing;
+pub mod results;
+pub mod search;
 pub mod settings;
 pub mod tabs;
 pub mod info;
@@ -57,6 +59,8 @@ pub fn handle_key(block_id: u8, event: KeyEvent) -> bool {
 			SettingsBlock::ID => SettingsBlock::instance().handle_key(event),
 			WavesBlock::ID => WavesBlock::instance().handle_key(event),
 			DialogBlock::ID => DialogBlock::instance().handle_key(event),
+			SearchBlock::ID => SearchBlock::instance().handle_key(event),
+			ResultsBlock::ID => ResultsBlock::instance().handle_key(event),
 			_ => false,
 		}
 	}
@@ -70,6 +74,8 @@ pub fn navigate_block(block_id: u8, dx: i16, dy: i16) -> u8 {
 		SettingsBlock::ID => SettingsBlock::instance().navigate_block(dx, dy),
 		WavesBlock::ID => WavesBlock::instance().navigate_block(dx, dy),
 		DialogBlock::ID => DialogBlock::instance().navigate_block(dx, dy),
+		SearchBlock::ID => SearchBlock::instance().navigate_block(dx, dy),
+		ResultsBlock::ID => ResultsBlock::instance().navigate_block(dx, dy),
 		_ => block_id
 	}
 }

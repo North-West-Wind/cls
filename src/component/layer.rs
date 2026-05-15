@@ -2,7 +2,7 @@ use std::thread;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::{component::{block::{self, BlockNavigation, dialogs::DialogBlock, files::FilesBlock, settings::SettingsBlock, waves::WavesBlock}, popup::{confirm::ConfirmPopup, exit_popup, save::SavePopup}}, config, state::{MainOpened, SelectionLayer, acquire, notify_redraw, stop_running}};
+use crate::{component::{block::{self, BlockNavigation, dialogs::DialogBlock, files::FilesBlock, results::ResultsBlock, search::SearchBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{confirm::ConfirmPopup, exit_popup, save::SavePopup}}, config, state::{MainOpened, SelectionLayer, acquire, notify_redraw, stop_running}};
 
 use super::{popup::{help::HelpPopup, set_popup, PopupComponent}};
 
@@ -36,6 +36,10 @@ pub fn handle_key(event: KeyEvent) -> bool {
 		},
 		KeyCode::Char('t') => {
 			toggle_main_opened(MainOpened::Dialog);
+			return true;
+		},
+		KeyCode::Char('\'') => {
+			toggle_main_opened(MainOpened::Search);
 			return true;
 		},
 		KeyCode::Char('\\') => {
@@ -121,7 +125,13 @@ fn toggle_main_opened(main_opened: MainOpened) {
 	} else {
 		app.main_opened = main_opened;
 	}
-	if app.block_selected == FilesBlock::ID || app.block_selected == WavesBlock::ID || app.block_selected == DialogBlock::ID {
+	if app.block_selected == FilesBlock::ID || app.block_selected == WavesBlock::ID || app.block_selected == DialogBlock::ID || app.block_selected == ResultsBlock::ID {
 		app.block_selected = app.main_opened.id(app.block_selected);
+	}
+
+	if app.main_opened == MainOpened::Search {
+		app.block_selected = SearchBlock::ID;
+	} else if app.block_selected == SearchBlock::ID {
+		app.block_selected = TabsBlock::ID;
 	}
 }
