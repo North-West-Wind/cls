@@ -156,6 +156,7 @@ fn on_paste(data: String) {
 pub fn listen_signals() {
 	log::info("Starting signal listener...");
 	ctrlc::set_handler(move || {
+		log::info("Received terminate signal");
 		stop_running();
 	}).expect("Failed to set Ctrl+C handler");
 }

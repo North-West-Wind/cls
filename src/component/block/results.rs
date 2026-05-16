@@ -1,4 +1,4 @@
-use std::{path::Path, sync::{Arc, Mutex, MutexGuard, OnceLock}, thread};
+use std::{path::Path, sync::{Arc, Mutex, MutexGuard, OnceLock}, thread::{self, JoinHandle}};
 
 use crossterm::event::KeyCode;
 use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
@@ -8,7 +8,7 @@ use sorted_list::SortedList;
 use substring::Substring;
 use uuid::Uuid;
 
-use crate::{component::block::{BlockHandleKey, BlockNavigation, BlockRenderArea, BlockSingleton, loop_index, search::SearchBlock, settings::SettingsBlock}, state::{acquire, notify_redraw}, util::file::play_file_auto_volume};
+use crate::{component::block::{BlockHandleKey, BlockNavigation, BlockRenderArea, BlockSingleton, log, loop_index, search::SearchBlock, settings::SettingsBlock}, state::{acquire, notify_redraw}, util::file::play_file_auto_volume};
 
 enum State {
 	Initial,
@@ -192,7 +192,8 @@ impl BlockNavigation for ResultsBlock {
 }
 
 impl ResultsBlock {
-	pub fn search(&mut self, query: &str) {
+	pub fn search(&mut self, query: &str) -> JoinHandle<()> {
+		log::info(&format!("ResultsBlock is searching up {query}"));
 		self.state = State::Searching;
 		notify_redraw();
 		let query = query.to_owned();
@@ -238,10 +239,10 @@ impl ResultsBlock {
 			}
 			block.state = State::Finish;
 			notify_redraw();
-		});
+		})
 	}
 
-	fn play(&self, random: bool) -> bool {
+	pub fn play(&self, random: bool) -> bool {
 		if self.results.len() == 0 {
 			return false;
 		}

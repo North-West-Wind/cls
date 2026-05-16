@@ -2,11 +2,10 @@ use std::{cmp::{max, min}, collections::HashMap, io::{self, BufRead, BufReader, 
 
 use clap::ArgMatches;
 use code::SocketCode;
-use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use interprocess::local_socket::{traits::{ListenerExt, Stream as _}, GenericFilePath, GenericNamespaced, Listener, ListenerOptions, Name, NameType, Stream, ToFsName, ToNsName};
 use normpath::PathExt;
 
-use crate::{component::block::{BlockSingleton, log, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, is_running, load_app_config, notify_redraw, stop_running}, util::{file::{parent_file, play_file_auto_volume, stop_all}, tab::scan, wave::stop_all_waves}};
+use crate::{component::block::{BlockSingleton, log, results::{ResultsBlock, SearchResult}, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, is_running, load_app_config, notify_redraw, stop_running}, util::{file::{parent_file, play_file_auto_volume, stop_all}, tab::scan, wave::stop_all_waves}};
 
 pub mod code;
 
@@ -259,31 +258,27 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 			if query.is_empty() {
 				return send_response(reader.get_mut(), &[1], false);
 			}
+			drop(app);
 			// Search
-			let mut best_match = (i64::MIN, String::new());
-			let matcher = SkimMatcherV2::default();
-			for (tab, files) in &app.files {
-				for file in files {
-					if let Some(score) = matcher.fuzzy_match(&file.0, &query) && score > best_match.0 {
-						best_match = (score, Path::new(tab).join(&file.0).into_os_string().into_string().unwrap());
-					}
-				}
-			}
-			if best_match.1.is_empty() {
+			let mut block = ResultsBlock::instance();
+			let handle = block.search(query);
+			drop(block);
+			handle.join().expect("Failed to join search thread");
+			let mut block = ResultsBlock::instance();
+			block.selected = 0;
+			if block.play(false) {
+				let played = match block.results.values().next().unwrap() {
+					SearchResult::File(result) => &Path::new(&result.parent).join(&result.name).into_os_string().into_string().unwrap(),
+					SearchResult::Wave(result) => &result.main,
+					SearchResult::Dialog(result) => &result.main,
+				};
+				// Send response
+				let mut bytes = played.as_bytes().to_vec();
+				bytes.insert(0, 0);
+				return send_response(reader.get_mut(), &bytes, true);
+			} else {
 				return send_response(reader.get_mut(), &[1], false);
 			}
-			// Play it
-			let lock = if app.config.playlist_mode {
-				app.playlist_lock.clone()
-			} else {
-				Arc::new(Mutex::new(()))
-			};
-			play_file_auto_volume(&best_match.1, lock);
-			notify_redraw();
-			// Send response
-			let mut bytes = best_match.1.as_bytes().to_vec();
-			bytes.insert(0, 0);
-			return send_response(reader.get_mut(), &bytes, true);
 		},
 		StopWaveId => {
 			let mut bytes = [0; 4];
