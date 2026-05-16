@@ -1,8 +1,8 @@
-use std::sync::{LazyLock, Mutex, MutexGuard};
+use std::{sync::{LazyLock, Mutex, MutexGuard}, thread};
 
 use ratatui::{style::{Color, Style}, text::Line, widgets::{Block, BorderType, Padding, Paragraph}};
 
-use crate::{component::block::{BlockRenderArea, BlockSingleton}, state::notify_redraw};
+use crate::{component::block::{BlockRenderArea, BlockSingleton}, state::{acquire, notify_redraw}};
 
 #[allow(dead_code)]
 pub enum LogLevel {
@@ -59,17 +59,38 @@ impl LogBlock {
 }
 
 pub fn info(body: &str) {
-	LogBlock::instance().append_message(body.to_string(), LogLevel::Info);
-	notify_redraw();
+	let body = body.to_owned();
+	thread::spawn(move || {
+		if acquire().hidden {
+			println!("{body}");
+		} else {
+			LogBlock::instance().append_message(body.to_string(), LogLevel::Info);
+			notify_redraw();
+		}
+	});
 }
 
 #[allow(dead_code)]
 pub fn warn(body: &str) {
-	LogBlock::instance().append_message(body.to_string(), LogLevel::Warn);
-	notify_redraw();
+	let body = body.to_owned();
+	thread::spawn(move || {
+		if acquire().hidden {
+			println!("{body}");
+		} else {
+			LogBlock::instance().append_message(body.to_string(), LogLevel::Warn);
+			notify_redraw();
+		}
+	});
 }
 
 pub fn error(body: &str) {
-	LogBlock::instance().append_message(body.to_string(), LogLevel::Error);
-	notify_redraw();
+	let body = body.to_owned();
+	thread::spawn(move || {
+		if acquire().hidden {
+			eprintln!("{body}");
+		} else {
+			LogBlock::instance().append_message(body.to_string(), LogLevel::Error);
+			notify_redraw();
+		}
+	});
 }
