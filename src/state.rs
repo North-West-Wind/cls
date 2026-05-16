@@ -3,6 +3,7 @@ use std::{collections::{HashMap, HashSet}, path::Path, sync::{Arc, Condvar, Lazy
 use linked_hash_map::LinkedHashMap;
 use mki::Keyboard;
 use ratatui::{style::{Color, Style}, widgets::BorderType};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use uuid::Uuid;
 
 use crate::{component::block::{BlockNavigation, dialogs::DialogBlock, files::FilesBlock, results::ResultsBlock, waves::WavesBlock}, config::{SoundboardConfig, load}, util::{dialog::Dialog, keyboard::string_to_keyboard, pulseaudio::unload_module, wave::Waveform}};
@@ -109,52 +110,32 @@ impl App {
 }
 
 fn key_strings_to_keyboards(keys: &HashSet<String>) -> Vec<Keyboard> {
-	let mut keyboard = vec![];
-	keys.iter().for_each(|key| {
-		let result = string_to_keyboard(key);
-		result.inspect(|result| {
-			keyboard.push(*result);
-		});
-	});
-	if keyboard.len() != keys.len() {
-		keyboard.clear();
-	}
-	keyboard
+	keys.par_iter().filter_map(|key| {
+		string_to_keyboard(key)
+	}).collect::<Vec<_>>()
 }
 
 pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Vec<Keyboard>>, HashMap<u32, String>, Vec<Waveform>, Vec<Dialog>) {
 	let config = load();
-	let mut stopkey = vec![];
-	if config.stop_key.len() > 0 {
-		config.stop_key.iter().for_each(|key| {
-			let result = string_to_keyboard(key);
-			result.inspect(|result| {
-				stopkey.push(*result);
-			});
-		});
-		if stopkey.len() != config.stop_key.len() {
-			stopkey.clear();
-		}
-	}
+	let stopkey = key_strings_to_keyboards(&config.stop_key);
 	let mut hotkey = HashMap::new();
 	let mut file_ids = HashMap::new();
-	for (parent, map) in config.files.iter() {
+	for (parent, map) in &config.files {
 		for (name, entry) in map {
-			let path = Path::new(parent).join(name).to_str().unwrap().to_string();
+			let path = Path::new(&parent).join(name).to_str().unwrap().to_string();
 			let keyboard = key_strings_to_keyboards(&entry.keys);
 			if keyboard.len() > 0 && keyboard.len() == entry.keys.len() {
 				hotkey.insert(path.clone(), keyboard);
 			}
 
-			entry.id.inspect(|id| {
-				file_ids.insert(*id, path);
-			});
+			if let Some(id) = entry.id {
+				file_ids.insert(id, path);
+			}
 		}
 	}
-	let mut waves = vec![];
-	for wave in config.waves.iter() {
+	let waves = config.waves.par_iter().map(|wave| {
 		let keyboard = key_strings_to_keyboards(&wave.keys);
-		waves.push(Waveform {
+		Waveform {
 			uuid: Uuid::new_v4(),
 			label: wave.label.clone(),
 			id: wave.id,
@@ -162,12 +143,11 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 			waves: wave.waves.clone(),
 			volume: wave.volume,
 			playing: Arc::new(Mutex::new((false, false)))
-		});
-	}
-	let mut dialogs = vec![];
-	for dialog in config.dialogs.iter() {
+		}
+	}).collect::<Vec<_>>();
+	let dialogs = config.dialogs.par_iter().map(|dialog| {
 		let keyboard = key_strings_to_keyboards(&dialog.keys);
-		dialogs.push(Dialog {
+		Dialog {
 			uuid: Uuid::new_v4(),
 			label: dialog.label.clone(),
 			id: dialog.id,
@@ -180,8 +160,8 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 			play_lock: Arc::new(Mutex::new(())),
 			play_next: 0,
 			playing: Arc::new(Mutex::new((false, false)))
-		});
-	}
+		}
+	}).collect::<Vec<_>>();
 
 	(config, stopkey, hotkey, file_ids, waves, dialogs)
 }

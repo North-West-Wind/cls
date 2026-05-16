@@ -2,13 +2,14 @@ use std::{collections::HashMap, path::Path, thread::{self, JoinHandle}};
 
 use file_format::{FileFormat, Kind};
 use mime_guess::mime;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use symphonium::{ResampleQuality, SymphoniumLoader};
 
 use crate::{component::block::{BlockSingleton, files::FilesBlock, log, tabs::TabsBlock}, state::{Scanning, acquire, notify_redraw}, util::file::read_file_ffmpeg};
 
 fn ffprobe_duration(path: &str) -> Option<u128> {
 	let Ok(info) = ffprobe::ffprobe(path) else { return None };
-	if info.streams.iter().any(|stream| stream.codec_type == Option::Some("audio".to_string())) {
+	if info.streams.par_iter().any(|stream| stream.codec_type == Option::Some("audio".to_string())) {
 		if let Some(duration) = info.format.get_duration() {
 			Some(duration.as_millis())
 		} else {

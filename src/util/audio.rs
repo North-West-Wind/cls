@@ -2,6 +2,7 @@ use std::{f32::consts::PI, io::{self, BufWriter, Write}, process::{Child, ChildS
 
 use cmd_exists::cmd_exists;
 use cpal::{DeviceId, FromSample, Sample, SampleFormat, traits::{DeviceTrait, HostTrait, StreamTrait}};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{component::block::log, constant::{APP_NAME, ENDIANESS}, state::{acquire, is_running, notify_redraw}, util::{file::acquire_playing_files, wave::{WaveType, acquire_playing_waves}}};
 
@@ -149,7 +150,7 @@ pub fn create_audio_player(player_type: PlayerType) {
 	});
 }
 
-fn cpal_data_callback<T: Sample + FromSample<f32>>(data: &mut [T], sample_rate: u32, player_type: PlayerType, pair: &Arc<(Mutex<bool>, Condvar)>) {
+fn cpal_data_callback<T: Sample + FromSample<f32> + Send>(data: &mut [T], sample_rate: u32, player_type: PlayerType, pair: &Arc<(Mutex<bool>, Condvar)>) {
 	let pair = pair.clone();
 	if !is_running() {
 		let (lock, cvar) = &*pair;
@@ -166,37 +167,39 @@ fn cpal_data_callback<T: Sample + FromSample<f32>>(data: &mut [T], sample_rate: 
 		Wave => get_wave_data(&mut buf, sample_rate),
 	};
 
-	for (ii, sample) in buf.iter().enumerate() {
-		data[ii] = T::from_sample(*sample);
-	}
+	data.copy_from_slice(&buf.par_iter().map(|sample| T::from_sample(*sample)).collect::<Vec<_>>());
 }
 
 fn get_file_data(buf: &mut [f32]) -> bool {
 	let mut playing_files = acquire_playing_files();
-	let mut eofs = vec![];
 	if playing_files.len() > 0 {
+		// No parallel because it creates too much overhead
 		let volume = { acquire().config.volume as f32 / 100.0 };
-		for (uuid, playable) in playing_files.iter_mut() {
+		for (_uuid, playable) in playing_files.iter_mut() {
+			let volume = linear_to_logarithmic(playable.volume * volume);
 			let max_read = buf.len().min(playable.data.len() - playable.position);
 			for ii in 0..max_read {
-				buf[ii] += playable.data[ii + playable.position] * linear_to_logarithmic(playable.volume * volume);
+				buf[ii] += playable.data[ii + playable.position] * volume;
 			}
 			playable.position += max_read;
+		}
+		let eofs = playing_files.par_iter().filter_map(|(uuid, playable)| {
 			if playable.position == playable.data.len() {
 				let (lock, cvar) = &*playable.finished;
 				let _locked = lock.lock().expect("Failed to lock conditional variable");
 				cvar.notify_one();
-				eofs.push(*uuid);
-				continue;
+				Some(*uuid)
+			} else {
+				None
 			}
-		}
+		}).collect::<Vec<_>>();
 		if !eofs.is_empty() {
 			let mut app = acquire();
 			eofs.iter().for_each(|uuid| {
 				playing_files.remove(uuid);
 				app.playing_file.remove(uuid);
-				notify_redraw();
 			});
+			notify_redraw();
 		}
 		drop(playing_files);
 		return true;
@@ -208,6 +211,7 @@ fn get_wave_data(buf: &mut [f32], sample_rate: u32) -> bool {
 	let mut playing_waves = acquire_playing_waves();
 	if playing_waves.len() > 0 {
 		let volume = { acquire().config.volume as f32 / 100.0 };
+		// No parallel because it creates too much overhead
 		for (_uuid, playable) in playing_waves.iter_mut() {
 			let len = playable.len() as f32;
 			let mut playable_bytes = vec![0_f32; buf.len()];
@@ -234,7 +238,7 @@ fn get_wave_data(buf: &mut [f32], sample_rate: u32) -> bool {
 					}
 				}
 			}
-			for ii in 0..CHUNK_SIZE {
+			for ii in 0..playable_bytes.len() {
 				buf[ii] += playable_bytes[ii] / len;
 			}
 		}

@@ -4,6 +4,7 @@ use clap::ArgMatches;
 use code::SocketCode;
 use interprocess::local_socket::{traits::{ListenerExt, Stream as _}, GenericFilePath, GenericNamespaced, Listener, ListenerOptions, Name, NameType, Stream, ToFsName, ToNsName};
 use normpath::PathExt;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{component::block::{BlockSingleton, log, results::{ResultsBlock, SearchResult}, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, is_running, load_app_config, notify_redraw, stop_running}, util::{file::{parent_file, play_file_auto_volume, stop_all}, tab::scan, wave::stop_all_waves}};
 
@@ -132,20 +133,18 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 						return send_response(reader.get_mut(), &[1], false);
 					}
 					let path = path.unwrap().into_os_string().into_string().unwrap();
-					let index = app.config.tabs.iter().position(|tab| *tab == path);
-					if index.is_none() {
+					let Some(index) = app.config.tabs.par_iter().position_first(|tab| *tab == path) else {
 						return send_response(reader.get_mut(), &[2], false);
-					}
-					chosen_index = index.unwrap();
+					};
+					chosen_index = index;
 				},
 				3 => {
 					let mut name = String::new();
 					reader.read_to_string(&mut name)?;
-					let index = app.config.tabs.iter().position(|tab| Path::new(tab).file_name().unwrap().to_os_string().into_string().unwrap() == name);
-					if index.is_none() {
+					let Some(index) = app.config.tabs.par_iter().position_first(|tab| Path::new(tab).file_name().unwrap().to_os_string().into_string().unwrap() == name) else {
 						return send_response(reader.get_mut(), &[3], false);
-					}
-					chosen_index = index.unwrap();
+					};
+					chosen_index = index;
 				},
 				_ => chosen_index = TabsBlock::instance().selected
 			}
@@ -220,33 +219,29 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 			let mut bytes = [0; 4];
 			reader.read_exact(&mut bytes)?;
 			let id = u32::from_le_bytes(bytes);
-			let wave = app.waves.iter().find(|wave| { wave.id.is_some_and(|wave_id| wave_id == id) });
-			if wave.is_some() {
-				let wave = wave.unwrap();
-				{ wave.playing.lock().unwrap().1 = true; }
-				wave.play(false);
-				notify_redraw();
-				let mut bytes = wave.label.as_bytes().to_vec();
-				bytes.insert(0, 0);
-				return send_response(reader.get_mut(), &bytes, true);
-			}
-			return send_response(reader.get_mut(), &[1], false);
+			let Some(wave) = app.waves.par_iter().find_any(|wave| { wave.id.is_some_and(|wave_id| wave_id == id) }) else {
+				return send_response(reader.get_mut(), &[1], false);
+			};
+			{ wave.playing.lock().unwrap().1 = true; }
+			wave.play(false);
+			notify_redraw();
+			let mut bytes = wave.label.as_bytes().to_vec();
+			bytes.insert(0, 0);
+			return send_response(reader.get_mut(), &bytes, true);
 		},
 		PlayDialogId => {
 			let mut bytes = [0; 4];
 			reader.read_exact(&mut bytes)?;
 			let id = u32::from_le_bytes(bytes);
-			let dialog = app.dialogs.iter().find(|dialog| { dialog.id.is_some_and(|wave_id| wave_id == id) });
-			if dialog.is_some() {
-				let dialog = dialog.unwrap();
-				{ dialog.playing.lock().unwrap().1 = true; }
-				dialog.play(false);
-				notify_redraw();
-				let mut bytes = dialog.label.as_bytes().to_vec();
-				bytes.insert(0, 0);
-				return send_response(reader.get_mut(), &bytes, true);
-			}
-			return send_response(reader.get_mut(), &[1], false);
+			let Some(dialog) = app.dialogs.par_iter().find_any(|dialog| { dialog.id.is_some_and(|wave_id| wave_id == id) }) else {
+				return send_response(reader.get_mut(), &[1], false);
+			};
+			{ dialog.playing.lock().unwrap().1 = true; }
+			dialog.play(false);
+			notify_redraw();
+			let mut bytes = dialog.label.as_bytes().to_vec();
+			bytes.insert(0, 0);
+			return send_response(reader.get_mut(), &bytes, true);
 		},
 		PlaySearch => {
 			// Read query
@@ -267,7 +262,7 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 			let mut block = ResultsBlock::instance();
 			block.selected = 0;
 			if block.play(false) {
-				let played = match block.results.values().next().unwrap() {
+				let played = match &block.results[0].1 {
 					SearchResult::File(result) => &Path::new(&result.parent).join(&result.name).into_os_string().into_string().unwrap(),
 					SearchResult::Wave(result) => &result.main,
 					SearchResult::Dialog(result) => &result.main,
@@ -284,7 +279,7 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 			let mut bytes = [0; 4];
 			reader.read_exact(&mut bytes)?;
 			let id = u32::from_le_bytes(bytes);
-			let wave = app.waves.iter().find(|wave| { wave.id.is_some_and(|wave_id| wave_id == id) });
+			let wave = app.waves.par_iter().find_first(|wave| { wave.id.is_some_and(|wave_id| wave_id == id) });
 			if wave.is_some() {
 				let wave = wave.unwrap();
 				let mut playing = wave.playing.lock().expect("Failed to lock mutex");
@@ -301,18 +296,16 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 			let mut bytes = [0; 4];
 			reader.read_exact(&mut bytes)?;
 			let id = u32::from_le_bytes(bytes);
-			let dialog = app.dialogs.iter().find(|dialog| { dialog.id.is_some_and(|wave_id| wave_id == id) });
-			if dialog.is_some() {
-				let dialog = dialog.unwrap();
-				let mut playing = dialog.playing.lock().expect("Failed to lock mutex");
-				playing.0 = false;
-				playing.1 = false;
-				notify_redraw();
-				let mut bytes = dialog.label.as_bytes().to_vec();
-				bytes.insert(0, 10);
-				return send_response(reader.get_mut(), &bytes, true);
-			}
-			return send_response(reader.get_mut(), &[1], false);
+			let Some(dialog) = app.dialogs.par_iter().find_any(|dialog| { dialog.id.is_some_and(|wave_id| wave_id == id) }) else {
+				return send_response(reader.get_mut(), &[1], false);
+			};
+			let mut playing = dialog.playing.lock().expect("Failed to lock mutex");
+			playing.0 = false;
+			playing.1 = false;
+			notify_redraw();
+			let mut bytes = dialog.label.as_bytes().to_vec();
+			bytes.insert(0, 10);
+			return send_response(reader.get_mut(), &bytes, true);
 		},
 		Stop => {
 			stop_all();

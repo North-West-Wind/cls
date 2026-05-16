@@ -2,6 +2,7 @@ use std::{collections::HashSet, sync::{Arc, Mutex}, thread, time::{Duration, Sys
 
 use mki::Keyboard;
 use rand::Rng;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use uuid::Uuid;
 
 use crate::{config::DialogEntry, state::{acquire, notify_redraw}, util::{file::play_file, keyboard::keyboard_to_string}};
@@ -46,7 +47,7 @@ impl Dialog {
 		DialogEntry {
 			label: self.label.clone(),
 			id: self.id,
-			keys: self.keys.iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>(),
+			keys: self.keys.par_iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>(),
 			files: self.files.clone(),
 			delay: self.delay,
 			random: self.random,
@@ -119,7 +120,7 @@ impl Dialog {
 				while {
 					let (playing, force) = *dialog.playing.lock().unwrap();
 					playing && force
-				} || dialog.keys.iter().all(|key| { key.is_pressed() }) {
+				} || dialog.keys.par_iter().all(|key| { key.is_pressed() }) {
 					let lock = if dialog.sequential {
 						dialog.play_lock.clone()
 					} else {

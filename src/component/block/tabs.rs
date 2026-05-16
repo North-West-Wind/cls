@@ -7,6 +7,7 @@ use super::{loop_index, BlockHandleKey, BlockRenderArea};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use normpath::PathExt;
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 pub struct TabsBlock {
 	offset: usize,
@@ -30,32 +31,28 @@ impl BlockRenderArea for TabsBlock {
 		let app = acquire();
 		let tabs = app.config.tabs.clone();
 	
-		let mut spans: Vec<Span> = vec![];
-		let mut cursor = 0;
-		for (ii, tab) in tabs.iter().enumerate() {
+		let spans = tabs.par_iter().enumerate().flat_map(|(ii, tab)| {
 			let path = Path::new(tab.as_str());
 			let basename = path.file_name();
 			let str = basename.unwrap().to_str().unwrap().to_string();
-			spans.push(Span::from(str)
-				.style(if ii == self.selected {
-					cursor = spans.len();
-					Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)
-				} else {
-					Style::default().fg(Color::Green)
-				})
-			);
+			let span = Span::from(str).style(if ii == self.selected {
+				Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)
+			} else {
+				Style::default().fg(Color::Green)
+			});
 			if ii < tabs.len() - 1 {
-				spans.push(Span::from(" | "));
-
+				vec![span, Span::from(" | ")]
+			} else {
+				vec![span]
 			}
-		}
+		}).collect::<Vec<_>>();
 	
 		let width = area.width as usize - 4;
 		let mut wanted_range = (0, 0);
 		for (ii, span) in spans.iter().enumerate() {
 			wanted_range.0 = wanted_range.1;
 			wanted_range.1 += span.width();
-			if ii == cursor {
+			if ii == self.selected * 2 {
 				break;
 			}
 		}

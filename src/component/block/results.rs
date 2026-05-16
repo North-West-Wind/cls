@@ -4,7 +4,7 @@ use crossterm::event::KeyCode;
 use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use rand::Rng;
 use ratatui::{style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}};
-use sorted_list::SortedList;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use substring::Substring;
 use uuid::Uuid;
 
@@ -44,7 +44,7 @@ pub struct ResultsBlock {
 	height: u16,
 	pub selected: usize,
 	state: State,
-	pub results: SortedList<i64, SearchResult>
+	pub results: Vec<(i64, SearchResult)>
 }
 
 impl BlockSingleton for ResultsBlock {
@@ -56,7 +56,7 @@ impl BlockSingleton for ResultsBlock {
 				height: 0,
 				selected: 0,
 				state: State::Initial,
-				results: SortedList::new()
+				results: vec![]
 			})
 		}).lock().unwrap()
 	}
@@ -85,8 +85,7 @@ impl BlockRenderArea for ResultsBlock {
 				if self.results.len() == 0 {
 					Paragraph::new("Result is empty :<")
 				} else {
-					let mut lines = vec![];
-					for (ii, result_type) in self.results.values().enumerate() {
+					let lines = self.results.par_iter().enumerate().map(| (ii, (_, result_type))| {
 						let mut spans = vec![];
 						let (has_id, has_key, main, right, style) = match result_type {
 							SearchResult::File(result) => {
@@ -135,19 +134,17 @@ impl BlockRenderArea for ResultsBlock {
 							spans.push(Span::from(" "));
 						}
 						spans.push(Span::from(" "));
-						let extra = spans.iter()
-							.map(|span| { span.width() as i32 })
-							.fold(0, |acc, width| { acc + width });
+						let extra: usize = spans.par_iter().map(|span| span.width()).sum();
 						if main.len() + right.len() + extra as usize > area.width as usize - 6 {
-							spans.push(Span::from(main.substring(0, 0.max(area.width as i32 - 10 - extra - right.len() as i32) as usize)).style(style));
+							spans.push(Span::from(main.substring(0, 0.max(area.width as i32 - 10 - extra as i32 - right.len() as i32) as usize)).style(style));
 							spans.push(Span::from("... ".to_owned() + &right).style(style));
 						} else {
 							spans.push(Span::from(main.clone()).style(style));
-							spans.push(Span::from(vec![" "; 0.max(area.width as i32 - 6 - extra - main.len() as i32 - right.len() as i32) as usize].join("")).style(style));
+							spans.push(Span::from(vec![" "; 0.max(area.width as i32 - 6 - extra as i32 - main.len() as i32 - right.len() as i32) as usize].join("")).style(style));
 							spans.push(Span::from(right.clone()).style(style));
 						}
-						lines.push(Line::from(spans));
-					}
+						Line::from(spans)
+					}).collect::<Vec<_>>();
 					Paragraph::new(lines)
 				}
 			}
@@ -203,40 +200,47 @@ impl ResultsBlock {
 			app.block_selected = ResultsBlock::ID;
 			let matcher = SkimMatcherV2::default();
 			let mut block = ResultsBlock::instance();
-			block.results = SortedList::new();
-			for (tab, files) in &app.files {
-				for (file, duration) in files {
+			block.results.clear();
+			app.files.iter().for_each(|(tab, files)| {
+				files.par_iter().filter_map(|(file, duration)| {
 					if let Some(score) = matcher.fuzzy_match(file, &query) {
-						block.results.insert(-score, SearchResult::File(FileResult {
+						Some((score, SearchResult::File(FileResult {
 							parent: tab.clone(),
 							name: file.clone(),
 							duration: duration.clone()
-						}));
+						})))
+					} else {
+						None
 					}
-				}
-			}
-			for waveform in &app.waves {
+				}).collect::<Vec<_>>().append(&mut block.results);
+			});
+			app.waves.par_iter().filter_map(|waveform| {
 				if let Some(score) = matcher.fuzzy_match(&waveform.label, &query) {
-					block.results.insert(-score, SearchResult::Wave(SimpleResult {
+					Some((-score, SearchResult::Wave(SimpleResult {
 						uuid: waveform.uuid,
 						has_id: waveform.id.is_some(),
 						has_key: !waveform.keys.is_empty(),
 						main: waveform.label.clone(),
 						sub: waveform.details()
-					}));
+					})))
+				} else {
+					None
 				}
-			}
-			for dialog in &app.dialogs {
+			}).collect::<Vec<_>>().append(&mut block.results);
+			app.dialogs.par_iter().filter_map(|dialog| {
 				if let Some(score) = matcher.fuzzy_match(&dialog.label, &query) {
-					block.results.insert(-score, SearchResult::Dialog(SimpleResult {
+					Some((-score, SearchResult::Dialog(SimpleResult {
 						uuid: dialog.uuid,
 						has_id: dialog.id.is_some(),
 						has_key: !dialog.keys.is_empty(),
 						main: dialog.label.clone(),
 						sub: String::new()
-					}));
+					})))
+				} else {
+					None
 				}
-			}
+			}).collect::<Vec<_>>().append(&mut block.results);
+			block.results.sort_by_key(|(score, _)| -score);
 			block.state = State::Finish;
 			notify_redraw();
 		})
@@ -255,7 +259,7 @@ impl ResultsBlock {
 			}
 			index = self.selected;
 		}
-		match self.results.values().collect::<Vec<_>>()[index] {
+		match &self.results[index].1 {
 			SearchResult::File(result) => {
 				let app = acquire();
 				let lock = if app.config.playlist_mode {
@@ -268,13 +272,13 @@ impl ResultsBlock {
 			},
 			SearchResult::Wave(result) => {
 				let app = acquire();
-				let Some(waveform) = app.waves.iter().find(|waveform| waveform.uuid == result.uuid) else { return false };
+				let Some(waveform) = app.waves.par_iter().find_any(|waveform| waveform.uuid == result.uuid) else { return false };
 				waveform.play(true);
 				true
 			},
 			SearchResult::Dialog(result) => {
 				let app = acquire();
-				let Some(dialog) = app.dialogs.iter().find(|dialog| dialog.uuid == result.uuid) else { return false };
+				let Some(dialog) = app.dialogs.par_iter().find_any(|dialog| dialog.uuid == result.uuid) else { return false };
 				dialog.play(true);
 				true
 			}

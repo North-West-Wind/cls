@@ -3,6 +3,7 @@ use std::{path::Path, thread};
 use crossterm::event::{KeyCode, KeyEvent};
 use normpath::PathExt;
 use ratatui::{Frame, layout::Rect, style::{Color, Modifier, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use substring::Substring;
 
 use crate::{component::popup::{PopupComponent, PopupHandleKey, PopupRender, confirm::ConfirmPopup, defer_exit_popup, defer_set_popup, input::{FLAG_FILE, FLAG_NUM, InputPopup}, popups}, state::acquire, util::dialog::Dialog};
@@ -51,6 +52,19 @@ impl PopupRender for DialogPopup {
 			"File List".to_string()
 		}).style(Style::default().add_modifier(Modifier::BOLD)).centered());
 
+		self.dialog.files[page * page_size..((page + 1) * page_size).min(self.dialog.files.len())].par_iter().enumerate().map(|(ii, file)| {
+			let file = if file.len() > max_width {
+				format!("{}...", file.substring(0, max_width - 3))
+			} else {
+				file.clone()
+			};
+			Line::from(file).style(if self.selected == ii {
+				Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)
+			} else {
+				Style::default().fg(Color::Green)
+			})
+		}).collect::<Vec<_>>().append(&mut lines);
+
 		for ii in (page * page_size)..((page + 1) * page_size).min(self.dialog.files.len()) {
 			let mut file =  self.dialog.files[ii].clone();
 			if file.len() > max_width {
@@ -64,9 +78,7 @@ impl PopupRender for DialogPopup {
 				}));
 		}
 
-		let width = lines.iter()
-			.map(|line| { line.width() })
-			.fold(0, |acc, width| acc.max(width)) as u16 + 4;
+		let width = lines.par_iter().map(|line| { line.width() as u16 }).sum::<u16>() + 4;
 		let height = lines.len() as u16 + 2;
 
 		let popup_area = Rect {
@@ -142,16 +154,10 @@ impl DialogPopup {
 			}
 			
 			thread::spawn(move || {
-				let mut popups = popups();
-				let Some(popup) = popups.iter_mut().find_map(|popup| {
-					match popup {
-						PopupComponent::Dialog(popup) => { Option::Some(popup) },
-						_ => Option::None
-					}
-				}) else { return; };
-
-				popup.dialog.files.append(&mut new_files);
-				popup.changed = true;
+				if let Some(popup) = popups().last_mut() && let PopupComponent::Dialog(popup) = popup {
+					popup.dialog.files.append(&mut new_files);
+					popup.changed = true;
+				}
 			});
 			false
 		})));
@@ -173,16 +179,10 @@ impl DialogPopup {
 		defer_set_popup(PopupComponent::Input(InputPopup::new(self.dialog.delay.to_string(), "Dialog Delay".to_string(), FLAG_NUM, |value| {
 			let Ok(delay) = value.parse::<f32>() else { return false; };
 			thread::spawn(move || {
-				let mut popups = popups();
-				let Some(popup) = popups.iter_mut().find_map(|popup| {
-					match popup {
-						PopupComponent::Dialog(popup) => { Option::Some(popup) },
-						_ => Option::None
-					}
-				}) else { return; };
-
-				popup.dialog.delay = delay;
-				popup.changed = true;
+				if let Some(popup) = popups().last_mut() && let PopupComponent::Dialog(popup) = popup {
+					popup.dialog.delay = delay;
+					popup.changed = true;
+				}
 			});
 			false
 		})));

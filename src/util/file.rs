@@ -1,5 +1,6 @@
 use std::{collections::HashMap, io::{Error, Read}, num::NonZero, path::Path, process::{Command, Stdio}, sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard}, thread, time::{Duration, SystemTime}};
 
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use symphonium::{ResampleQuality, SymphoniumLoader};
 use uuid::Uuid;
 
@@ -93,9 +94,9 @@ pub fn play_file(path: &String, volume: f32, lock: Arc<Mutex<()>>) {
 			} else {
 				let audio_data = result.unwrap();
 				if audio_data.channels() == 1 {
-					audio_data.data[0].iter().zip(audio_data.data[0].iter()).flat_map(|(a, b)| [*a, *b]).collect()
+					audio_data.data[0].par_iter().zip(audio_data.data[0].par_iter()).flat_map(|(a, b)| [*a, *b]).collect()
 				} else if audio_data.channels() > 2 {
-					audio_data.data[0].iter().zip(audio_data.data[1].iter()).flat_map(|(a, b)| [*a, *b]).collect()
+					audio_data.data[0].par_iter().zip(audio_data.data[1].par_iter()).flat_map(|(a, b)| [*a, *b]).collect()
 				} else {
 					audio_data.as_interleaved()
 				}
@@ -146,12 +147,13 @@ pub fn audio_cache_invalidator() {
 	thread::spawn(move || {
 		while is_running() {
 			let mut cache = AUDIO_CACHE.lock().unwrap();
-			let mut removable = vec![];
-			for (key, (_data, last_accessed)) in cache.iter() {
+			let removable = cache.par_iter().filter_map(|(key, (_data, last_accessed))| {
 				if SystemTime::now().duration_since(*last_accessed).unwrap().as_secs() > 60 {
-					removable.push(key.clone());
+					Some(key.clone())
+				} else {
+					None
 				}
-			}
+			}).collect::<Vec<_>>();
 			for key in removable {
 				cache.remove(&key);
 			}

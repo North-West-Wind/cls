@@ -1,6 +1,7 @@
 use std::{collections::{HashMap, HashSet}, sync::{Arc, LazyLock, Mutex, MutexGuard}, thread, time::Duration};
 
 use mki::Keyboard;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -65,7 +66,7 @@ impl Waveform {
 		WaveformEntry {
 			label: self.label.clone(),
 			id: self.id,
-			keys: self.keys.iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>(),
+			keys: self.keys.par_iter().map(|key| { keyboard_to_string(*key) }).collect::<HashSet<String>>(),
 			waves: self.waves.clone(),
 			volume: self.volume
 		}
@@ -100,7 +101,7 @@ impl Waveform {
 			playing.0 = true;
 			drop(playing);
 
-			let playable = wave.waves.iter().map(|w| {
+			let playable = wave.waves.par_iter().map(|w| {
 				PlayableWave {
 					wave_type: w.wave_type,
 					period: 1.0 / w.frequency,
@@ -120,7 +121,7 @@ impl Waveform {
 				while {
 					let (playing, force) = *wave.playing.lock().unwrap();
 					playing && force
-				} || wave.keys.iter().all(|key| { key.is_pressed() }) {
+				} || wave.keys.par_iter().all(|key| { key.is_pressed() }) {
 					thread::sleep(Duration::from_millis(100));
 				}
 			}
@@ -151,7 +152,7 @@ pub fn stop_all_waves() {
 	// Defer to avoid deadlock
 	thread::spawn(move || {
 		let app = acquire();
-		app.waves.iter().for_each(|wave| {
+		app.waves.par_iter().for_each(|wave| {
 			let mut playing = wave.playing.lock().expect("Failed to lock mutex");
 			playing.0 = false;
 			playing.1 = false;

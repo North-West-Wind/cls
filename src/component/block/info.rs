@@ -2,6 +2,7 @@ use std::{cmp::{max, min}, path::Path, sync::{LazyLock, Mutex, MutexGuard}};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{component::block::{BlockNavigation, BlockSingleton, dialogs::DialogBlock, results::{ResultsBlock, SearchResult}, search::SearchBlock, tabs::TabsBlock, waves::WavesBlock}, config::FileEntry, state::{MainOpened, acquire}, util::{keyboard::{keyboard_to_string, sort_keys}, tab::selected_file_path}};
 
@@ -78,7 +79,7 @@ impl BlockRenderArea for InfoBlock {
 					if wave.keys.is_empty() {
 						spans.push(Span::from("None").style(Style::default().fg(Color::Red)));
 					} else {
-						let mut keys = wave.keys.iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
+						let mut keys = wave.keys.par_iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
 						let keys = sort_keys(&mut keys);
 						spans.push(Span::from(format!(" {{{}}} ", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
 					}
@@ -102,7 +103,7 @@ impl BlockRenderArea for InfoBlock {
 					if dialog.keys.is_empty() {
 						spans.push(Span::from("None").style(Style::default().fg(Color::Red)));
 					} else {
-						let mut keys = dialog.keys.iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
+						let mut keys = dialog.keys.par_iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
 						let keys = sort_keys(&mut keys);
 						spans.push(Span::from(format!(" {{{}}} ", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
 					}
@@ -112,7 +113,7 @@ impl BlockRenderArea for InfoBlock {
 			MainOpened::Search => {
 				let block = ResultsBlock::instance();
 				if block.results.len() > 0 && block.selected < block.results.len() {
-					let (name, volume, keys, id, volume_label) = match block.results.values().collect::<Vec<_>>()[block.selected] {
+					let (name, volume, keys, id, volume_label) = match &block.results[block.selected].1 {
 						SearchResult::File(result) => {
 							let path = Path::new(&result.parent).join(&result.name).into_os_string().into_string().unwrap();
 							match app.config.get_file_entry(&path) {
@@ -125,18 +126,18 @@ impl BlockRenderArea for InfoBlock {
 							}
 						},
 						SearchResult::Wave(result) => {
-							app.waves.iter().find(|wave| wave.uuid == result.uuid).map_or((String::new(), 0, None, None, "Wave"), |wave| {
+							app.waves.par_iter().find_any(|wave| wave.uuid == result.uuid).map_or((String::new(), 0, None, None, "Wave"), |wave| {
 								(format!("{} ({})", result.main, result.sub), wave.volume, if wave.keys.is_empty() { None } else {
-									let mut keys = wave.keys.iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
+									let mut keys = wave.keys.par_iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
 									let keys = sort_keys(&mut keys);
 									Some(format!("{{{}}}", keys.join(" ")))
 								}, wave.id, "Wave")
 							})
 						},
 						SearchResult::Dialog(result) => {
-							app.dialogs.iter().find(|dialog| dialog.uuid == result.uuid).map_or((String::new(), 0, None, None, "Dialog"), |dialog| {
+							app.dialogs.par_iter().find_any(|dialog| dialog.uuid == result.uuid).map_or((String::new(), 0, None, None, "Dialog"), |dialog| {
 								(result.main.clone(), dialog.volume, if dialog.keys.is_empty() { None } else {
-									let mut keys = dialog.keys.iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
+									let mut keys = dialog.keys.par_iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
 									let keys = sort_keys(&mut keys);
 									Some(format!("{{{}}}", keys.join(" ")))
 								}, dialog.id, "Dialog")

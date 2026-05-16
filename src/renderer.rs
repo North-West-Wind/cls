@@ -103,6 +103,7 @@ pub fn ui(f: &mut Frame) {
 	}
 	{ HelpBlock::instance().render_area(f, chunks[3]); }
 	{ PlayingBlock::instance().render(f); }
+	// No parallel. Need to draw in order
 	popups().iter().for_each(|popup| {
 		popup.render(f);
 	});

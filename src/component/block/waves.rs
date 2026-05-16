@@ -4,6 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use mki::Keyboard;
 use rand::Rng;
 use ratatui::{style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use substring::Substring;
 
 use crate::component::{block::{BlockSingleton, loop_index}, popup::{confirm::ConfirmPopup, input::{FLAG_NONE, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}}};
@@ -48,8 +49,7 @@ impl BlockRenderArea for WavesBlock {
 		if app.waves.len() == 0 {
 			paragraph = Paragraph::new("Add a waveform to get started! :>");
 		} else {
-			let mut lines = vec![];
-			for (ii, wave) in app.waves.iter().enumerate() {
+			let lines = app.waves.par_iter().enumerate().map(|(ii, wave)| {
 				let mut spans = vec![];
 				if wave.id.is_some() {
 					spans.push(Span::from("I").style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)));
@@ -69,19 +69,17 @@ impl BlockRenderArea for WavesBlock {
 				};
 				let details = wave.details();
 				let label = &wave.label;
-				let extra = spans.iter()
-					.map(|span| { span.width() as i32 })
-					.fold(0, |acc, width| { acc + width });
+				let extra: usize = spans.par_iter().map(|span| { span.width() }).sum();
 				if label.len() + details.len() + extra as usize > area.width as usize - 6 {
-					spans.push(Span::from(label.substring(0, max(0, area.width as i32 - 10 - extra - details.len() as i32) as usize)).style(style));
+					spans.push(Span::from(label.substring(0, max(0, area.width as i32 - 10 - extra as i32 - details.len() as i32) as usize)).style(style));
 					spans.push(Span::from("... ".to_owned() + &details).style(style));
 				} else {
 					spans.push(Span::from(label.clone()).style(style));
-					spans.push(Span::from(vec![" "; max(0, area.width as i32 - 6 - extra - label.len() as i32 - details.len() as i32) as usize].join("")).style(style));
+					spans.push(Span::from(vec![" "; max(0, area.width as i32 - 6 - extra as i32 - label.len() as i32 - details.len() as i32) as usize].join("")).style(style));
 					spans.push(Span::from(details.clone()).style(style));
 				}
-				lines.push(Line::from(spans));
-			}
+				Line::from(spans)
+			}).collect::<Vec<_>>();
 			if self.selected < self.range.0 as usize {
 				self.range = (self.selected as i32, self.selected as i32 + area.height as i32 - 5);
 			} else if self.selected > self.range.1 as usize {

@@ -8,6 +8,7 @@ use crossterm::event::KeyCode;
 use mki::Keyboard;
 use rand::Rng;
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph, Wrap}, Frame};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use substring::Substring;
 
 pub struct FilesBlock {
@@ -67,8 +68,7 @@ impl BlockRenderArea for FilesBlock {
 					}
 					return Paragraph::new("There are no playable files in this directory :<").wrap(Wrap { trim: false });
 				}
-				let mut lines = vec![];
-				for (ii, (file, duration)) in files.iter().enumerate() {
+				let lines = files.par_iter().enumerate().map(|(ii, (file, duration))| {
 					let mut spans = vec![];
 					let full_path = &Path::new(&app.config.tabs[tab_selected]).join(file).into_os_string().into_string().unwrap();
 					let entry = app.config.get_file_entry(full_path);
@@ -97,19 +97,17 @@ impl BlockRenderArea for FilesBlock {
 					} else {
 						Style::default().fg(Color::Cyan)
 					};
-					let extra = spans.iter()
-						.map(|span| { span.width() as i32 })
-						.fold(0, |acc, width| { acc + width });
+					let extra: usize = spans.par_iter().map(|span| { span.width() }).sum();
 					if file.len() + duration.len() + extra as usize > area.width as usize - 6 {
-						spans.push(Span::from(file.substring(0, max(0, area.width as i32 - 10 - extra - duration.len() as i32) as usize)).style(style));
+						spans.push(Span::from(file.substring(0, max(0, area.width as i32 - 10 - extra as i32 - duration.len() as i32) as usize)).style(style));
 						spans.push(Span::from("... ".to_owned() + duration).style(style));
 					} else {
 						spans.push(Span::from(file.clone()).style(style));
-						spans.push(Span::from(vec![" "; max(0, area.width as i32 - 6 - extra - file.len() as i32 - duration.len() as i32) as usize].join("")).style(style));
+						spans.push(Span::from(vec![" "; max(0, area.width as i32 - 6 - extra as i32 - file.len() as i32 - duration.len() as i32) as usize].join("")).style(style));
 						spans.push(Span::from(duration.clone()).style(style));
 					}
-					lines.push(Line::from(spans));
-				}
+					Line::from(spans)
+				}).collect::<Vec<_>>();
 				if self.selected < self.range.0 as usize {
 					self.range = (self.selected as i32, self.selected as i32 + area.height as i32 - 5);
 				} else if self.selected > self.range.1 as usize {
@@ -229,7 +227,7 @@ impl FilesBlock {
 		}
 		let hotkey = app.hotkey.get(&path);
 		let recorded = match hotkey {
-			Option::Some(vec) => vec.iter().map(|key| { *key }).collect::<HashSet<Keyboard>>(),
+			Option::Some(vec) => vec.par_iter().map(|key| { *key }).collect::<HashSet<Keyboard>>(),
 			Option::None => HashSet::new(),
 		};
 		set_popup(PopupComponent::KeyBind(KeyBindPopup::new(KeyBindFor::File, recorded)));

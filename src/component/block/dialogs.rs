@@ -4,6 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use mki::Keyboard;
 use rand::Rng;
 use ratatui::{Frame, layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{component::{block::{BlockHandleKey, BlockNavigation, BlockRenderArea, BlockSingleton, loop_index, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, confirm::ConfirmPopup, dialog::DialogPopup, input::{FLAG_NONE, InputPopup}, key_bind::{KeyBindFor, KeyBindPopup}, set_popup}}, state::acquire, util::dialog::Dialog};
 
@@ -46,8 +47,7 @@ impl BlockRenderArea for DialogBlock {
 		if app.dialogs.len() == 0 {
 			paragraph = Paragraph::new("Add a dialog to get started! :>");
 		} else {
-			let mut lines = vec![];
-			for (ii, dialog) in app.dialogs.iter().enumerate() {
+			let lines = app.dialogs.par_iter().enumerate().map(|(ii, dialog)| {
 				let mut spans = vec![];
 				if dialog.id.is_some() {
 					spans.push(Span::from("I").style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)));
@@ -66,8 +66,8 @@ impl BlockRenderArea for DialogBlock {
 					Style::default().fg(Color::Yellow)
 				};
 				spans.push(Span::from(dialog.label.clone()).style(style));
-				lines.push(Line::from(spans));
-			}
+				Line::from(spans)
+			}).collect::<Vec<_>>();
 			if self.selected < self.range.0 as usize {
 				self.range = (self.selected as i32, self.selected as i32 + area.height as i32 - 5);
 			} else if self.selected > self.range.1 as usize {

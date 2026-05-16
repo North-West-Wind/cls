@@ -1,6 +1,7 @@
 use std::{io, sync::{Arc, Mutex}, time::Duration};
 use crossterm::event::{Event, KeyEvent, KeyEventKind, poll, read};
 use mki::Action;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{component::{block::{self, log}, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste, popups}}, constant::{MIN_HEIGHT, MIN_WIDTH}, state::{SelectionLayer, acquire, is_running, notify_redraw, stop_running}, util::file::{play_file_auto_volume, stop_all}};
 
@@ -8,17 +9,15 @@ pub fn program_loop() -> io::Result<()> {
 	// Global key listener
 	log::info("Starting global key listener...");
 	mki::bind_any_key(Action::handle_kb(move |key| {
-		popups().iter_mut().for_each(|popup| {
-			if popup.has_global_key_handler() {
-				popup.handle_global_key(key);
-				notify_redraw();
-			}
-		});
+		if let Some(popup) = popups().last_mut() && popup.has_global_key_handler() {
+			popup.handle_global_key(key);
+			notify_redraw();
+		}
 
 		let app = acquire();
 		// File hotkey
-		app.hotkey.iter().for_each(|(path, keys)| {
-			if keys.iter().all(|key| { key.is_pressed() }) {
+		app.hotkey.par_iter().for_each(|(path, keys)| {
+			if keys.par_iter().all(|key| { key.is_pressed() }) {
 				let lock = if app.config.playlist_mode {
 					app.playlist_lock.clone()
 				} else {
@@ -28,17 +27,17 @@ pub fn program_loop() -> io::Result<()> {
 			}
 		});
 		if !app.stopkey.is_empty() && !app.edit {
-			if app.stopkey.iter().all(|key| { key.is_pressed() }) {
+			if app.stopkey.par_iter().all(|key| { key.is_pressed() }) {
 				stop_all();
 			}
 		}
 
 		// Waveform hotkey
-		app.waves.iter().for_each(|wave| {
+		app.waves.par_iter().for_each(|wave| {
 			if wave.keys.len() == 0 {
 				return;
 			}
-			if wave.keys.iter().all(|key| { key.is_pressed() }) {
+			if wave.keys.par_iter().all(|key| { key.is_pressed() }) {
 				wave.play(false);
 			} else {
 				let mut playing = wave.playing.lock().expect("Failed to lock mutex");
@@ -49,11 +48,11 @@ pub fn program_loop() -> io::Result<()> {
 		});
 
 		// Dialog hotkey
-		app.dialogs.iter().for_each(|dialog| {
+		app.dialogs.par_iter().for_each(|dialog| {
 			if dialog.keys.len() == 0 {
 				return;
 			}
-			if dialog.keys.iter().all(|key| { key.is_pressed() }) {
+			if dialog.keys.par_iter().all(|key| { key.is_pressed() }) {
 				dialog.play(false);
 			} else {
 				let mut playing = dialog.playing.lock().expect("Failed to lock mutex");
@@ -146,11 +145,9 @@ fn on_key(event: KeyEvent) {
 }
 
 fn on_paste(data: String) {
-	if popups().iter_mut()
-		.map(|popup| { popup.handle_paste(data.clone()) })
-		.fold(false, |acc, redraw| { acc || redraw }) {
-			notify_redraw();
-		}
+	if let Some(popup) = popups().last_mut() && popup.handle_paste(data) {
+		notify_redraw();
+	}
 }
 
 pub fn listen_signals() {
