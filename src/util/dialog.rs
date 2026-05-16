@@ -2,11 +2,13 @@ use std::{collections::HashSet, sync::{Arc, Mutex}, thread, time::{Duration, Sys
 
 use mki::Keyboard;
 use rand::Rng;
+use uuid::Uuid;
 
 use crate::{config::DialogEntry, state::{acquire, notify_redraw}, util::{file::play_file, keyboard::keyboard_to_string}};
 
 #[derive(Clone)]
 pub struct Dialog {
+	pub uuid: Uuid, // internal id
 	pub label: String,
 	pub id: Option<u32>,
 	pub keys: Vec<Keyboard>,
@@ -23,6 +25,7 @@ pub struct Dialog {
 impl Default for Dialog {
 	fn default() -> Self {
 		Self {
+			uuid: Uuid::new_v4(),
 			label: "New Dialog".to_string(),
 			id: Option::None,
 			keys: vec![],

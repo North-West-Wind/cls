@@ -37,6 +37,7 @@ impl Default for Wave {
 
 #[derive(Clone)]
 pub struct Waveform {
+	pub uuid: Uuid, // internal id
 	pub label: String,
 	pub id: Option<u32>,
 	pub keys: Vec<Keyboard>,
@@ -48,6 +49,7 @@ pub struct Waveform {
 impl Default for Waveform {
 	fn default() -> Self {
 		Self {
+			uuid: Uuid::new_v4(),
 			label: "New Waveform".to_string(),
 			id: Option::None,
 			keys: vec![],

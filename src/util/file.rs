@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use crate::{component::block::log, constant::ENDIANESS, state::{acquire, is_running, notify_redraw}};
 
-pub fn parent_file(str: String) -> (String, String) {
-	let path = Path::new(&str);
+pub fn parent_file(str: &str) -> (String, String) {
+	let path = Path::new(str);
 	let parent = path.parent().unwrap().to_str().unwrap().to_string();
 	let name = path.file_name().unwrap().to_str().unwrap().to_string();
 	(parent, name)

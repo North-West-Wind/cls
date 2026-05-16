@@ -53,7 +53,6 @@ impl BlockHandleKey for SearchBlock {
 			},
 			KeyCode::Enter => {
 				ResultsBlock::instance().search(self.input.value());
-				acquire().block_selected = ResultsBlock::ID;
 				true
 			},
 			_ => {

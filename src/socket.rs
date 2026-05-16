@@ -349,7 +349,7 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 				if file.is_empty() {
 					return send_response(reader.get_mut(), &[1], false);
 				}
-				let (parent, name) = parent_file(file);
+				let (parent, name) = parent_file(&file);
 				let old_volume = match app.config.files.get(&parent) {
 					Some(map) => match map.get(&name) {
 						Some(entry) => entry.volume,

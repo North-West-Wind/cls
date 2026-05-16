@@ -3,7 +3,7 @@ use std::{cmp::{max, min}, path::Path, sync::{LazyLock, Mutex, MutexGuard}};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 
-use crate::{component::block::{BlockNavigation, BlockSingleton, dialogs::DialogBlock, results::ResultsBlock, search::SearchBlock, tabs::TabsBlock, waves::WavesBlock}, config::FileEntry, state::{MainOpened, acquire}, util::{keyboard::{keyboard_to_string, sort_keys}, tab::selected_file_path}};
+use crate::{component::block::{BlockNavigation, BlockSingleton, dialogs::DialogBlock, results::{ResultsBlock, SearchResult}, search::SearchBlock, tabs::TabsBlock, waves::WavesBlock}, config::FileEntry, state::{MainOpened, acquire}, util::{keyboard::{keyboard_to_string, sort_keys}, tab::selected_file_path}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -44,7 +44,7 @@ impl BlockRenderArea for InfoBlock {
 						Span::from("Selected "),
 						Span::from(path.clone()).style(Style::default().fg(Color::LightGreen))
 					]));
-					let (volume, hotkey, file_id) = match app.config.get_file_entry(path) {
+					let (volume, hotkey, file_id) = match app.config.get_file_entry(&path) {
 						Some(entry) => (entry.volume, if entry.keys.is_empty() { None } else {
 							let mut keys = entry.keys.clone().into_iter().collect::<Vec<String>>();
 							let keys = sort_keys(&mut keys);
@@ -110,35 +110,50 @@ impl BlockRenderArea for InfoBlock {
 				}
 			},
 			MainOpened::Search => {
-				let path = {
-					let block = ResultsBlock::instance();
-					if block.results.len() == 0 || block.selected >= block.results.len() {
-						String::new()
-					} else {
-						let (parent, file) = block.results.values().collect::<Vec<_>>()[block.selected];
-						Path::new(parent).join(file).into_os_string().into_string().unwrap()
-					}
-				};
-				if !path.is_empty() {
+				let block = ResultsBlock::instance();
+				if block.results.len() > 0 && block.selected < block.results.len() {
+					let (name, volume, keys, id, volume_label) = match block.results.values().collect::<Vec<_>>()[block.selected] {
+						SearchResult::File(result) => {
+							let path = Path::new(&result.parent).join(&result.name).into_os_string().into_string().unwrap();
+							match app.config.get_file_entry(&path) {
+								Some(entry) => (path, entry.volume, if entry.keys.is_empty() { None } else {
+									let mut keys = entry.keys.clone().into_iter().collect::<Vec<String>>();
+									let keys = sort_keys(&mut keys);
+									Some(format!("{{{}}}", keys.join(" ")))
+								}, entry.id, "File"),
+								None => (path, 100, None, None, "File")
+							}
+						},
+						SearchResult::Wave(result) => {
+							app.waves.iter().find(|wave| wave.uuid == result.uuid).map_or((String::new(), 0, None, None, "Wave"), |wave| {
+								(format!("{} ({})", result.main, result.sub), wave.volume, if wave.keys.is_empty() { None } else {
+									let mut keys = wave.keys.iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
+									let keys = sort_keys(&mut keys);
+									Some(format!("{{{}}}", keys.join(" ")))
+								}, wave.id, "Wave")
+							})
+						},
+						SearchResult::Dialog(result) => {
+							app.dialogs.iter().find(|dialog| dialog.uuid == result.uuid).map_or((String::new(), 0, None, None, "Dialog"), |dialog| {
+								(result.main.clone(), dialog.volume, if dialog.keys.is_empty() { None } else {
+									let mut keys = dialog.keys.iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
+									let keys = sort_keys(&mut keys);
+									Some(format!("{{{}}}", keys.join(" ")))
+								}, dialog.id, "Dialog")
+							})
+						}
+					};
 					lines.push(Line::from(""));
 					lines.push(Line::from(vec![
 						Span::from("Selected "),
-						Span::from(path.clone()).style(Style::default().fg(Color::LightGreen))
+						Span::from(name).style(Style::default().fg(Color::LightGreen))
 					]));
-					let (volume, hotkey, file_id) = match app.config.get_file_entry(path) {
-						Some(entry) => (entry.volume, if entry.keys.is_empty() { None } else {
-							let mut keys = entry.keys.clone().into_iter().collect::<Vec<String>>();
-							let keys = sort_keys(&mut keys);
-							Some(format!("{{{}}}", keys.join(" ")))
-						}, entry.id),
-						None => (100, None, None)
-					};
-					lines.push(volume_line("File Volume".to_string(), volume, area.width, self.selected == 1));
+					lines.push(volume_line(format!("{volume_label} Volume"), volume, area.width, self.selected == 1));
 					let mut spans = vec![];
 					spans.push(Span::from("ID "));
-					spans.push(file_id.map_or( Span::from("None").style(Style::default().fg(Color::Red)), |id| { Span::from(format!(" {} ", id)).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)) }));
+					spans.push(id.map_or( Span::from("None").style(Style::default().fg(Color::Red)), |id| { Span::from(format!(" {} ", id)).style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)) }));
 					spans.push(Span::from(" | Keys "));
-					spans.push(hotkey.map_or(Span::from("None").style(Style::default().fg(Color::Red)), |keys| { Span::from(format!(" {} ", keys)).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)) }));
+					spans.push(keys.map_or(Span::from("None").style(Style::default().fg(Color::Red)), |keys| { Span::from(format!(" {} ", keys)).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)) }));
 					lines.push(Line::from(spans));
 				}
 			},

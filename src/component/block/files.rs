@@ -71,7 +71,7 @@ impl BlockRenderArea for FilesBlock {
 				for (ii, (file, duration)) in files.iter().enumerate() {
 					let mut spans = vec![];
 					let full_path = &Path::new(&app.config.tabs[tab_selected]).join(file).into_os_string().into_string().unwrap();
-					let entry = app.config.get_file_entry(full_path.clone());
+					let entry = app.config.get_file_entry(full_path);
 					if entry.is_some() {
 						let entry = entry.unwrap();
 						spans.push(entry.id.map_or(Span::from(" "), |_| { Span::from("I").style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)) }));
@@ -257,7 +257,7 @@ impl FilesBlock {
 		if path.is_empty() {
 			return false;
 		}
-		let init = match app.config.get_file_entry(path) {
+		let init = match app.config.get_file_entry(&path) {
 			Some(entry) => match entry.id {
 				Some(id) => id.to_string(),
 				None => String::new(),

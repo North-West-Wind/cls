@@ -155,6 +155,7 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 	for wave in config.waves.iter() {
 		let keyboard = key_strings_to_keyboards(&wave.keys);
 		waves.push(Waveform {
+			uuid: Uuid::new_v4(),
 			label: wave.label.clone(),
 			id: wave.id,
 			keys: keyboard,
@@ -167,6 +168,7 @@ pub fn load_app_config() -> (SoundboardConfig, Vec<Keyboard>, HashMap<String, Ve
 	for dialog in config.dialogs.iter() {
 		let keyboard = key_strings_to_keyboards(&dialog.keys);
 		dialogs.push(Dialog {
+			uuid: Uuid::new_v4(),
 			label: dialog.label.clone(),
 			id: dialog.id,
 			keys: keyboard,
