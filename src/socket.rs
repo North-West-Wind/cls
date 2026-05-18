@@ -6,7 +6,7 @@ use interprocess::local_socket::{traits::{ListenerExt, Stream as _}, GenericFile
 use normpath::PathExt;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
-use crate::{component::block::{BlockSingleton, log, results::{ResultsBlock, SearchResult}, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, is_running, load_app_config, notify_redraw, stop_running}, util::{file::{parent_file, play_file_auto_volume, stop_all}, tab::scan, wave::stop_all_waves}};
+use crate::{component::block::{BlockSingleton, log, results::{ResultsBlock, SearchResult}, search::SearchBlock, tabs::TabsBlock}, config::FileEntry, constant::APP_NAME, state::{Scanning, acquire, is_running, load_app_config, notify_redraw, stop_running}, util::{file::{parent_file, play_file_auto_volume, stop_all}, tab::scan, wave::stop_all_waves}};
 
 pub mod code;
 
@@ -255,6 +255,7 @@ fn handle_stream(mut reader: BufReader<Stream>) -> std::io::Result<bool> {
 			}
 			drop(app);
 			// Search
+			{ SearchBlock::instance().set_query(query); }
 			let mut block = ResultsBlock::instance();
 			let handle = block.search(query);
 			drop(block);

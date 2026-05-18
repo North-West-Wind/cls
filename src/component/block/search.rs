@@ -75,3 +75,9 @@ impl BlockNavigation for SearchBlock {
 		return Self::ID;
 	}
 }
+
+impl SearchBlock {
+	pub fn set_query(&mut self, query: &str) {
+		self.input = self.input.clone().with_value(query.to_string());
+	}
+}

@@ -52,7 +52,7 @@ impl PopupRender for DialogPopup {
 			"File List".to_string()
 		}).style(Style::default().add_modifier(Modifier::BOLD)).centered());
 
-		self.dialog.files[page * page_size..((page + 1) * page_size).min(self.dialog.files.len())].par_iter().enumerate().map(|(ii, file)| {
+		lines.extend(self.dialog.files[page * page_size..((page + 1) * page_size).min(self.dialog.files.len())].par_iter().enumerate().map(|(ii, file)| {
 			let file = if file.len() > max_width {
 				format!("{}...", file.substring(0, max_width - 3))
 			} else {
@@ -63,7 +63,7 @@ impl PopupRender for DialogPopup {
 			} else {
 				Style::default().fg(Color::Green)
 			})
-		}).collect::<Vec<_>>().append(&mut lines);
+		}).collect::<Vec<_>>());
 
 		for ii in (page * page_size)..((page + 1) * page_size).min(self.dialog.files.len()) {
 			let mut file =  self.dialog.files[ii].clone();
@@ -155,7 +155,7 @@ impl DialogPopup {
 			
 			thread::spawn(move || {
 				if let Some(popup) = popups().last_mut() && let PopupComponent::Dialog(popup) = popup {
-					popup.dialog.files.append(&mut new_files);
+					popup.dialog.files.extend(new_files);
 					popup.changed = true;
 				}
 			});

@@ -202,7 +202,7 @@ impl ResultsBlock {
 			let mut block = ResultsBlock::instance();
 			block.results.clear();
 			app.files.iter().for_each(|(tab, files)| {
-				files.par_iter().filter_map(|(file, duration)| {
+				block.results.extend(files.par_iter().filter_map(|(file, duration)| {
 					if let Some(score) = matcher.fuzzy_match(file, &query) {
 						Some((score, SearchResult::File(FileResult {
 							parent: tab.clone(),
@@ -212,11 +212,11 @@ impl ResultsBlock {
 					} else {
 						None
 					}
-				}).collect::<Vec<_>>().append(&mut block.results);
+				}).collect::<Vec<_>>());
 			});
-			app.waves.par_iter().filter_map(|waveform| {
+			block.results.extend(app.waves.par_iter().filter_map(|waveform| {
 				if let Some(score) = matcher.fuzzy_match(&waveform.label, &query) {
-					Some((-score, SearchResult::Wave(SimpleResult {
+					Some((score, SearchResult::Wave(SimpleResult {
 						uuid: waveform.uuid,
 						has_id: waveform.id.is_some(),
 						has_key: !waveform.keys.is_empty(),
@@ -226,10 +226,10 @@ impl ResultsBlock {
 				} else {
 					None
 				}
-			}).collect::<Vec<_>>().append(&mut block.results);
-			app.dialogs.par_iter().filter_map(|dialog| {
+			}).collect::<Vec<_>>());
+			block.results.extend(app.dialogs.par_iter().filter_map(|dialog| {
 				if let Some(score) = matcher.fuzzy_match(&dialog.label, &query) {
-					Some((-score, SearchResult::Dialog(SimpleResult {
+					Some((score, SearchResult::Dialog(SimpleResult {
 						uuid: dialog.uuid,
 						has_id: dialog.id.is_some(),
 						has_key: !dialog.keys.is_empty(),
@@ -239,7 +239,7 @@ impl ResultsBlock {
 				} else {
 					None
 				}
-			}).collect::<Vec<_>>().append(&mut block.results);
+			}).collect::<Vec<_>>());
 			block.results.sort_by_key(|(score, _)| -score);
 			block.state = State::Finish;
 			notify_redraw();

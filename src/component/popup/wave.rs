@@ -44,13 +44,13 @@ impl PopupRender for WavePopup {
 			"Wave List".to_string()
 		}).style(Style::default().add_modifier(Modifier::BOLD)).centered());
 
-		self.waveform.waves[(page * page_size)..((page + 1) * page_size).min(self.waveform.waves.len())].par_iter().enumerate().map(|(ii, wave)| {
+		lines.extend(self.waveform.waves[(page * page_size)..((page + 1) * page_size).min(self.waveform.waves.len())].par_iter().enumerate().map(|(ii, wave)| {
 			Line::from(format!("{:?} {:.2} Hz x{:.2} >{:2.}", wave.wave_type, wave.frequency, wave.amplitude, wave.phase)).style(if self.selected == ii {
 				Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)
 			} else {
 				Style::default().fg(Color::Green)
 			})
-		}).collect::<Vec<_>>().append(&mut lines);
+		}).collect::<Vec<_>>());
 
 		let area = f.area();
 		let width = lines.par_iter().map(|line| { line.width() as u16 }).sum::<u16>() + 4;
