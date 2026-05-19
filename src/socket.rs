@@ -1,4 +1,4 @@
-use std::{cmp::{max, min}, collections::HashMap, io::{self, BufRead, BufReader, Error, Read, Write}, path::Path, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
+use std::{cmp::{max, min}, collections::HashMap, io::{BufRead, BufReader, Error, Read, Write}, path::Path, sync::{Arc, Mutex}, thread::{self, JoinHandle}};
 
 use clap::ArgMatches;
 use code::SocketCode;
@@ -41,11 +41,11 @@ fn listen_socket(listener: Listener) {
 	}
 }
 
-pub fn start_socket() -> Result<JoinHandle<()>, io::Error> {
-	let listener = try_socket()?;
+pub fn start_socket() -> Option<JoinHandle<()>> {
+	let Ok(listener) = try_socket() else { return None };
 	log::info("Spawning socket thread...");
 
-	Ok(thread::spawn(move || {
+	Some(thread::spawn(move || {
 		{ acquire().socket_holder = true; }
 		listen_socket(listener);
 	}))

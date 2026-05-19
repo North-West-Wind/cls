@@ -31,7 +31,10 @@ pub fn draw_loop() -> JoinHandle<Result<(), io::Error>> {
 		while is_running() {
 			wait_redraw();
 			// Render again
-			terminal.draw(|f| { ui(f); })?;
+			if let Err(err) = terminal.draw(|f| { ui(f); }) {
+				log::error(&err.to_string());
+				break;
+			}
 		}
 
 		// Restore terminal

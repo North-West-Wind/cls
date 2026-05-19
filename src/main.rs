@@ -1,9 +1,11 @@
+use std::panic;
+
 use socket::{send_exit, send_socket};
 use util::pulseaudio::{load_null_sink, loopback};
 use state::Scanning;
 use clap::{command, Arg, ArgAction, Command};
 
-use crate::{listener::{listen_signals, program_loop}, renderer::draw_loop, socket::start_socket, state::acquire, util::{audio::{PlayerType, create_audio_player, list_audio_devices}, file::audio_cache_invalidator, tab::scan}};
+use crate::{component::block::{BlockSingleton, log}, listener::{listen_signals, program_loop}, renderer::draw_loop, socket::start_socket, state::{acquire, stop_running}, util::{audio::{PlayerType, create_audio_player, list_audio_devices}, file::audio_cache_invalidator, tab::scan}};
 mod component;
 mod config;
 mod constant;
@@ -113,36 +115,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let (is_edit, is_hidden) = (app.edit, app.hidden);
 	drop(app);
 
-	// Create threads for all background listeners
-	listen_signals();
-	scan(Scanning::All);
-	let socket_thread = start_socket();
-	// Audio players
-	if !is_edit {
-		create_audio_player(PlayerType::File);
-		create_audio_player(PlayerType::Wave);
-		audio_cache_invalidator();
-	}
-	let draw_thread = if !is_hidden {
-		// If not hidden, we need to render the UI
-		Some(draw_loop())
-	} else {
-		None
-	};
-	// Keep the program running
-	program_loop().ok();
-	draw_thread.map(|thread| thread.join());
-	// Wait for all threads to end before closing
-	if socket_thread.is_ok() {
-		send_exit().ok();
-		socket_thread.unwrap().join().ok();
-	}
+	std::panic::set_hook(Box::new(|info| {
+		let old_hook = std::panic::take_hook();
+		stop_running();
+		(old_hook)(info);
+	}));
 
+	let result = std::panic::catch_unwind(|| {
+		// Create threads for all background listeners
+		listen_signals();
+		scan(Scanning::All);
+		let socket_thread = start_socket();
+		// Audio players
+		if !is_edit {
+			create_audio_player(PlayerType::File);
+			create_audio_player(PlayerType::Wave);
+			audio_cache_invalidator();
+		}
+		let draw_thread = if !is_hidden {
+			Some(draw_loop())
+		} else {
+			None
+		};
+		// Keep the program running
+		program_loop().ok();
+		draw_thread.map(|thread| thread.join());
+		// Wait for all threads to end before closing
+		socket_thread.map(|thread| {
+			send_exit().ok();
+			thread.join().ok();
+		});
+	});
+
+	if let Err(err) = result {
+		log::error(&format!("{:?}", err));
+	}
 	// Finish up PulseAudio
 	{ acquire().unload_modules(); }
 	if !is_hidden && !matches.get_flag("no-save") {
 		// Save config if not hidden
 		config::save();
 	}
+	log::LogBlock::instance().flush_console();
 	Ok(())
 }

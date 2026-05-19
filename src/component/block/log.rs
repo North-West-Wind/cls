@@ -56,6 +56,16 @@ impl LogBlock {
 		}
 		notify_redraw();
 	}
+
+	pub fn flush_console(&self) {
+		for (message, level) in &self.messages {
+			match level {
+				LogLevel::Info => println!("{message}"),
+				LogLevel::Warn => println!("{message}"),
+				LogLevel::Error => eprintln!("{message}")
+			}
+		}
+	}
 }
 
 pub fn info(body: &str) {

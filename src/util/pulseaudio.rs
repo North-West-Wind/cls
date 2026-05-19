@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use crate::constant::APP_NAME;
+use crate::{component::block::log, constant::APP_NAME};
 
 pub fn load_null_sink() -> String {
 	let appname = APP_NAME;
@@ -37,7 +37,9 @@ pub fn unload_module(module: &str) -> Result<(), Box<dyn std::error::Error>> {
 	]).output()?;
 	
 	if !output.status.success() {
-		println!("Failed to unload module {}", module);
+		log::error(&format!("Failed to unload module {}", module));
+	} else {
+		log::info(&format!("Unloaded module {}", module));
 	}
 	Ok(())
 }

@@ -5,6 +5,7 @@ pub use migrate::FileEntry;
 pub use migrate::WaveformEntry;
 pub use migrate::DialogEntry;
 
+use crate::component::block::log;
 use crate::constant::APP_NAME;
 use crate::state::acquire;
 
@@ -25,7 +26,9 @@ pub fn save() {
 	config_path.parent().inspect(|parent| {
 		let _ = std::fs::create_dir_all(parent);
 	});
-	let _ = std::fs::File::create(get_config_path(false).to_str().unwrap()).is_ok_and(|mut output| {
-		output.write_all(serialized.as_bytes()).is_ok()
-	});
+	if let Ok(mut output) = std::fs::File::create(get_config_path(false).to_str().unwrap()) && output.write_all(serialized.as_bytes()).is_ok() {
+		log::info("Saved config");
+	} else {
+		log::error("Failed to save config");
+	}
 }
