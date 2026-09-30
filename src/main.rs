@@ -1,19 +1,14 @@
-use std::panic;
+use std::{panic, path::Path, println, thread};
 
-use socket::{send_exit, send_socket};
-use util::pulseaudio::{load_null_sink, loopback};
-use state::Scanning;
+use cpal::traits::{DeviceTrait, HostTrait};
 use clap::{command, Arg, ArgAction, Command};
+use nng::{Protocol, Socket};
 
-use crate::{component::block::{BlockSingleton, log}, listener::{listen_signals, program_loop}, renderer::draw_loop, socket::start_socket, state::{acquire, stop_running}, util::{audio::{PlayerType, create_audio_player, list_audio_devices}, file::audio_cache_invalidator, tab::scan}};
-mod component;
-mod config;
-mod constant;
-mod listener;
-mod renderer;
-mod socket;
-mod state;
-mod util;
+use crate::{client::start_client, common::{config, constant::ADDRESS_COMMS, socket::{ClientToServer, ServerToClient, decode_s2c, encode_c2s}}, server::start_server};
+
+mod client;
+mod common;
+mod server;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// Setup command line to for subcommands and options
@@ -23,27 +18,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		.disable_help_subcommand(true)
 		.args_conflicts_with_subcommands(true)
 		.arg(Arg::new("help").short('h').long("help").help("print this help menu").action(ArgAction::SetTrue))
-		.arg(Arg::new("edit").short('e').long("edit").help("run the soundboard in edit mode, meaning you can only modify config and not play anything").action(ArgAction::SetTrue))
-		.arg(Arg::new("hidden").long("hidden").help("run the soundboard in the background, basically read-only").action(ArgAction::SetTrue))
+		.arg(Arg::new("daemon").short('d').long("daemon").help("run in daemon mode").action(ArgAction::SetTrue))
 		.arg(Arg::new("no-save").long("no-save").help("disable auto-save of config when the program exits").action(ArgAction::SetTrue))
-		.arg(Arg::new("fast-scan").long("fast-scan").help("scan files by extensions instead of header").action(ArgAction::SetTrue))
+		//.arg(Arg::new("fast-scan").long("fast-scan").help("scan files by extensions instead of header").action(ArgAction::SetTrue))
 		.arg(Arg::new("no-pacat").long("no-pacat").help("avoid using pacat for playback").action(ArgAction::SetTrue))
 		.arg(Arg::new("audio-device").long("audio-device").help("output audio device to use (ignored with pacat)").action(ArgAction::Set))
 		.subcommand(Command::new("exit").about("exit another instance"))
 		.subcommand(Command::new("audio-devices").about("list available audio devices"))
-		.subcommand(Command::new("reload-config").about("reload config for another instance"))
-		.subcommand(Command::new("add-tab").about("add a directory tab").arg(Arg::new("dir").required(true)))
-		.subcommand(Command::new("delete-tab").about("delete a tab, defaults to the selected one")
-			.args([
-				Arg::new("index").long("index").help("delete a specific index (starting at 0)"),
-				Arg::new("path").long("path").help("delete the tab with this path"),
-				Arg::new("name").long("name").help("delete the tab with this basename")
-			]))
-		.subcommand(Command::new("reload-tab").about("reload a tab, defaults to the selected one").args([
-			Arg::new("index").long("index").help("reload a specific index (starting at 0)"),
-			Arg::new("path").long("path").help("reload the tab with this path"),
-			Arg::new("name").long("name").help("reload the tab with this basename")
-		]))
+		.subcommand(Command::new("reload").about("reload config for another instance"))
 		.subcommand(Command::new("play").about("play a file").arg(Arg::new("path").required(true)))
 		.subcommand(Command::new("play-id").about("play a file by user-defined ID").arg(Arg::new("id").required(true)))
 		.subcommand(Command::new("play-wave").about("play a waveform by user-defined ID").arg(Arg::new("id").required(true)))
@@ -51,12 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		.subcommand(Command::new("play-search").about("play a searched audio file").arg(Arg::new("query").required(true)))
 		.subcommand(Command::new("stop").about("stop all playing files"))
 		.subcommand(Command::new("stop-wave").about("stop a waveform by user-defined ID").arg(Arg::new("id").required(true)))
-		.subcommand(Command::new("stop-dialog").about("stop a dialog by user-defined ID").arg(Arg::new("id").required(true)))
-		.subcommand(Command::new("set-volume").about("set volume of the sink or a file").args([
-			Arg::new("volume").help("new volume or volume increment (-200 - +200)"),
-			Arg::new("increment").long("increment").help("increment volume instead of setting it").action(ArgAction::SetTrue),
-			Arg::new("path").long("path").help("a file's volume to set")
-		]));
+		.subcommand(Command::new("stop-dialog").about("stop a dialog by user-defined ID").arg(Arg::new("id").required(true)));
 
 	// Parse options
 	let matches = command.clone().get_matches();
@@ -67,95 +44,147 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	}
 	// Parse subcommand
 	// All subcommands are currently used for IPC
-	let subcommand = matches.subcommand();
-	if subcommand.is_some() {
-		let (subcommand, matches) = subcommand.unwrap();
-		match subcommand {
+	if let Some((subcommand, matches)) = matches.subcommand() {
+		use ClientToServer::*;
+		let socket = Socket::new(Protocol::Req0)?;
+		socket.dial(ADDRESS_COMMS)?;
+		let result = match subcommand {
+			"exit" => {
+				let _ = socket.send(&encode_c2s(Exit));
+				decode_s2c(&socket.recv()?)
+			},
 			"audio-devices" => {
 				list_audio_devices()?;
 				return Ok(())
 			},
-			_ => {
-				let response = send_socket((subcommand, matches))?;
-				if response.starts_with("Success") {
-					println!("{}", response);
-					return Ok(());
-				} else {
-					panic!("{}", response);
+			"reload" => {
+				let _ = socket.send(&encode_c2s(Reload));
+				decode_s2c(&socket.recv()?)
+			},
+			"play" => {
+				let Some(path) = matches.get_one::<String>("path") else { panic!("Missing path") };
+				let _ = socket.send(&encode_c2s(PlayPath(path.clone())));
+				decode_s2c(&socket.recv()?)
+			},
+			"play-id" => {
+				let Some(id) = matches.get_one::<u32>("id") else { panic!("Missing id") };
+				let id = *id;
+				let config = config::load();
+				let mut response = None;
+				for (tab, files) in &config.files {
+					for (name, file) in files {
+						if let Some(file_id) = file.id && file_id == id {
+							let path = Path::new(tab).join(name).to_str().unwrap().to_string();
+							let _ = socket.send(&encode_c2s(PlayPath(path)));
+							response = Some(decode_s2c(&socket.recv()?));
+						}
+					}
 				}
-			}
-		}
-	}
-	// Initialize global app object
-	let mut app = acquire();
-	(app.hidden, app.edit, app.no_pacat) = (matches.get_flag("hidden"), matches.get_flag("edit"), matches.get_flag("no-pacat"));
-	app.cpal_device = matches.get_one::<String>("audio-device").unwrap_or(&String::new()).clone();
-
-	if app.hidden && app.edit {
-		// Mutually exclusive options
-		println!("`hidden` is read-only, but `edit` is write-only.");
-		println!("You probably don't want this");
-		return Ok(());
-	}
-
-	// PulseAudio setup
-	if !app.edit {
-		app.module_null_sink = load_null_sink();
-		if app.config.loopback_default {
-			app.module_loopback_default = loopback("@DEFAULT_SINK@".to_string());
-		}
-		if !app.config.loopback_1.is_empty() {
-			app.module_loopback_1 = loopback(app.config.loopback_1.clone());
-		}
-		if !app.config.loopback_2.is_empty() {
-			app.module_loopback_2 = loopback(app.config.loopback_2.clone());
-		}
-	}
-
-	let (is_edit, is_hidden) = (app.edit, app.hidden);
-	drop(app);
-
-	std::panic::set_hook(Box::new(|info| {
-		let old_hook = std::panic::take_hook();
-		stop_running();
-		(old_hook)(info);
-	}));
-
-	let result = std::panic::catch_unwind(|| {
-		// Create threads for all background listeners
-		listen_signals();
-		scan(Scanning::All);
-		let socket_thread = start_socket();
-		// Audio players
-		if !is_edit {
-			create_audio_player(PlayerType::File);
-			create_audio_player(PlayerType::Wave);
-			audio_cache_invalidator();
-		}
-		let draw_thread = if !is_hidden {
-			Some(draw_loop())
-		} else {
-			None
+				let Some(response) = response else { panic!("No file with ID {}", id) };
+				response
+			},
+			"play-wave" => {
+				let Some(id) = matches.get_one::<u32>("id") else { panic!("Missing id") };
+				let id = *id;
+				let config = config::load();
+				let wave = config.waves.iter().find(|wave| {
+					let Some(wave_id) = wave.id else { return false };
+					wave_id == id
+				});
+				let Some(wave) = wave else { panic!("No wave with ID {}", id) };
+				let _ = socket.send(&encode_c2s(PlayWave(wave.uid)));
+				decode_s2c(&socket.recv()?)
+			},
+			"play-dialog" => {
+				let Some(id) = matches.get_one::<u32>("id") else { panic!("Missing id") };
+				let id = *id;
+				let config = config::load();
+				let dialog = config.dialogs.iter().find(|dialog| {
+					let Some(dialog_id) = dialog.id else { return false };
+					dialog_id == id
+				});
+				let Some(dialog) = dialog else { panic!("No wave with ID {}", id) };
+				let _ = socket.send(&encode_c2s(PlayDialog(dialog.uid)));
+				decode_s2c(&socket.recv()?)
+			},
+			"play-search" => {
+				let Some(query) = matches.get_one::<String>("path") else { panic!("Missing query") };
+				let _ = socket.send(&encode_c2s(PlaySearch(query.clone())));
+				decode_s2c(&socket.recv()?)
+			},
+			"stop" => {
+				let _ = socket.send(&encode_c2s(StopFiles));
+				decode_s2c(&socket.recv()?)
+			},
+			"stop-wave" => {
+				let Some(id) = matches.get_one::<u32>("id") else { panic!("Missing id") };
+				let id = *id;
+				let config = config::load();
+				let wave = config.waves.iter().find(|wave| {
+					let Some(wave_id) = wave.id else { return false };
+					wave_id == id
+				});
+				let Some(wave) = wave else { panic!("No wave with ID {}", id) };
+				let _ = socket.send(&encode_c2s(StopWave(wave.uid)));
+				decode_s2c(&socket.recv()?)
+			},
+			"stop-dialog" => {
+				let Some(id) = matches.get_one::<u32>("id") else { panic!("Missing id") };
+				let id = *id;
+				let config = config::load();
+				let dialog = config.dialogs.iter().find(|dialog| {
+					let Some(dialog_id) = dialog.id else { return false };
+					dialog_id == id
+				});
+				let Some(dialog) = dialog else { panic!("No wave with ID {}", id) };
+				let _ = socket.send(&encode_c2s(StopDialog(dialog.uid)));
+				decode_s2c(&socket.recv()?)
+			},
+			_ => panic!("Unknown subcommand {}", subcommand)
 		};
-		// Keep the program running
-		program_loop().ok();
-		draw_thread.map(|thread| thread.join());
-		// Wait for all threads to end before closing
-		socket_thread.map(|thread| {
-			send_exit().ok();
-			thread.join().ok();
-		});
-	});
+		return match result {
+			Err(err) => Err(err),
+			Ok(ServerToClient::Error(err)) => panic!("{}", err),
+			_ => {
+				println!("Success");
+				Ok(())
+			}
+		};
+	}
 
-	if let Err(err) = result {
-		log::error(&format!("{:?}", err));
+	let daemon = matches.get_flag("daemon");
+	let no_pacat = matches.get_flag("no-pacat");
+	let cpal_device = matches.get_one::<String>("audio-device").map_or(String::new(), |device| device.clone());
+
+	// Start client in thread
+	let client_thread = if !daemon {
+		let save_on_exit = !matches.get_flag("no-save");
+		Some(thread::spawn(move || {
+			let _ = start_client(save_on_exit);
+		}))
+	} else { None };
+
+	// Start server
+	let _ = start_server(no_pacat, cpal_device, !daemon);
+
+	// Wait for client to exit
+	if let Some(client_thread) = client_thread {
+		client_thread.join().unwrap();
 	}
-	// Finish up PulseAudio
-	{ acquire().unload_modules(); }
-	if !is_hidden && !matches.get_flag("no-save") {
-		// Save config if not hidden
-		config::save();
+
+	// Remove global key listener
+	mki::remove_any_key_bind();
+
+	Ok(())
+}
+
+fn list_audio_devices() -> Result<(), Box<dyn std::error::Error>> {
+	for id in cpal::available_hosts() {
+		let host = cpal::host_from_id(id)?;
+		let devices = host.output_devices()?;
+		for device in devices {
+			println!("{}", device.id()?);
+		}
 	}
-	log::LogBlock::instance().flush_console();
 	Ok(())
 }
