@@ -1,11 +1,11 @@
-use std::{collections::HashSet, hash::Hash};
+use std::{collections::HashSet, fmt::Debug, hash::Hash};
 
 use indexmap::IndexSet;
 use mki::Keyboard;
 
 use crate::common::keyboard::string_to_keyboard;
 
-#[derive(Debug, PartialEq, Eq, Clone, Default)]
+#[derive(PartialEq, Eq, Clone, Default)]
 pub struct KeyCombo {
 	keys: IndexSet<Keyboard>,
 	partial: bool,
@@ -16,6 +16,15 @@ impl Hash for KeyCombo {
 		self.keys.iter().for_each(|key| {
 			key.hash(state);
 		});
+	}
+}
+
+impl Debug for KeyCombo {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("KeyCombo")
+			.field("keys", &self.keys.iter().map(|key| key.to_string()).collect::<Vec<_>>().join(" + "))
+			.field("partial", &self.partial)
+			.finish()
 	}
 }
 
@@ -74,7 +83,7 @@ impl KeyCombo {
 		Self::from(keys)
 	}
 
-	pub fn contains_key(&self, key: &Keyboard) -> bool {
-		self.keys.contains(key)
+	pub fn active(&self) -> bool {
+		self.keys.iter().all(|key| key.is_pressed())
 	}
 }

@@ -198,18 +198,17 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 	let server_event_mki = server_event.clone();
 	mki::bind_any_key(mki::Action::handle_kb(move |key| {
 		let mut combos = combos.lock();
-		if key.is_pressed() {
-			// Create new ones from existing combos
-			let mut new_combos = vec![];
-			for combo in combos.iter() {
-				let new_combo = combo.add_key(key);
-				new_combos.push(new_combo);
-			}
-			new_combos.iter().for_each(|combo| { combos.insert(combo.clone()); });
-			combos.insert(KeyCombo::from(vec![key]));
-		} else {
-			combos.retain(|combo| !combo.contains_key(&key));
+		// Remove unpressed
+		combos.retain(|combo| combo.active());
+		// Add new combinations
+		let mut new_combos = vec![];
+		for combo in combos.iter() {
+			let new_combo = combo.add_key(key);
+			new_combos.push(new_combo);
 		}
+		new_combos.iter().for_each(|combo| { combos.insert(combo.clone()); });
+		combos.insert(KeyCombo::from(vec![key]));
+
 		let server_state_combo = server_state_mki.clone();
 		combos.par_iter().for_each(|combo| {
 			let server_state = server_state_combo.read();
@@ -217,6 +216,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 			if server_state.file_keys.contains_key(combo) {
 				let server_event = server_event_mki.clone();
 				let path = server_state.file_keys.get(combo).unwrap().clone();
+				log::info(format!("{:?} -> {}", combo, &path));
 				let server_state = server_state_combo.clone();
 				thread::spawn(move || {
 					let uuid = Uuid::new_v4();
@@ -260,7 +260,8 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 
 			// Stop hotkey
 			if !server_state.stopkey.is_empty() && server_state.stopkey == *combo {
-				stop_all(server_state_combo.clone());
+				drop(server_state);
+				stop_all(&mut server_state_combo.write());
 			}
 		});
 	}));
@@ -372,7 +373,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 						}
 					},
 					StopFiles => {
-						stop_all(server_state.clone());
+						stop_all(&mut server_state.write());
 						msg.push_back(&encode_s2c(Success));
 					},
 					StopWave(uid) => {

@@ -5,7 +5,7 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIter
 use symphonium::ResampleQuality;
 use uuid::Uuid;
 
-use crate::{common::{ffmpeg::read_file_ffmpeg, log}, server::AtomicServerState};
+use crate::{common::{ffmpeg::read_file_ffmpeg, log}, server::{AtomicServerState, ServerState}};
 
 pub struct PlayableFile {
 	pub data: Vec<f32>,
@@ -91,6 +91,6 @@ pub fn play_file(server_state: AtomicServerState, path: String, volume: f32, blo
 	}
 }
 
-pub fn stop_all(server_state: AtomicServerState) {
-	server_state.write().playable_files.clear();
+pub fn stop_all(server_state: &mut ServerState) {
+	server_state.playable_files.clear();
 }
