@@ -1,8 +1,10 @@
 use std::{format, fs::File, io::Read, path::Path, process::{Command, Stdio}, sync::Arc, thread::{self, JoinHandle}, time::Duration, vec};
 
 use parking_lot::Mutex;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use ringbuf::{HeapProd, HeapRb, traits::{Producer, Split}};
-use symphonia::core::{codecs::audio::AudioDecoderOptions, errors::Error::DecodeError, formats::{FormatOptions, TrackType, probe::Hint}, io::MediaSourceStream, meta::MetadataOptions};
+use symphonia::core::{audio::Position, codecs::audio::AudioDecoderOptions, errors::Error::DecodeError, formats::{FormatOptions, TrackType, probe::Hint}, io::MediaSourceStream, meta::MetadataOptions};
+use symphonium::resample::fixed_resample::rubato::{Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction};
 use uuid::Uuid;
 
 use crate::{common::{base::file::SaveableFile, constant::ENDIANESS, log}, server::ServerState};
@@ -52,7 +54,7 @@ impl ServerFile {
 		};
 
 		// Try Symphonia
-		let thread = match self.play_with_symphonia(prod.clone(), self.lock.clone()) {
+		let thread = match self.play_with_symphonia(sample_rate, prod.clone(), self.lock.clone()) {
 			Ok(thread) => thread,
 			Err(err) => {
 				// Try FFMPEG
@@ -71,7 +73,7 @@ impl ServerFile {
 		Some(thread)
 	}
 
-	fn play_with_symphonia(&self, prod: Arc<Mutex<HeapProd<f32>>>, lock: Arc<Mutex<()>>) -> Result<JoinHandle<()>, Box<dyn std::error::Error>> {
+	fn play_with_symphonia(&self, sample_rate: usize, prod: Arc<Mutex<HeapProd<f32>>>, lock: Arc<Mutex<()>>) -> Result<JoinHandle<()>, Box<dyn std::error::Error>> {
     let file = Box::new(File::open(Path::new(&self.path))?);
 		let mss = MediaSourceStream::new(file, Default::default());
     let hint = Hint::new();
@@ -95,7 +97,7 @@ impl ServerFile {
 		Ok(thread::spawn(move || {
 			let _locked = lock.lock();
 			let mut prod = prod.lock();
-			let mut samples: Vec<f32> = vec![];
+			let mut channel_samples: Vec<Vec<f32>> = vec![];
 	    while let Some(packet) = format.next_packet().unwrap() {
         // If the packet does not belong to the selected track, skip it.
         if packet.track_id != track_id {
@@ -105,11 +107,68 @@ impl ServerFile {
         // Decode the packet into audio samples, ignoring any decode errors.
         match decoder.decode(&packet) {
           Ok(audio_buf) => {
-						audio_buf.copy_to_vec_interleaved(&mut samples);
-						let mut offset = prod.push_slice(&samples);
-						while offset < samples.len() {
+						let rate = audio_buf.spec().rate() as usize;
+						let channels = audio_buf.spec().channels();
+						let frames = audio_buf.frames();
+
+						audio_buf.copy_to_vecs_planar(&mut channel_samples);
+
+						// Force stereo
+						match channels.count() {
+							1 => {
+								let samples = channel_samples[0].clone();
+								channel_samples.push(samples);
+							},
+							2 => (),
+							_ => {
+								let left = match channels.get_canonical_index_for_positioned_channel(Position::FRONT_LEFT) {
+									Some(index) => index,
+									None => 0
+								};
+								let right = match channels.get_canonical_index_for_positioned_channel(Position::FRONT_RIGHT) {
+									Some(index) => index,
+									None => 1
+								};
+								let left = channel_samples[left].clone();
+								let right = channel_samples[right].clone();
+								channel_samples = vec![left, right];
+							}
+						}
+
+						let interleaved = if sample_rate != rate {
+							// Resample
+							let params = SincInterpolationParameters {
+				        sinc_len: 256,
+				        f_cutoff: 0.95,
+				        interpolation: SincInterpolationType::Linear,
+				        oversampling_factor: 256,
+				        window: WindowFunction::BlackmanHarris2,
+							};
+
+							let mut resampler = match SincFixedIn::<f32>::new(sample_rate as f64 / rate as f64, 2.0, params, frames, 2) {
+								Ok(resampler) => resampler,
+								Err(err) => {
+									log::error(format!("Failed to create resampler: {:?}", err));
+									break;
+								}
+							};
+
+							let resampled = match resampler.process(&channel_samples, None) {
+								Ok(resampled) => resampled,
+								Err(err) => {
+									log::error(format!("Failed to resample: {:?}", err));
+									break;
+								}
+							};
+
+							resampled[0].par_iter().zip(resampled[1].par_iter()).flat_map(|(left, right)| [*left, *right]).collect::<Vec<_>>()
+						} else {
+							channel_samples[0].par_iter().zip(channel_samples[1].par_iter()).flat_map(|(left, right)| [*left, *right]).collect::<Vec<_>>()
+						};
+						let mut offset = prod.push_slice(&interleaved);
+						while offset < interleaved.len() {
 							thread::sleep(Duration::from_millis(100));
-							offset += prod.push_slice(&samples[offset..]);
+							offset += prod.push_slice(&interleaved[offset..]);
 						}
           }
           Err(DecodeError(err)) => log::warn(format!("Symphonia decode error: {}", err)),
@@ -135,7 +194,11 @@ impl ServerFile {
 		Ok(thread::spawn(move || {
 			let _locked = lock.lock();
 			let mut prod = prod.lock();
-			let mut buf = vec![0u8; sample_rate * 4 / 20];
+			let mut buf_size = sample_rate * 4 / 20;
+			while buf_size % 4 != 0 {
+				buf_size += 1;
+			}
+			let mut buf = vec![0u8; buf_size];
 			loop {
 				match stdout.read(&mut buf) {
 					Ok(read) => {
@@ -143,11 +206,12 @@ impl ServerFile {
 							break;
 						}
 
+						let read = read / 4;
 						let buf: &[f32] = bytemuck::cast_slice(&buf);
-						let mut offset = prod.push_slice(&buf);
-						while offset < buf.len() {
+						let mut offset = prod.push_slice(&buf[..read]);
+						while offset < read {
 							thread::sleep(Duration::from_millis(100));
-							offset += prod.push_slice(&buf[offset..]);
+							offset += prod.push_slice(&buf[offset..read]);
 						}
 					},
 					Err(err) => {
