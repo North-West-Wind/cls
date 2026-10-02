@@ -97,10 +97,13 @@ pub(self) struct Redrawer {
 
 impl Redrawer {
 	fn notify(&self) {
-		let (lock, cvar) = &*self.redraw;
-		let mut shared = lock.lock();
-		*shared = true;
-		cvar.notify_one();
+		let redraw = self.redraw.clone();
+		thread::spawn(move || {
+			let (lock, cvar) = &*redraw;
+			let mut shared = lock.lock();
+			*shared = true;
+			cvar.notify_one();
+		});
 	}
 
 	fn wait(&self) {
