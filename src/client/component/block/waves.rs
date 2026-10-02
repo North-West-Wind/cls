@@ -150,9 +150,9 @@ impl WavesBlock {
 		let atomic_client_state = atomic_client_state.clone();
 		thread::spawn(move || {
 			thread::sleep(Duration::from_secs(1));
-			atomic_client_state.read().request(ClientToServer::StopDialog(uid));
+			atomic_client_state.read().request(ClientToServer::StopWave(uid));
 		});
-		client_state.request(ClientToServer::PlayDialog(uid))
+		client_state.request(ClientToServer::PlayWave(uid))
 	}
 
 	fn navigate_wave(&mut self, client_state: AtomicClientState, dy: i32) -> bool {

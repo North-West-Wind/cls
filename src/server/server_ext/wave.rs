@@ -18,12 +18,23 @@ struct PlayableWave {
 #[derive(Clone, Default)]
 pub struct ServerWave {
 	pub base: Wave,
+	pub forced: Arc<AtomicBool>,
 	pub playing: Arc<AtomicBool>,
+}
+
+impl From<Wave> for ServerWave {
+	fn from(base: Wave) -> Self {
+		Self {
+			base,
+			forced: Arc::new(AtomicBool::new(false)),
+			playing: Arc::new(AtomicBool::new(false)),
+		}
+	}
 }
 
 impl ServerWave {
 	pub fn play(&self, server_state: AtomicServerState) -> Option<JoinHandle<()>> {
-		if self.base.waves.len() == 0 || self.playing.load(Ordering::Relaxed) {
+		if self.base.waves.len() == 0 {
 			return None;
 		}
 
@@ -41,17 +52,19 @@ impl ServerWave {
 		let (sample_rate, mut prod) = {
 			let mut server_state = server_state.write();
 			let sample_rate = server_state.sample_rate as usize;
-			let rb = HeapRb::<f32>::new(sample_rate);
+			let rb = HeapRb::<f32>::new(sample_rate / 16);
 			let (prod, cons) = rb.split();
 			server_state.audio_data.insert(uuid, Arc::new(Mutex::new(cons)));
 			(sample_rate, prod)
 		};
 
+		let forced = self.forced.clone();
 		let playing = self.playing.clone();
 		let keys = self.base.keys.clone();
 		Some(thread::spawn(move || {
-			let mut buf = vec![0f32; sample_rate];
-			while playing.load(Ordering::Relaxed) || keys.par_iter().all(|key| key.is_pressed()) {
+			playing.store(true, Ordering::Relaxed);
+			let mut buf = vec![0f32; sample_rate / 16];
+			while forced.load(Ordering::Relaxed) || keys.par_iter().all(|key| key.is_pressed()) {
 				for wave in playable.iter_mut() {
 					for ii in 0..buf.len() / 2 {
 						let sample = match wave.wave_type {
@@ -75,17 +88,15 @@ impl ServerWave {
 						}
 					}
 				}
-				for ii in 0..buf.len() {
-					buf[ii] /= playable.len() as f32;
-				}
 
 				let mut offset = prod.push_slice(&buf);
 				while offset < buf.len() {
-					thread::sleep(Duration::from_millis(100));
+					thread::sleep(Duration::from_millis(10));
 					offset += prod.push_slice(&buf[offset..]);
 				}
+				buf.fill(0.0);
 			}
-			server_state.write().audio_data.remove(&uuid);
+			playing.store(false, Ordering::Relaxed);
 		}))
 	}
 }

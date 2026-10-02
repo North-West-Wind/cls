@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, eprintln, format, fs::read_dir, path::Path, println, sync::{Arc, atomic::{AtomicBool, Ordering}}, thread, vec};
+use std::{collections::{HashMap, HashSet}, eprintln, format, fs::read_dir, path::Path, println, sync::{Arc, atomic::Ordering}, thread, vec};
 
 use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use nng::{Protocol, Socket};
@@ -76,10 +76,7 @@ impl ServerState {
 			if !combo.is_empty() && !combo.is_partial() {
 				self.wave_keys.insert(combo, wave.uid);
 			}
-			let wave = ServerWave {
-				base: Wave::from(wave),
-				playing: Arc::new(AtomicBool::new(false)),
-			};
+			let wave = ServerWave::from(Wave::from(wave));
 			self.waves.insert(wave.base.uid, wave);
 		});
 
@@ -89,10 +86,7 @@ impl ServerState {
 			if !combo.is_empty() {
 				self.dialog_keys.insert(combo, dialog.uid);
 			}
-			let dialog = ServerDialog {
-				base: Dialog::from(dialog),
-				playing: Arc::new(AtomicBool::new(false)),
-			};
+			let dialog = ServerDialog::from(Dialog::from(dialog));
 			self.dialogs.insert(dialog.base.uid, dialog);
 		});
 
@@ -215,7 +209,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 			}
 
 			// Wave hotkey
-			if let Some(uid) = server_state.wave_keys.get(combo) && let Some(wave) = server_state.waves.get(uid) {
+			if let Some(uid) = server_state.wave_keys.get(combo) && let Some(wave) = server_state.waves.get(uid) && !wave.playing.load(Ordering::Relaxed) {
 				let wave = wave.clone();
 				let server_state = server_state_combo.clone();
 				let server_event = server_event_mki.clone();
@@ -230,7 +224,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 			}
 
 			// Dialog hotkey
-			if let Some(uid) = server_state.dialog_keys.get(combo) && let Some(dialog) = server_state.dialogs.get(uid) {
+			if let Some(uid) = server_state.dialog_keys.get(combo) && let Some(dialog) = server_state.dialogs.get(uid) && !dialog.playing.load(Ordering::Relaxed) {
 				let dialog = dialog.clone();
 				let server_state = server_state_combo.clone();
 				let server_event = server_event_mki.clone();
@@ -291,36 +285,44 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 					},
 					PlayWave(uid) => {
 						if let Some(wave) = server_state.read().waves.get(&uid).cloned() {
-							msg.push_back(&encode_s2c(Success));
-							let server_state = server_state.clone();
-							let server_event = server_event.clone();
-							thread::spawn(move || {
-								let uuid = Uuid::new_v4();
-								let _ = server_event.lock().send(&encode_s2c(Playing(1, uuid, wave.base.label.clone())));
-								wave.playing.store(true, Ordering::Relaxed);
-								if let Some(thread) = wave.play(server_state) {
-									let _ = thread.join();
-								}
-								let _ = server_event.lock().send(&encode_s2c(Stopping(uuid)));
-							});
+							if wave.playing.load(Ordering::Relaxed) {
+								msg.push_back(&encode_s2c(Error(format!("Wave with ID {} is already playing", uid))));
+							} else {
+								msg.push_back(&encode_s2c(Success));
+								let server_state = server_state.clone();
+								let server_event = server_event.clone();
+								thread::spawn(move || {
+									let uuid = Uuid::new_v4();
+									let _ = server_event.lock().send(&encode_s2c(Playing(1, uuid, wave.base.label.clone())));
+									wave.forced.store(true, Ordering::Relaxed);
+									if let Some(thread) = wave.play(server_state) {
+										let _ = thread.join();
+									}
+									let _ = server_event.lock().send(&encode_s2c(Stopping(uuid)));
+								});
+							}
 						} else {
 							msg.push_back(&encode_s2c(Error(format!("Wave with ID {} not found", uid))));
 						}
 					},
 					PlayDialog(uid) => {
 						if let Some(dialog) = server_state.read().dialogs.get(&uid).cloned() {
-							msg.push_back(&encode_s2c(Success));
-							let server_state = server_state.clone();
-							let server_event = server_event.clone();
-							thread::spawn(move || {
-								let uuid = Uuid::new_v4();
-								let _ = server_event.lock().send(&encode_s2c(Playing(2, uuid, dialog.base.label.clone())));
-								dialog.playing.store(true, Ordering::Relaxed);
-								if let Some(thread) = dialog.play(server_state) {
-									let _ = thread.join();
-								}
-								let _ = server_event.lock().send(&encode_s2c(Stopping(uuid)));
-							});
+							if dialog.playing.load(Ordering::Relaxed) {
+								msg.push_back(&encode_s2c(Error(format!("Dialog with ID {} is already playing", uid))));
+							} else {
+								msg.push_back(&encode_s2c(Success));
+								let server_state = server_state.clone();
+								let server_event = server_event.clone();
+								thread::spawn(move || {
+									let uuid = Uuid::new_v4();
+									let _ = server_event.lock().send(&encode_s2c(Playing(2, uuid, dialog.base.label.clone())));
+									dialog.forced.store(true, Ordering::Relaxed);
+									if let Some(thread) = dialog.play(server_state) {
+										let _ = thread.join();
+									}
+									let _ = server_event.lock().send(&encode_s2c(Stopping(uuid)));
+								});
+							}
 						} else {
 							msg.push_back(&encode_s2c(Error(format!("Dialog with ID {} not found", uid))));
 						}
@@ -370,7 +372,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 					StopWave(uid) => {
 						match server_state.read().waves.get(&uid) {
 							Some(wave) => {
-								wave.playing.store(false, Ordering::Relaxed);
+								wave.forced.store(false, Ordering::Relaxed);
 								msg.push_back(&encode_s2c(Success));
 							},
 							None => {
@@ -381,7 +383,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 					StopDialog(uid) => {
 						match server_state.read().dialogs.get(&uid) {
 							Some(dialog) => {
-								dialog.playing.store(false, Ordering::Relaxed);
+								dialog.forced.store(false, Ordering::Relaxed);
 								msg.push_back(&encode_s2c(Success));
 							},
 							None => {

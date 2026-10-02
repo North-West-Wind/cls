@@ -9,7 +9,18 @@ use crate::{common::base::dialog::Dialog, server::{AtomicServerState, server_ext
 #[derive(Clone, Default)]
 pub struct ServerDialog {
 	pub base: Dialog,
+	pub forced: Arc<AtomicBool>,
 	pub playing: Arc<AtomicBool>,
+}
+
+impl From<Dialog> for ServerDialog {
+	fn from(base: Dialog) -> Self {
+		Self {
+			base,
+			forced: Arc::new(AtomicBool::new(false)),
+			playing: Arc::new(AtomicBool::new(false))
+		}
+	}
 }
 
 impl ServerDialog {
@@ -18,6 +29,7 @@ impl ServerDialog {
 			return None;
 		}
 
+		let forced = self.forced.clone();
 		let playing = self.playing.clone();
 		let keys = self.base.keys.clone();
 		let files = {
@@ -33,8 +45,9 @@ impl ServerDialog {
 		let sequential = self.base.sequential;
 
 		Some(thread::spawn(move || {
+			playing.store(true, Ordering::Relaxed);
 			let mut play_next = 0;
-			while playing.load(Ordering::Relaxed) || keys.par_iter().all(|key| { key.is_pressed() }) {
+			while forced.load(Ordering::Relaxed) || keys.par_iter().all(|key| { key.is_pressed() }) {
 				if random {
 					if play_next == 0 {
 						play_next = rand::thread_rng().gen_range(0..files.len());
@@ -56,6 +69,7 @@ impl ServerDialog {
 					let _ = thread.join();
 				}
 			}
+			playing.store(false, Ordering::Relaxed);
 		}))
 	}
 }

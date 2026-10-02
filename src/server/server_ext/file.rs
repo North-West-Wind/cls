@@ -47,7 +47,7 @@ impl ServerFile {
 		let uuid = Uuid::new_v4();
 		let (sample_rate, prod) = {
 			let sample_rate = server_state.sample_rate as usize;
-			let rb = HeapRb::<f32>::new(sample_rate);
+			let rb = HeapRb::<f32>::new(sample_rate / 16);
 			let (prod, cons) = rb.split();
 			server_state.audio_data.insert(uuid, Arc::new(Mutex::new(cons)));
 			(sample_rate, Arc::new(Mutex::new(prod)))
@@ -167,7 +167,7 @@ impl ServerFile {
 						};
 						let mut offset = prod.push_slice(&interleaved);
 						while offset < interleaved.len() {
-							thread::sleep(Duration::from_millis(100));
+							thread::sleep(Duration::from_millis(10));
 							offset += prod.push_slice(&interleaved[offset..]);
 						}
           }
@@ -194,7 +194,7 @@ impl ServerFile {
 		Ok(thread::spawn(move || {
 			let _locked = lock.lock();
 			let mut prod = prod.lock();
-			let mut buf_size = sample_rate * 4 / 20;
+			let mut buf_size = sample_rate * 4 / 16;
 			while buf_size % 4 != 0 {
 				buf_size += 1;
 			}
