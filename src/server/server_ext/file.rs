@@ -210,7 +210,7 @@ impl ServerFile {
 						let buf: &[f32] = bytemuck::cast_slice(&buf);
 						let mut offset = prod.push_slice(&buf[..read]);
 						while offset < read {
-							thread::sleep(Duration::from_millis(100));
+							thread::sleep(Duration::from_millis(10));
 							offset += prod.push_slice(&buf[offset..read]);
 						}
 					},
