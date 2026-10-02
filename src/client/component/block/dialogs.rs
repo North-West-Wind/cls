@@ -1,5 +1,5 @@
 
-use std::vec;
+use std::{thread, time::Duration, vec};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use rand::Rng;
@@ -124,9 +124,9 @@ impl BlockNavigation for DialogBlock {
 }
 
 impl DialogBlock {
-	fn play_dialog(&self, client_state: AtomicClientState, random: bool) -> bool {
+	fn play_dialog(&self, atomic_client_state: AtomicClientState, random: bool) -> bool {
 		let (selected, length) = {
-			let client_state = client_state.read();
+			let client_state = atomic_client_state.read();
 			(client_state.selected_dialog, client_state.dialogs.len())
 		};
 		let index;
@@ -138,8 +138,14 @@ impl DialogBlock {
 			}
 			index = selected;
 		}
-		let client_state = client_state.read();
+		let client_state = atomic_client_state.read();
 		let uid = client_state.dialogs[index].uid;
+		// Stop 1 second later
+		let atomic_client_state = atomic_client_state.clone();
+		thread::spawn(move || {
+			thread::sleep(Duration::from_secs(1));
+			atomic_client_state.read().request(ClientToServer::StopDialog(uid));
+		});
 		client_state.request(ClientToServer::PlayDialog(uid))
 	}
 

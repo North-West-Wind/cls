@@ -1,4 +1,4 @@
-use std::{cmp::{max, min}, vec};
+use std::{cmp::{max, min}, thread, time::Duration, vec};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use rand::Rng;
@@ -134,8 +134,8 @@ impl BlockNavigation for WavesBlock {
 }
 
 impl WavesBlock {
-	fn play_wave(&self, client_state: AtomicClientState, random: bool) -> bool {
-		let client_state = client_state.read();
+	fn play_wave(&self, atomic_client_state: AtomicClientState, random: bool) -> bool {
+		let client_state = atomic_client_state.read();
 		let index;
 		if random {
 			index = rand::thread_rng().gen_range(0..client_state.waves.len());
@@ -146,6 +146,12 @@ impl WavesBlock {
 			index = client_state.selected_wave;
 		}
 		let uid = client_state.waves[index].base.uid;
+		// Stop 1 second later
+		let atomic_client_state = atomic_client_state.clone();
+		thread::spawn(move || {
+			thread::sleep(Duration::from_secs(1));
+			atomic_client_state.read().request(ClientToServer::StopDialog(uid));
+		});
 		client_state.request(ClientToServer::PlayDialog(uid))
 	}
 
