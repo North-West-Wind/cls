@@ -1,10 +1,11 @@
 use std::{format, io::Read, path::Path, process::{Command, Stdio}, sync::Arc, thread::{self, JoinHandle}, time::Duration, vec};
 
 use parking_lot::Mutex;
+use rayon::{iter::ParallelIterator, slice::ParallelSlice};
 use ringbuf::{HeapProd, HeapRb, traits::{Producer, Split}};
 use uuid::Uuid;
 
-use crate::{common::{base::file::SaveableFile, constant::ENDIANESS, log}, server::ServerState};
+use crate::{common::{base::file::SaveableFile, log}, server::ServerState};
 
 pub struct ServerFile {
 	pub base: SaveableFile,
@@ -42,6 +43,7 @@ impl ServerFile {
 
 	pub fn play(&self, server_state: &mut ServerState) -> Option<JoinHandle<()>> {
 		let uuid = Uuid::new_v4();
+		let volume = self.base.volume as f32 / 100.0;
 		let (sample_rate, prod) = {
 			let sample_rate = server_state.sample_rate as usize;
 			let rb = HeapRb::<f32>::new(sample_rate / 16);
@@ -50,7 +52,7 @@ impl ServerFile {
 			(sample_rate, prod)
 		};
 
-		match self.play_with_ffmpeg(sample_rate, prod, self.lock.clone()) {
+		match self.play_with_ffmpeg(volume, sample_rate, prod, self.lock.clone()) {
 			Ok(thread) => Some(thread),
 			Err(err) => {
 				log::error(format!("Failed to play file with ffmpeg: {:?}", err));
@@ -60,11 +62,11 @@ impl ServerFile {
 		}
 	}
 
-	fn play_with_ffmpeg(&self, sample_rate: usize, mut prod: HeapProd<f32>, lock: Arc<Mutex<()>>) -> Result<JoinHandle<()>, Box<dyn std::error::Error>> {
+	fn play_with_ffmpeg(&self, volume: f32, sample_rate: usize, mut prod: HeapProd<f32>, lock: Arc<Mutex<()>>) -> Result<JoinHandle<()>, Box<dyn std::error::Error>> {
 		let mut result = Command::new("ffmpeg").args([
 			"-loglevel", "-8",
 			"-i", &self.path,
-			"-f", format!("f32{}", ENDIANESS).as_str(),
+			"-f", "f32be",
 			"-ac", "2",
 			"-ar", sample_rate.to_string().as_str(),
 			"-"
@@ -85,7 +87,7 @@ impl ServerFile {
 						}
 
 						let read = read / 4;
-						let buf: &[f32] = bytemuck::cast_slice(&buf);
+						let buf = buf.par_chunks_exact(4).map(|group| f32::from_be_bytes(group.try_into().unwrap()) * volume).collect::<Vec<_>>();
 						let mut offset = prod.push_slice(&buf[..read]);
 						while offset < read {
 							thread::sleep(Duration::from_millis(10));
