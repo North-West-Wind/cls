@@ -23,8 +23,8 @@ pub fn save(config: &SoundboardConfig) {
 		let _ = std::fs::create_dir_all(parent);
 	});
 	if let Ok(mut output) = std::fs::File::create(get_config_path(false).to_str().unwrap()) && output.write_all(serialized.as_bytes()).is_ok() {
-		log::info("Saved config".to_string());
+		log::info("Saved config");
 	} else {
-		log::warn("Failed to save config".to_string());
+		log::warn("Failed to save config");
 	}
 }

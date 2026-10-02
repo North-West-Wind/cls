@@ -112,7 +112,7 @@ impl ServerState {
 
 	fn exit() {
 		if let Ok(socket) = Socket::new(Protocol::Req0) {
-			log::info("Exiting...".to_string());
+			log::info("Exiting...");
 			socket.dial(ADDRESS_COMMS).unwrap();
 			let _ = socket.send(&encode_c2s(ClientToServer::Exit));
 		}
@@ -131,7 +131,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 		});
 	}
 
-	log::info("Starting server...".to_string());
+	log::info("Starting server...");
 	let server_state = Arc::new(RwLock::new(ServerState {
 		config: config::load(),
 		running: true,
@@ -176,7 +176,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 
 	// Termination signal handler
 	let _ = ctrlc::set_handler(move || ServerState::exit());
-	log::info("Set SIGTERM handler".to_string());
+	log::info("Set SIGTERM handler");
 
 	// Global Key Listener
 	let combos: Mutex<HashSet<KeyCombo>> = Mutex::new(HashSet::new());
@@ -251,7 +251,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 			}
 		});
 	}));
-	log::info("Set global key listener".to_string());
+	log::info("Set global key listener");
 
 	// Socket listener - the main thing keeping this running
 	while server_state.read().running {
@@ -391,7 +391,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 					},
 				}
 				match server_comms.send(msg) {
-					Ok(()) => log::info("Replied".to_string()),
+					Ok(()) => log::info("Replied"),
 					Err((_, err)) => log::error(format!("Failed to reply: {:?}", err)),
 				}
 			},
@@ -401,7 +401,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 		}
 	}
 
-	log::info("Done. Goodbye!".to_string());
+	log::info("Done. Goodbye!");
 
 	Ok(())
 }

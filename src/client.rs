@@ -232,21 +232,21 @@ impl ClientState {
 
 	fn request(&self, request: ClientToServer) -> bool {
 		if let Err((_, err)) = self.socket_comms.send(&encode_c2s(request)) {
-			log::error(err.to_string());
+			log::error(err);
 			return false;
 		};
 		let result = {
 			match self.socket_comms.recv() {
 				Ok(msg) => decode_s2c(&msg),
 				Err(err) => {
-					log::error(err.to_string());
+					log::error(err);
 					return false;
 				}
 			}
 		};
 		match result {
 			Err(err) => {
-				log::error(err.to_string());
+				log::error(err);
 				false
 			},
 			Ok(ServerToClient::Error(message)) => {
@@ -405,7 +405,7 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 						Err(err) => log::error(format!("Failed to decode server message: {:?}", err)),
 					}
 				},
-				Err(err) => log::error(err.to_string()),
+				Err(err) => log::error(err),
 			}
 		}
 	});
@@ -441,7 +441,7 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 	while client_state.read().running {
 		// Render again
 		if let Err(err) = terminal.draw(|f| { ui(&client_state.read(), &mut blocks.write(), f); }) {
-			log::error(err.to_string());
+			log::error(err);
 			break;
 		}
 		redrawer.wait();
@@ -462,7 +462,7 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 
 	blocks.write().log.flush_logs();
 
-	log::info("Client is done. Goodbye!".to_string());
+	log::info("Client is done. Goodbye!");
 
 	Ok(())
 }

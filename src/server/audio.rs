@@ -63,7 +63,7 @@ pub fn create_audio_player(atomic_server_state: AtomicServerState) {
 		server_state.sample_rate = sample_rate;
 		log::info(format!("Sample rate: {}", sample_rate));
 		let err_callback = |err| {
-			log::error(format!("{:?}", err));
+			log::error(err);
 		};
 		let mut active = HashSet::new();
 		let stream = device.build_output_stream(&config, move |data: &mut [f32], _| {

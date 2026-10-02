@@ -146,9 +146,9 @@ pub fn scan(client_state: AtomicClientState, mode: Scanning) {
 	{ client_state.write().scanning = mode; }
 	match mode {
 		Scanning::All => {
-			log::info("Scanning all tabs...".to_string());
+			log::info("Scanning all tabs...");
 			let _ = scan_tabs(client_state.clone());
-			log::info("Scanned all tabs".to_string());
+			log::info("Scanned all tabs");
 		},
 		Scanning::One(index) => {
 			log::info(format!("Scanning tab {}...", index));

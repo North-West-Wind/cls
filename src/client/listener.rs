@@ -6,7 +6,7 @@ use crate::{client::{AtomicClientState, AtomicStaticBlocks, ClientState, Selecti
 
 pub fn init_key_listener(client_state: AtomicClientState, blocks: AtomicStaticBlocks) -> Result<(), Box<dyn std::error::Error>> {
 	// Global key listener
-	log::info("Starting global key listener...".to_string());
+	log::info("Starting global key listener...");
 	let (popup_manager, redrawer) = {
 		let client_state = client_state.read();
 		(client_state.popup_manager.clone(), client_state.redrawer.clone())
@@ -21,7 +21,7 @@ pub fn init_key_listener(client_state: AtomicClientState, blocks: AtomicStaticBl
 	}));
 
 	// Local key listener
-	log::info("Starting local key listener...".to_string());
+	log::info("Starting local key listener...");
 	while client_state.read().running {
 		// `poll()` waits for an `Event` for a given time period
 		if poll(Duration::from_millis(500))? {
