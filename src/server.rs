@@ -1,16 +1,15 @@
-use std::{collections::{HashMap, HashSet}, eprintln, format, fs::read_dir, path::Path, println, sync::Arc, thread, time::SystemTime, vec};
+use std::{collections::{HashMap, HashSet}, eprintln, format, fs::read_dir, path::Path, println, sync::{Arc, atomic::{AtomicBool, Ordering}}, thread, vec};
 
 use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use nng::{Protocol, Socket};
 use parking_lot::{Mutex, RwLock};
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
-use symphonium::SymphoniumLoader;
+use ringbuf::HeapCons;
 use uuid::Uuid;
 
-use crate::{common::{base::{dialog::Dialog, wave::Wave}, config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, APP_NAME}, log, socket::{ClientToServer, ServerToClient, decode_c2s, encode_c2s, encode_s2c}}, server::{audio::{PlayerType, create_audio_player}, file::{PlayableFile, play_file_auto_volume, stop_all}, keys::KeyCombo, pulseaudio::{load_null_sink, loopback, unload_module}, server_ext::{dialog::ServerDialog, wave::{PlayableWave, ServerWave}}}};
+use crate::{common::{base::{dialog::Dialog, wave::Wave}, config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, APP_NAME}, log, socket::{ClientToServer, ServerToClient, decode_c2s, encode_c2s, encode_s2c}}, server::{audio::create_audio_player, keys::KeyCombo, pulseaudio::{load_null_sink, loopback, unload_module}, server_ext::{dialog::ServerDialog, file::ServerFile, wave::ServerWave}}};
 
 mod audio;
-mod file;
 mod keys;
 mod pulseaudio;
 mod server_ext;
@@ -26,15 +25,12 @@ pub(self) struct ServerState {
 	pa_modules: HashMap<u8, (String, String)>, // ID -> (Name, Module num)
 
 	// Audio data
-	symphonium_loader: Mutex<SymphoniumLoader>,
-	playable_files: HashMap<Uuid, PlayableFile>,
-	playable_waves: HashMap<u64, Vec<PlayableWave>>,
-	file_cache: HashMap<String, (Vec<f32>, SystemTime)>,
+	audio_data: HashMap<Uuid, Arc<Mutex<HeapCons<f32>>>>,
 	playlist_lock: Arc<Mutex<()>>,
 
 	// Waves and Dialogs
-	waves: Arc<RwLock<HashMap<u64, ServerWave>>>,
-	dialogs: Arc<RwLock<HashMap<u64, ServerDialog>>>,
+	waves: HashMap<u64, ServerWave>,
+	dialogs: HashMap<u64, ServerDialog>,
 
 	// Hotkey map
 	file_keys: HashMap<KeyCombo, String>, // KeyCombo -> File path
@@ -56,14 +52,9 @@ impl ServerState {
 		let config = &self.config;
 		self.stopkey = KeyCombo::from(config.stop_key.clone());
 
-		let waves = self.waves.clone();
-		let dialogs = self.dialogs.clone();
-		let mut waves = waves.write();
-		let mut dialogs = dialogs.write();
-
 		// Clear all maps
-		waves.clear();
-		dialogs.clear();
+		self.waves.clear();
+		self.dialogs.clear();
 		self.file_keys.clear();
 		self.wave_keys.clear();
 		self.dialog_keys.clear();
@@ -87,9 +78,9 @@ impl ServerState {
 			}
 			let wave = ServerWave {
 				base: Wave::from(wave),
-				forced: false,
+				playing: Arc::new(AtomicBool::new(false)),
 			};
-			waves.insert(wave.base.uid, wave);
+			self.waves.insert(wave.base.uid, wave);
 		});
 
 		// Load dialog hotkeys and IDs
@@ -100,10 +91,9 @@ impl ServerState {
 			}
 			let dialog = ServerDialog {
 				base: Dialog::from(dialog),
-				forced: false,
-				play_next: 0,
+				playing: Arc::new(AtomicBool::new(false)),
 			};
-			dialogs.insert(dialog.base.uid, dialog);
+			self.dialogs.insert(dialog.base.uid, dialog);
 		});
 
 		// Pulseaudio loopback reload
@@ -153,15 +143,12 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 		pa_modules: HashMap::new(),
 
 		// Audio data
-		symphonium_loader: Mutex::new(SymphoniumLoader::new()),
-		playable_files: HashMap::new(),
-		playable_waves: HashMap::new(),
-		file_cache: HashMap::new(),
+		audio_data: HashMap::new(),
 		playlist_lock: Arc::new(Mutex::new(())),
 
 		// Waves and Dialogs
-		waves: Arc::new(RwLock::new(HashMap::new())),
-		dialogs: Arc::new(RwLock::new(HashMap::new())),
+		waves: HashMap::new(),
+		dialogs: HashMap::new(),
 
 		// Hotkey maps
 		file_keys: HashMap::new(),
@@ -184,9 +171,8 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 	// Load config
 	server_state.write().apply_config();
 
-	// Create audio players
-	create_audio_player(server_state.clone(), PlayerType::File);
-	create_audio_player(server_state.clone(), PlayerType::Wave);
+	// Create audio player
+	create_audio_player(server_state.clone());
 
 	// Termination signal handler
 	let _ = ctrlc::set_handler(move || ServerState::exit());
@@ -216,44 +202,44 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 			if server_state.file_keys.contains_key(combo) {
 				let server_event = server_event_mki.clone();
 				let path = server_state.file_keys.get(combo).unwrap().clone();
-				log::info(format!("{:?} -> {}", combo, &path));
+				let file = ServerFile::new(path.clone(), &server_state);
 				let server_state = server_state_combo.clone();
 				thread::spawn(move || {
 					let uuid = Uuid::new_v4();
 					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(0, uuid, path.clone())));
-					let _ = play_file_auto_volume(server_state, path, true);
+					if let Some(thread) = file.play(&mut server_state.write()) {
+						let _ = thread.join();
+					}
 					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(uuid)));
 				});
 			}
 
 			// Wave hotkey
-			if server_state.wave_keys.contains_key(combo) {
-				let uid = *server_state.wave_keys.get(combo).unwrap();
-				let waves = server_state.waves.clone();
+			if let Some(uid) = server_state.wave_keys.get(combo) && let Some(wave) = server_state.waves.get(uid) {
+				let wave = wave.clone();
 				let server_state = server_state_combo.clone();
 				let server_event = server_event_mki.clone();
 				thread::spawn(move || {
-					let waves = waves.read();
-					let wave = waves.get(&uid).unwrap();
 					let uuid = Uuid::new_v4();
 					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(1, uuid, wave.base.label.clone())));
-					wave.play(server_state, false);
+					if let Some(thread) = wave.play(server_state) {
+						let _ = thread.join();
+					}
 					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(uuid)));
 				});
 			}
 
 			// Dialog hotkey
-			if server_state.dialog_keys.contains_key(combo) {
-				let uid = *server_state.dialog_keys.get(combo).unwrap();
-				let dialogs = server_state.dialogs.clone();
+			if let Some(uid) = server_state.dialog_keys.get(combo) && let Some(dialog) = server_state.dialogs.get(uid) {
+				let dialog = dialog.clone();
 				let server_state = server_state_combo.clone();
 				let server_event = server_event_mki.clone();
 				thread::spawn(move || {
-					let dialogs = dialogs.read();
-					let dialog = dialogs.get(&uid).unwrap();
 					let uuid = Uuid::new_v4();
 					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(2, uuid, dialog.base.label.clone())));
-					dialog.play(server_state, false);
+					if let Some(thread) = dialog.play(server_state) {
+						let _ = thread.join();
+					}
 					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(uuid)));
 				});
 			}
@@ -261,7 +247,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 			// Stop hotkey
 			if !server_state.stopkey.is_empty() && server_state.stopkey == *combo {
 				drop(server_state);
-				stop_all(&mut server_state_combo.write());
+				server_state_combo.write().audio_data.clear();
 			}
 		});
 	}));
@@ -291,47 +277,49 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 					PlayPath(path) => {
 						log::info(format!("Playing {}", path));
 						msg.push_back(&encode_s2c(Success));
+						let file = ServerFile::new(path.clone(), &server_state.read());
 						let (server_state, server_event) = (server_state.clone(), server_event.clone());
 						thread::spawn(move || {
 							let uuid = Uuid::new_v4();
 							let _ = server_event.lock().send(&encode_s2c(Playing(0, uuid, path.clone())));
-							let _ = play_file_auto_volume(server_state, path, true);
+							let thread = file.play(&mut server_state.write());
+							if let Some(thread) = thread {
+								let _ = thread.join();
+							}
 							let _ = server_event.lock().send(&encode_s2c(Stopping(uuid)));
 						});
 					},
 					PlayWave(uid) => {
-						if server_state.read().waves.read().contains_key(&uid) {
+						if let Some(wave) = server_state.read().waves.get(&uid).cloned() {
 							msg.push_back(&encode_s2c(Success));
 							let server_state = server_state.clone();
 							let server_event = server_event.clone();
 							thread::spawn(move || {
-								let waves = { server_state.read().waves.clone() };
-								if let Some(wave) = waves.write().get_mut(&uid) {
-									let uuid = Uuid::new_v4();
-									let _ = server_event.lock().send(&encode_s2c(Playing(1, uuid, wave.base.label.clone())));
-									wave.forced = true;
-									wave.play(server_state, false);
-									let _ = server_event.lock().send(&encode_s2c(Stopping(uuid)));
+								let uuid = Uuid::new_v4();
+								let _ = server_event.lock().send(&encode_s2c(Playing(1, uuid, wave.base.label.clone())));
+								wave.playing.store(true, Ordering::Relaxed);
+								if let Some(thread) = wave.play(server_state) {
+									let _ = thread.join();
 								}
+								let _ = server_event.lock().send(&encode_s2c(Stopping(uuid)));
 							});
 						} else {
 							msg.push_back(&encode_s2c(Error(format!("Wave with ID {} not found", uid))));
 						}
 					},
 					PlayDialog(uid) => {
-						if server_state.read().dialogs.read().contains_key(&uid) {
+						if let Some(dialog) = server_state.read().dialogs.get(&uid).cloned() {
 							msg.push_back(&encode_s2c(Success));
 							let server_state = server_state.clone();
 							let server_event = server_event.clone();
 							thread::spawn(move || {
-								let dialogs = { server_state.read().dialogs.clone() };
-								if let Some(dialog) = dialogs.write().get_mut(&uid) {
-									let uuid = Uuid::new_v4();
-									let _ = server_event.lock().send(&encode_s2c(Playing(2, uuid, dialog.base.label.clone())));
-									dialog.forced = true;
-									dialog.play(server_state, true);
-									let _ = server_event.lock().send(&encode_s2c(Stopping(uuid)));
+								let uuid = Uuid::new_v4();
+								let _ = server_event.lock().send(&encode_s2c(Playing(2, uuid, dialog.base.label.clone())));
+								dialog.playing.store(true, Ordering::Relaxed);
+								if let Some(thread) = dialog.play(server_state) {
+									let _ = thread.join();
 								}
+								let _ = server_event.lock().send(&encode_s2c(Stopping(uuid)));
 							});
 						} else {
 							msg.push_back(&encode_s2c(Error(format!("Dialog with ID {} not found", uid))));
@@ -357,13 +345,16 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 						}).max_by(|(a, _), (b, _)| a.cmp(b));
 						match result {
 							Some((_, path)) => {
-								let path = path.to_string();
 								msg.push_back(&encode_s2c(Success));
+								let file = ServerFile::new(path.clone(), &server_state.read());
 								let (server_state, server_event) = (server_state.clone(), server_event.clone());
 								thread::spawn(move || {
 									let uuid = Uuid::new_v4();
 									let _ = server_event.lock().send(&encode_s2c(Playing(0, uuid, path.clone())));
-									let _ = play_file_auto_volume(server_state, path, true);
+									let thread = file.play(&mut server_state.write());
+									if let Some(thread) = thread {
+										let _ = thread.join();
+									}
 									let _ = server_event.lock().send(&encode_s2c(Stopping(uuid)));
 								});
 							},
@@ -373,13 +364,13 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 						}
 					},
 					StopFiles => {
-						stop_all(&mut server_state.write());
+						server_state.write().audio_data.clear();
 						msg.push_back(&encode_s2c(Success));
 					},
 					StopWave(uid) => {
-						match server_state.read().waves.write().get_mut(&uid) {
+						match server_state.read().waves.get(&uid) {
 							Some(wave) => {
-								wave.forced = false;
+								wave.playing.store(false, Ordering::Relaxed);
 								msg.push_back(&encode_s2c(Success));
 							},
 							None => {
@@ -388,9 +379,9 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 						}
 					},
 					StopDialog(uid) => {
-						match server_state.read().dialogs.write().get_mut(&uid) {
+						match server_state.read().dialogs.get(&uid) {
 							Some(dialog) => {
-								dialog.forced = false;
+								dialog.playing.store(false, Ordering::Relaxed);
 								msg.push_back(&encode_s2c(Success));
 							},
 							None => {

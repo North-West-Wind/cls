@@ -25,16 +25,16 @@ fn log(level: LogLevel, message: String) {
 	});
 }
 
-pub fn info(message: String) {
-	log(LogLevel::Info, message);
+pub fn info(message: impl ToString) {
+	log(LogLevel::Info, message.to_string());
 }
 
-pub fn warn(message: String) {
-	log(LogLevel::Warn, message);
+pub fn warn(message: impl ToString) {
+	log(LogLevel::Warn, message.to_string());
 }
 
-pub fn error(message: String) {
-	log(LogLevel::Error, message);
+pub fn error(message: impl ToString) {
+	log(LogLevel::Error, message.to_string());
 }
 
 pub fn register(callback: impl Fn(LogLevel, String) + Send + Sync + 'static) {
