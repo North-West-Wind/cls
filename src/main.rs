@@ -67,8 +67,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 				decode_s2c(&socket.recv()?)
 			},
 			"play-id" => {
-				let Some(id) = matches.get_one::<u32>("id") else { panic!("Missing id") };
-				let id = *id;
+				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
+				let Ok(id) = id.parse::<u32>() else { panic!("Could not parse ID") };
 				let config = config::load();
 				let mut response = None;
 				for (tab, files) in &config.files {
@@ -84,8 +84,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 				response
 			},
 			"play-wave" => {
-				let Some(id) = matches.get_one::<u32>("id") else { panic!("Missing id") };
-				let id = *id;
+				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
+				let Ok(id) = id.parse::<u32>() else { panic!("Could not parse ID") };
 				let config = config::load();
 				let wave = config.waves.iter().find(|wave| {
 					let Some(wave_id) = wave.id else { return false };
@@ -96,8 +96,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 				decode_s2c(&socket.recv()?)
 			},
 			"play-dialog" => {
-				let Some(id) = matches.get_one::<u32>("id") else { panic!("Missing id") };
-				let id = *id;
+				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
+				let Ok(id) = id.parse::<u32>() else { panic!("Could not parse ID") };
 				let config = config::load();
 				let dialog = config.dialogs.iter().find(|dialog| {
 					let Some(dialog_id) = dialog.id else { return false };
@@ -117,8 +117,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 				decode_s2c(&socket.recv()?)
 			},
 			"stop-wave" => {
-				let Some(id) = matches.get_one::<u32>("id") else { panic!("Missing id") };
-				let id = *id;
+				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
+				let Ok(id) = id.parse::<u32>() else { panic!("Could not parse ID") };
 				let config = config::load();
 				let wave = config.waves.iter().find(|wave| {
 					let Some(wave_id) = wave.id else { return false };
@@ -129,8 +129,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 				decode_s2c(&socket.recv()?)
 			},
 			"stop-dialog" => {
-				let Some(id) = matches.get_one::<u32>("id") else { panic!("Missing id") };
-				let id = *id;
+				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
+				let Ok(id) = id.parse::<u32>() else { panic!("Could not parse ID") };
 				let config = config::load();
 				let dialog = config.dialogs.iter().find(|dialog| {
 					let Some(dialog_id) = dialog.id else { return false };
