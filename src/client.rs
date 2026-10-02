@@ -154,7 +154,7 @@ pub(self) struct ClientState {
 	running: bool,
 
 	// Communication
-	socket_comms: Socket,
+	socket_comms: Arc<Mutex<Socket>>,
 
 	error: String,
 	error_important: bool,
@@ -231,30 +231,28 @@ impl ClientState {
 	}
 
 	fn request(&self, request: ClientToServer) -> bool {
-		if let Err((_, err)) = self.socket_comms.send(&encode_c2s(request)) {
+		if let Err((_, err)) = self.socket_comms.lock().send(&encode_c2s(request)) {
 			log::error(err);
 			return false;
 		};
-		let result = {
-			match self.socket_comms.recv() {
-				Ok(msg) => decode_s2c(&msg),
-				Err(err) => {
-					log::error(err);
-					return false;
+		let socket_comms = self.socket_comms.clone();
+		thread::spawn(move || {
+			let result = {
+				match socket_comms.lock().recv() {
+					Ok(msg) => decode_s2c(&msg),
+					Err(err) => {
+						log::error(err);
+						return;
+					}
 				}
+			};
+			match result {
+				Err(err) => log::error(err),
+				Ok(ServerToClient::Error(message)) => log::error(message),
+				_ => ()
 			}
-		};
-		match result {
-			Err(err) => {
-				log::error(err);
-				false
-			},
-			Ok(ServerToClient::Error(message)) => {
-				log::error(message);
-				false
-			},
-			_ => true
-		}
+		});
+		true
 	}
 
 	fn borders(&self, id: u8) -> (BorderType, Style) {
@@ -325,7 +323,7 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 		config: config::load(),
 		running: true,
 
-		socket_comms,
+		socket_comms: Arc::new(Mutex::new(socket_comms)),
 
 		error: String::new(),
 		error_important: false,
