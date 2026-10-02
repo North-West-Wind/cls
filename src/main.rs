@@ -108,7 +108,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 				decode_s2c(&socket.recv()?)
 			},
 			"play-search" => {
-				let Some(query) = matches.get_one::<String>("path") else { panic!("Missing query") };
+				let Some(query) = matches.get_one::<String>("query") else { panic!("Missing query") };
 				let _ = socket.send(&encode_c2s(PlaySearch(query.clone())));
 				decode_s2c(&socket.recv()?)
 			},
