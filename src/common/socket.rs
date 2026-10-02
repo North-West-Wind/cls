@@ -1,7 +1,6 @@
 use std::{fmt, vec, write};
 
 use nng::Message;
-use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 struct DecodeError;
@@ -36,8 +35,8 @@ pub enum ServerToClient {
 	Reload,
 
 	// Starts from 11
-	Playing(u8, Uuid, String),
-	Stopping(Uuid)
+	Playing(u8, u16, String),
+	Stopping(u16)
 }
 
 pub fn decode_c2s(msg: &Message) -> Result<ClientToServer, Box<dyn std::error::Error>> {
@@ -84,13 +83,13 @@ pub fn decode_s2c(msg: &Message) -> Result<ServerToClient, Box<dyn std::error::E
 		},
 		3 => Ok(Reload),
 		11 => {
-			let uuid = Uuid::from_bytes(msg[2..17].try_into()?);
-			let body = String::from_utf8(msg[17..].try_into()?)?;
-			Ok(Playing(msg[1], uuid, body))
+			let id = u16::from_be_bytes(msg[2..6].try_into()?);
+			let body = String::from_utf8(msg[6..].try_into()?)?;
+			Ok(Playing(msg[1], id, body))
 		},
 		12 => {
-			let uuid = Uuid::from_bytes(msg[1..].try_into()?);
-			Ok(Stopping(uuid))
+			let id = u16::from_be_bytes(msg[2..6].try_into()?);
+			Ok(Stopping(id))
 		},
 		_ => Err(Box::from(DecodeError))
 	}
@@ -145,15 +144,15 @@ pub fn encode_s2c(response: ServerToClient) -> Vec<u8> {
 			buf
 		},
 		Reload => vec![3u8],
-		Playing(playing_type, uuid, message) => {
+		Playing(playing_type, id, message) => {
 			let mut buf = vec![11u8, playing_type];
-			buf.extend_from_slice(uuid.as_bytes());
+			buf.extend(id.to_be_bytes());
 			buf.extend_from_slice(message.as_bytes());
 			buf
 		},
-		Stopping(uuid) => {
+		Stopping(id) => {
 			let mut buf = vec![12u8];
-			buf.extend_from_slice(uuid.as_bytes());
+			buf.extend(id.to_be_bytes());
 			buf
 		}
 	}

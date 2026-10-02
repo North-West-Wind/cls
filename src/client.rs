@@ -5,7 +5,6 @@ use indexmap::IndexMap;
 use nng::{Error::ConnectionRefused, Protocol, Socket};
 use parking_lot::{Condvar, Mutex, RwLock};
 use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, widgets::{Block, BorderType, Borders, Paragraph}};
-use uuid::Uuid;
 
 use crate::{client::{client_ext::{file::ClientFile, wave::ClientWave}, component::{block::{BlockNavigation, BlockRender, BlockRenderArea, dialogs::DialogBlock, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::LogBlock, playing::PlayingBlock, results::ResultsBlock, search::SearchBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupComponent, PopupRender}}, listener::init_key_listener, tab::scan}, common::{base::{dialog::Dialog, wave::Wave}, config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, MIN_HEIGHT, MIN_WIDTH}, log, socket::{ClientToServer, ServerToClient, decode_s2c, encode_c2s}}};
 
@@ -164,7 +163,7 @@ pub(self) struct ClientState {
 	settings_opened: bool,
 	main_opened: MainOpened,
 	scanning: Scanning,
-	playing: HashMap<Uuid, (String, Color)>,
+	playing: HashMap<u16, (String, Color)>,
 	dirty: bool,
 
 	// Transformed from config
@@ -387,16 +386,21 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 									client_state.apply_config();
 									scan(client_state_socket.clone(), Scanning::All);
 								},
-								Playing(playing_type, uuid, message) => {
+								Playing(playing_type, id, message) => {
 									let mut client_state = client_state_socket.write();
 									let color = match playing_type {
 										1 => Color::LightCyan,
 										2 => Color::LightYellow,
 										_ => Color::LightGreen
 									};
-									client_state.playing.insert(uuid, (message, color));
+									client_state.playing.insert(id, (message, color));
+									client_state.redrawer.notify();
 								},
-								Stopping(uuid) => { client_state_socket.write().playing.remove(&uuid); },
+								Stopping(id) => {
+									let mut client_state = client_state_socket.write();
+									client_state.playing.remove(&id);
+									client_state.redrawer.notify();
+								},
 								_ => ()
 							}
 						},

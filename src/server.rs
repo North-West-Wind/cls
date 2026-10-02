@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, eprintln, format, fs::read_dir, path::Path, println, sync::{Arc, atomic::Ordering}, thread, vec};
+use std::{collections::{HashMap, HashSet}, eprintln, format, fs::read_dir, path::Path, println, sync::{Arc, atomic::{AtomicU16, Ordering}}, thread, vec};
 
 use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use nng::{Protocol, Socket};
@@ -113,6 +113,23 @@ impl ServerState {
 	}
 }
 
+#[derive(Default, Clone)]
+struct IdGen {
+	current: Arc<AtomicU16>
+}
+
+impl IdGen {
+	fn next(&self) -> u16 {
+		let id = self.current.load(Ordering::Relaxed);
+		if id == u16::MAX {
+			self.current.store(0, Ordering::Relaxed);
+		} else {
+			self.current.store(id + 1, Ordering::Relaxed);
+		}
+		id
+	}
+}
+
 pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result<(), Box<dyn std::error::Error>> {
 	// Initialize logger
 	if !no_log {
@@ -161,6 +178,9 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 	let server_event = Arc::new(Mutex::new(server_event));
 	log::info(format!("COMMS is listening to {}", ADDRESS_COMMS));
 	log::info(format!("EVENT is listening to {}", ADDRESS_EVENT));
+
+	// ID generator for some server broadcasts
+	let id = IdGen::default();
 	
 	// Load config
 	server_state.write().apply_config();
@@ -176,6 +196,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 	let combos: Mutex<HashSet<KeyCombo>> = Mutex::new(HashSet::new());
 	let server_state_mki = server_state.clone();
 	let server_event_mki = server_event.clone();
+	let id_mki = id.clone();
 	mki::bind_any_key(mki::Action::handle_kb(move |key| {
 		let mut combos = combos.lock();
 		// Remove unpressed
@@ -198,13 +219,13 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 				let path = server_state.file_keys.get(combo).unwrap().clone();
 				let file = ServerFile::new(path.clone(), &server_state);
 				let server_state = server_state_combo.clone();
+				let id = id_mki.next();
 				thread::spawn(move || {
-					let uuid = Uuid::new_v4();
-					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(0, uuid, path.clone())));
+					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(0, id, path.clone())));
 					if let Some(thread) = file.play(&mut server_state.write()) {
 						let _ = thread.join();
 					}
-					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(uuid)));
+					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
 				});
 			}
 
@@ -213,13 +234,13 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 				let wave = wave.clone();
 				let server_state = server_state_combo.clone();
 				let server_event = server_event_mki.clone();
+				let id = id_mki.next();
 				thread::spawn(move || {
-					let uuid = Uuid::new_v4();
-					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(1, uuid, wave.base.label.clone())));
+					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(1, id, wave.base.label.clone())));
 					if let Some(thread) = wave.play(server_state) {
 						let _ = thread.join();
 					}
-					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(uuid)));
+					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
 				});
 			}
 
@@ -228,13 +249,13 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 				let dialog = dialog.clone();
 				let server_state = server_state_combo.clone();
 				let server_event = server_event_mki.clone();
+				let id = id_mki.next();
 				thread::spawn(move || {
-					let uuid = Uuid::new_v4();
-					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(2, uuid, dialog.base.label.clone())));
+					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(2, id, dialog.base.label.clone())));
 					if let Some(thread) = dialog.play(server_state) {
 						let _ = thread.join();
 					}
-					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(uuid)));
+					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
 				});
 			}
 
@@ -273,14 +294,14 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 						msg.push_back(&encode_s2c(Success));
 						let file = ServerFile::new(path.clone(), &server_state.read());
 						let (server_state, server_event) = (server_state.clone(), server_event.clone());
+						let id = id.next();
 						thread::spawn(move || {
-							let uuid = Uuid::new_v4();
-							let _ = server_event.lock().send(&encode_s2c(Playing(0, uuid, path.clone())));
+							let _ = server_event.lock().send(&encode_s2c(Playing(0, id, path.clone())));
 							let thread = file.play(&mut server_state.write());
 							if let Some(thread) = thread {
 								let _ = thread.join();
 							}
-							let _ = server_event.lock().send(&encode_s2c(Stopping(uuid)));
+							let _ = server_event.lock().send(&encode_s2c(Stopping(id)));
 						});
 					},
 					PlayWave(uid) => {
@@ -291,14 +312,14 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 								msg.push_back(&encode_s2c(Success));
 								let server_state = server_state.clone();
 								let server_event = server_event.clone();
+								let id = id.next();
 								thread::spawn(move || {
-									let uuid = Uuid::new_v4();
-									let _ = server_event.lock().send(&encode_s2c(Playing(1, uuid, wave.base.label.clone())));
+									let _ = server_event.lock().send(&encode_s2c(Playing(1, id, wave.base.label.clone())));
 									wave.forced.store(true, Ordering::Relaxed);
 									if let Some(thread) = wave.play(server_state) {
 										let _ = thread.join();
 									}
-									let _ = server_event.lock().send(&encode_s2c(Stopping(uuid)));
+									let _ = server_event.lock().send(&encode_s2c(Stopping(id)));
 								});
 							}
 						} else {
@@ -313,14 +334,14 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 								msg.push_back(&encode_s2c(Success));
 								let server_state = server_state.clone();
 								let server_event = server_event.clone();
+								let id = id.next();
 								thread::spawn(move || {
-									let uuid = Uuid::new_v4();
-									let _ = server_event.lock().send(&encode_s2c(Playing(2, uuid, dialog.base.label.clone())));
+									let _ = server_event.lock().send(&encode_s2c(Playing(2, id, dialog.base.label.clone())));
 									dialog.forced.store(true, Ordering::Relaxed);
 									if let Some(thread) = dialog.play(server_state) {
 										let _ = thread.join();
 									}
-									let _ = server_event.lock().send(&encode_s2c(Stopping(uuid)));
+									let _ = server_event.lock().send(&encode_s2c(Stopping(id)));
 								});
 							}
 						} else {
@@ -350,14 +371,14 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 								msg.push_back(&encode_s2c(Success));
 								let file = ServerFile::new(path.clone(), &server_state.read());
 								let (server_state, server_event) = (server_state.clone(), server_event.clone());
+								let id = id.next();
 								thread::spawn(move || {
-									let uuid = Uuid::new_v4();
-									let _ = server_event.lock().send(&encode_s2c(Playing(0, uuid, path.clone())));
+									let _ = server_event.lock().send(&encode_s2c(Playing(0, id, path.clone())));
 									let thread = file.play(&mut server_state.write());
 									if let Some(thread) = thread {
 										let _ = thread.join();
 									}
-									let _ = server_event.lock().send(&encode_s2c(Stopping(uuid)));
+									let _ = server_event.lock().send(&encode_s2c(Stopping(id)));
 								});
 							},
 							None => {
