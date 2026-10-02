@@ -222,7 +222,8 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 				let id = id_mki.next();
 				thread::spawn(move || {
 					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(0, id, path.clone())));
-					if let Some(thread) = file.play(&mut server_state.write()) {
+					let thread = file.play(&mut server_state.write());
+					if let Some(thread) = thread {
 						let _ = thread.join();
 					}
 					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
@@ -237,7 +238,8 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 				let id = id_mki.next();
 				thread::spawn(move || {
 					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(1, id, wave.base.label.clone())));
-					if let Some(thread) = wave.play(server_state) {
+					let thread = wave.play(server_state);
+					if let Some(thread) = thread {
 						let _ = thread.join();
 					}
 					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
@@ -252,7 +254,8 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 				let id = id_mki.next();
 				thread::spawn(move || {
 					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(2, id, dialog.base.label.clone())));
-					if let Some(thread) = dialog.play(server_state) {
+					let thread = dialog.play(server_state);
+					if let Some(thread) = thread {
 						let _ = thread.join();
 					}
 					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
