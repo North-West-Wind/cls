@@ -1,12 +1,11 @@
-use std::{format, path::Path, thread, vec};
+use std::{format, io::Read, path::Path, process::{Command, Stdio}, thread, vec};
 
 use file_format::{FileFormat, Kind};
 use indexmap::IndexMap;
 use mime_guess::mime;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use symphonium::{ResampleQuality, SymphoniumLoader};
 
-use crate::{client::{AtomicClientState, Scanning, client_ext::file::ClientFile}, common::{ffmpeg::read_file_ffmpeg, log}};
+use crate::{client::{AtomicClientState, Scanning, client_ext::file::ClientFile}, common::log};
 
 fn ffprobe_duration(path: &str) -> Option<u128> {
 	let Ok(info) = ffprobe::ffprobe(path) else { return None };
@@ -21,33 +20,44 @@ fn ffprobe_duration(path: &str) -> Option<u128> {
 	}
 }
 
-fn add_duration(atomic_client_state: AtomicClientState, tab: String) {
-	let client_state = atomic_client_state.read();
-	let Some((_, files)) = client_state.file_tabs.iter().find(|(key, _)| *key == tab).cloned() else { return; };
-	drop(client_state);
-	let mut loader = SymphoniumLoader::new();
+fn ffmpeg_duration(path: &str) -> Option<u128> {
+	let child = match Command::new("ffmpeg").args([
+		"-loglevel", "-8",
+		"-i", path,
+		"-f", "u8",
+		"-ac", "1",
+		"-ar", "1000",
+		"-"
+	]).stdout(Stdio::piped()).spawn() {
+		Ok(child) => child,
+		Err(_) => { return None; }
+	};
+	let mut buf = vec![];
+	let _ = child.stdout.unwrap().read_to_end(&mut buf);
+	Some(buf.len() as u128)
+}
+
+fn add_duration(client_state: AtomicClientState, tab: String) {
+	let files = {
+		let client_state = client_state.read();
+		let Some((_, files)) = client_state.file_tabs.iter().find(|(key, _)| *key == tab).cloned() else { return; };
+		files
+	};
 	let mut new_files = IndexMap::new();
 	for (filename, info) in files {
 		let longpath = Path::new(&tab).join(filename.clone());
 		let filepath = longpath.into_os_string().into_string().unwrap();
 		let mut info = info.clone();
 
-		let result = ffprobe_duration(&filepath);
-		let millis: u128 = if result.is_none() {
-			let result = loader.load(&filepath, None, ResampleQuality::Low, None);
-			if result.is_err() {
-				let result = read_file_ffmpeg(&filepath, 48000);
-				if result.is_err() {
+		let millis = match ffprobe_duration(&filepath) {
+			Some(duration) => duration,
+			None => match ffmpeg_duration(&filepath) {
+				Some(duration) => duration,
+				None => {
 					new_files.insert(filename.clone(), info);
 					continue;
 				}
-				result.unwrap().len() as u128 / 48
-			} else {
-				let audio_data = result.unwrap();
-				audio_data.frames() as u128 * 1000 / audio_data.sample_rate().get() as u128
 			}
-		} else {
-			result.unwrap()
 		};
 
 		let mut duration_str = String::new();
@@ -78,7 +88,7 @@ fn add_duration(atomic_client_state: AtomicClientState, tab: String) {
 		info.duration = duration_str;
 		new_files.insert(filename.clone(), info);
 	}
-	let mut client_state = atomic_client_state.write();
+	let mut client_state = client_state.write();
 	if let Some((_, files)) = client_state.file_tabs.iter_mut().find(|(key, _)| *key == tab) {
 		*files = new_files;
 		client_state.redrawer.notify();
