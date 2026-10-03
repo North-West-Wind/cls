@@ -97,10 +97,10 @@ impl ServerState {
 			self.pa_modules.insert(1, ("@DEFAULT_SINK".to_string(), loopback("@DEFAULT_SINK@")));
 		}
 		if !config.loopback_1.is_empty() {
-			self.pa_modules.insert(1, (config.loopback_1.clone(), loopback(&config.loopback_1)));
+			self.pa_modules.insert(2, (config.loopback_1.clone(), loopback(&config.loopback_1)));
 		}
 		if !config.loopback_2.is_empty() {
-			self.pa_modules.insert(1, (config.loopback_2.clone(), loopback(&config.loopback_2)));
+			self.pa_modules.insert(3, (config.loopback_2.clone(), loopback(&config.loopback_2)));
 		}
 	}
 
