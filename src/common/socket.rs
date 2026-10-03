@@ -99,12 +99,12 @@ pub fn decode_s2c(msg: &mut Message) -> Result<ServerToClient, Box<dyn std::erro
 		},
 		3 => Ok(Reload),
 		11 => {
-			let id = u16::from_be_bytes(msg[2..6].try_into()?);
-			let body = String::from_utf8(msg[6..].try_into()?)?;
+			let id = u16::from_be_bytes(msg[2..4].try_into()?);
+			let body = String::from_utf8(msg[4..].try_into()?)?;
 			Ok(Playing(msg[1], id, body))
 		},
 		12 => {
-			let id = u16::from_be_bytes(msg[2..6].try_into()?);
+			let id = u16::from_be_bytes(msg[1..].try_into()?);
 			Ok(Stopping(id))
 		},
 		_ => Err(UnknownMsgTypeError::new(msg[0]))

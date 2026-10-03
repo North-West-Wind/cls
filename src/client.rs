@@ -2,7 +2,7 @@ use std::{collections::HashMap, format, io, sync::Arc, thread, time::Duration, v
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode}};
 use indexmap::IndexMap;
-use nng::{Error::ConnectionRefused, Protocol, Socket, options::{Options, RecvTimeout}};
+use nng::{Error::ConnectionRefused, Protocol, Socket, options::{Options, RecvTimeout, protocol::pubsub::Subscribe}};
 use parking_lot::{Condvar, Mutex, RwLock};
 use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, widgets::{Block, BorderType, Borders, Paragraph}};
 
@@ -320,7 +320,8 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 	}
 
 	socket_comms.set_opt::<RecvTimeout>(Some(Duration::from_secs(3)))?;
-	//socket_event.set_opt::<RecvTimeout>(Some(Duration::from_secs(5)))?;
+	socket_event.set_opt::<RecvTimeout>(Some(Duration::from_secs(3)))?;
+	socket_event.set_opt::<Subscribe>(vec![])?; // Subscribe to all topics
 
 	let redrawer = Redrawer::default();
 
@@ -414,6 +415,7 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 						Err(err) => log::error(format!("Failed to decode server broadcast: {:?}", err)),
 					}
 				},
+				Err(err) if err == nng::Error::TimedOut => (), // Ignore server timeout
 				Err(err) => log::error(format!("Failed to recv server broadcast: {:?}", err)),
 			}
 		}
