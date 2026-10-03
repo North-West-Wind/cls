@@ -221,7 +221,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 				let server_state = server_state_combo.clone();
 				let id = id_mki.next();
 				thread::spawn(move || {
-					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(0, id, path.clone())));
+					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(0, id, Path::new(&path).file_name().unwrap().to_str().unwrap().to_string())));
 					let thread = file.play(&mut server_state.write());
 					if let Some(thread) = thread {
 						let _ = thread.join();
@@ -293,13 +293,12 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 						msg.push_back(&encode_s2c(Success));
 					},
 					PlayPath(path) => {
-						log::info(format!("Playing {}", path));
 						msg.push_back(&encode_s2c(Success));
 						let file = ServerFile::new(path.clone(), &server_state.read());
 						let (server_state, server_event) = (server_state.clone(), server_event.clone());
 						let id = id.next();
 						thread::spawn(move || {
-							let _ = server_event.lock().send(&encode_s2c(Playing(0, id, path.clone())));
+							let _ = server_event.lock().send(&encode_s2c(Playing(0, id, Path::new(&path).file_name().unwrap().to_str().unwrap().to_string())));
 							let thread = file.play(&mut server_state.write());
 							if let Some(thread) = thread {
 								let _ = thread.join();
@@ -376,7 +375,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 								let (server_state, server_event) = (server_state.clone(), server_event.clone());
 								let id = id.next();
 								thread::spawn(move || {
-									let _ = server_event.lock().send(&encode_s2c(Playing(0, id, path.clone())));
+									let _ = server_event.lock().send(&encode_s2c(Playing(0, id, Path::new(&path).file_name().unwrap().to_str().unwrap().to_string())));
 									let thread = file.play(&mut server_state.write());
 									if let Some(thread) = thread {
 										let _ = thread.join();
@@ -416,8 +415,9 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 						}
 					},
 				}
+				let msg_type = msg[0];
 				match server_comms.send(msg) {
-					Ok(()) => log::info("Replied"),
+					Ok(()) => log::info(format!("Replied with message type {}", msg_type)),
 					Err((_, err)) => log::error(format!("Failed to reply: {:?}", err)),
 				}
 			},
