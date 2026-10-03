@@ -3,31 +3,11 @@ use std::{format, io::stdout, sync::{Arc, RwLock, atomic::{AtomicBool, Ordering}
 use crossterm::{execute, style::{Color::{Red, Reset, Yellow}, Print, ResetColor, SetForegroundColor}};
 use ratatui::{style::{Color, Style}, text::Line, widgets::{Block, BorderType, Padding, Paragraph}};
 
-use crate::{client::{ClientState, component::block::BlockRenderArea}, common::log::{self, LogLevel}};
+use crate::{client::{ClientState, Redrawer, component::block::BlockRenderArea}, common::log::{self, LogLevel}};
 
 pub struct LogBlock {
 	flushed: Arc<AtomicBool>,
-	messages: Arc<RwLock<Vec<(LogLevel, String)>>>
-}
-
-impl Default for LogBlock {
-	fn default() -> Self {
-		let flushed = Arc::new(AtomicBool::new(false));
-		let messages = Arc::new(RwLock::new(vec![]));
-		let flushed_copy = flushed.clone();
-		let messages_copy = messages.clone();
-		log::register(move |level, message| {
-			if flushed_copy.load(Ordering::Relaxed) {
-				log(&level, &message);
-			} else {
-				messages_copy.write().unwrap().push((level, message));
-			}
-		});
-		Self {
-			flushed,
-			messages
-		}
-	}
+	messages: Arc<RwLock<Vec<(LogLevel, String)>>>,
 }
 
 impl BlockRenderArea for LogBlock {
@@ -56,6 +36,25 @@ impl BlockRenderArea for LogBlock {
 }
 
 impl LogBlock {
+	pub fn new(redrawer: Redrawer) -> Self {
+		let flushed = Arc::new(AtomicBool::new(false));
+		let messages = Arc::new(RwLock::new(vec![]));
+		let flushed_copy = flushed.clone();
+		let messages_copy = messages.clone();
+		log::register(move |level, message| {
+			if flushed_copy.load(Ordering::Relaxed) {
+				log(&level, &message);
+			} else {
+				messages_copy.write().unwrap().push((level, message));
+				redrawer.notify();
+			}
+		});
+		Self {
+			flushed,
+			messages
+		}
+	}
+
 	pub fn flush_logs(&mut self) {
 		let mut messages = self.messages.write().unwrap();
 		messages.iter().for_each(|(level, message)| log(level, message));
