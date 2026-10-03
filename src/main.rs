@@ -4,7 +4,7 @@ use cpal::traits::{DeviceTrait, HostTrait};
 use clap::{command, Arg, ArgAction, Command};
 use nng::{Protocol, Socket};
 
-use crate::{client::start_client, common::{config, constant::ADDRESS_COMMS, socket::{ClientToServer, ServerToClient, decode_s2c, encode_c2s}}, server::start_server};
+use crate::{client::start_client, common::{config, constant::ADDRESS_COMMS, log, socket::{ClientToServer, ServerToClient, decode_s2c, encode_c2s}}, server::start_server};
 
 mod client;
 mod common;
@@ -156,7 +156,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let no_pacat = matches.get_flag("no-pacat");
 	let cpal_device = matches.get_one::<String>("audio-device").map_or(String::new(), |device| device.clone());
 
-	// Start client in thread
+	// Start client
 	let client_thread = if !daemon {
 		let save_on_exit = !matches.get_flag("no-save");
 		Some(thread::spawn(move || {
@@ -165,11 +165,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	} else { None };
 
 	// Start server
-	let _ = start_server(no_pacat, cpal_device, !daemon);
+	let server_thread = thread::spawn(move || {
+		let _ = start_server(no_pacat, cpal_device, !daemon);
+	});
 
 	// Wait for client to exit
 	if let Some(client_thread) = client_thread {
 		client_thread.join().unwrap();
+		if !server_thread.is_finished() {
+			log::info("Server is still running! Keep it running for global hot keys");
+			server_thread.join().unwrap();
+		}
 	}
 
 	// Remove global key listener
