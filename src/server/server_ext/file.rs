@@ -2,7 +2,7 @@ use std::{format, io::Read, path::Path, process::{Command, Stdio}, sync::{Arc, L
 
 use indexmap::IndexMap;
 use parking_lot::{Mutex, RwLock};
-use rayon::{iter::ParallelIterator, slice::ParallelSlice};
+use rayon::{iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::ParallelSlice};
 use ringbuf::{HeapProd, HeapRb, traits::{Producer, Split}};
 use uuid::Uuid;
 
@@ -132,11 +132,12 @@ impl ServerFile {
 							}
 
 							let read = read / 4;
-							let buf = buf.par_chunks_exact(4).map(|group| f32::from_be_bytes(group.try_into().unwrap()) * volume).collect::<Vec<_>>();
-							let mut offset = prod.push_slice(&buf[..read]);
+							let mut buf = buf.par_chunks_exact(4).map(|group| f32::from_be_bytes(group.try_into().unwrap())).collect::<Vec<_>>();
 							if cached.len() < MAX_SAMPLE {
-								cached.extend_from_slice(&buf);
+								cached.extend_from_slice(&buf[..read]);
 							}
+							buf.par_iter_mut().for_each(|sample| *sample = *sample * volume);
+							let mut offset = prod.push_slice(&buf[..read]);
 							while offset < read {
 								thread::sleep(Duration::from_millis(10));
 								offset += prod.push_slice(&buf[offset..read]);
@@ -156,6 +157,7 @@ impl ServerFile {
 			match FILE_CACHE.try_read() {
 				Some(file_cache) => {
 					if let Some(buf) = file_cache.get(&path) {
+						let buf = buf.par_iter().map(|sample| sample * volume).collect::<Vec<_>>();
 						let mut offset = prod.push_slice(&buf);
 						while offset < buf.len() {
 							thread::sleep(Duration::from_millis(10));
