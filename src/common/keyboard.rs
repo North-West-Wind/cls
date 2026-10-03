@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, str::FromStr};
+use std::{cmp::Ordering, format, str::FromStr};
 
 use mki::Keyboard;
 use regex::Regex;
@@ -101,50 +101,47 @@ pub fn string_to_keyboard(string: &str) -> Option<Keyboard> {
 // 3. Letter keys
 // 4. Number keys
 // 5. Symbol keys
-pub fn sort_keys(vec: &mut Vec<String>) -> &mut Vec<String> {
+pub fn key_sorter(a: &str, b: &str) -> Ordering {
 	let regex_fn = Regex::new(r"F\d").unwrap();
-	vec.sort_by(|a, b| {
-		let regex_a = regex_fn.is_match(a);
-		let regex_b = regex_fn.is_match(b);
-		if regex_a && !regex_b {
+	let regex_a = regex_fn.is_match(a);
+	let regex_b = regex_fn.is_match(b);
+	if regex_a && !regex_b {
+		Ordering::Less
+	} else if !regex_a && regex_b {
+		Ordering::Greater
+	} else if regex_a && regex_b {
+		a.cmp(b)
+	} else {
+		let single_a = a.len() == 1;
+		let single_b = b.len() == 1;
+		if !single_a && single_b {
 			Ordering::Less
-		} else if !regex_a && regex_b {
+		} else if single_a && !single_b {
 			Ordering::Greater
-		} else if regex_a && regex_b {
+		} else if !single_a && !single_b {
 			a.cmp(b)
 		} else {
-			let single_a = a.len() == 1;
-			let single_b = b.len() == 1;
-			if !single_a && single_b {
+			let char_a = a.chars().next().expect("a is empty");
+			let char_b = b.chars().next().expect("a is empty");
+			let letter_a = char_a.is_alphabetic();
+			let letter_b = char_b.is_alphabetic();
+			if letter_a && !letter_b {
 				Ordering::Less
-			} else if single_a && !single_b {
+			} else if !letter_a && letter_b {
 				Ordering::Greater
-			} else if !single_a && !single_b {
+			} else if letter_a && letter_b {
 				a.cmp(b)
 			} else {
-				let char_a = a.chars().next().expect("a is empty");
-				let char_b = b.chars().next().expect("a is empty");
-				let letter_a = char_a.is_alphabetic();
-				let letter_b = char_b.is_alphabetic();
-				if letter_a && !letter_b {
+				let digit_a = char_a.is_digit(10);
+				let digit_b = char_b.is_digit(10);
+				if digit_a && !digit_b {
 					Ordering::Less
-				} else if !letter_a && letter_b {
+				} else if !digit_a && digit_b {
 					Ordering::Greater
-				} else if letter_a && letter_b {
-					a.cmp(b)
 				} else {
-					let digit_a = char_a.is_digit(10);
-					let digit_b = char_b.is_digit(10);
-					if digit_a && !digit_b {
-						Ordering::Less
-					} else if !digit_a && digit_b {
-						Ordering::Greater
-					} else {
-						a.cmp(b)
-					}
+					a.cmp(b)
 				}
 			}
 		}
-	});
-	vec
+	}
 }

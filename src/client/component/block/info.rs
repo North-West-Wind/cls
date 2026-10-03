@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::{client::{AtomicClientState, ClientState, MainOpened, SearchResult, component::block::{BlockNavigation, search::SearchBlock, tabs::TabsBlock}}, common::keyboard::{keyboard_to_string, sort_keys}};
+use crate::{client::{AtomicClientState, ClientState, MainOpened, SearchResult, component::block::{BlockNavigation, search::SearchBlock, tabs::TabsBlock}}, common::keyboard::{keyboard_to_string, key_sorter}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -48,7 +48,7 @@ impl BlockRenderArea for InfoBlock {
 						None
 					} else {
 						let mut keys = info.base.keys.clone().into_iter().collect::<Vec<String>>();
-						let keys = sort_keys(&mut keys);
+						keys.sort_by(|a, b| key_sorter(a, b));
 						Some(format!("{{{}}}", keys.join(" ")))
 					};
 					let file_id = info.base.id;
@@ -79,7 +79,7 @@ impl BlockRenderArea for InfoBlock {
 						spans.push(Span::from("None").style(Style::default().fg(Color::Red)));
 					} else {
 						let mut keys = wave.base.keys.par_iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
-						let keys = sort_keys(&mut keys);
+						keys.sort_by(|a, b| key_sorter(a, b));
 						spans.push(Span::from(format!(" {{{}}} ", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
 					}
 					lines.push(Line::from(spans));
@@ -103,7 +103,7 @@ impl BlockRenderArea for InfoBlock {
 						spans.push(Span::from("None").style(Style::default().fg(Color::Red)));
 					} else {
 						let mut keys = dialog.keys.par_iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
-						let keys = sort_keys(&mut keys);
+						keys.sort_by(|a, b| key_sorter(a, b));
 						spans.push(Span::from(format!(" {{{}}} ", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
 					}
 					lines.push(Line::from(spans));
@@ -116,7 +116,7 @@ impl BlockRenderArea for InfoBlock {
 						File(result) => {
 							let keys = if result.info.base.keys.is_empty() { None } else {
 								let mut keys: Vec<String> = result.info.base.keys.clone().into_iter().collect();
-								let keys = sort_keys(&mut keys);
+								keys.sort_by(|a, b| key_sorter(a, b));
 								Some(format!("{{{}}}", keys.join(" ")))
 							};
 							(result.name.clone(), result.info.base.volume, keys, result.info.base.id, "File")
@@ -125,7 +125,7 @@ impl BlockRenderArea for InfoBlock {
 							client_state.waves.par_iter().find_any(|wave| wave.base.uid == result.uid).map_or((String::new(), 0, None, None, "Wave"), |wave| {
 								(format!("{} ({})", result.main, result.sub), wave.base.volume, if wave.base.keys.is_empty() { None } else {
 									let mut keys = wave.base.keys.par_iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
-									let keys = sort_keys(&mut keys);
+									keys.sort_by(|a, b| key_sorter(a, b));
 									Some(format!("{{{}}}", keys.join(" ")))
 								}, wave.base.id, "Wave")
 							})
@@ -134,7 +134,7 @@ impl BlockRenderArea for InfoBlock {
 							client_state.dialogs.par_iter().find_any(|dialog| dialog.uid == result.uid).map_or((String::new(), 0, None, None, "Dialog"), |dialog| {
 								(result.main.clone(), dialog.volume, if dialog.keys.is_empty() { None } else {
 									let mut keys = dialog.keys.par_iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
-									let keys = sort_keys(&mut keys);
+									keys.sort_by(|a, b| key_sorter(a, b));
 									Some(format!("{{{}}}", keys.join(" ")))
 								}, dialog.id, "Dialog")
 							})

@@ -2,7 +2,7 @@ use std::{format, vec};
 
 use ratatui::{Frame, layout::Rect, style::{Color, Style}, text::{Line, Span}, widgets::Paragraph};
 
-use crate::{client::ClientState, common::keyboard::sort_keys};
+use crate::{client::ClientState, common::keyboard::key_sorter};
 
 use super::BlockRenderArea;
 
@@ -17,7 +17,7 @@ impl BlockRenderArea for HelpBlock {
 		];
 		if !client_state.config.stop_key.is_empty() {
 			let mut keys = client_state.config.stop_key.clone().into_iter().collect::<Vec<String>>();
-			let keys = sort_keys(&mut keys);
+			keys.sort_by(|a, b| key_sorter(a, b));
 			spans.push(Span::from(format!(", {} to stop", keys.join(" + "))).style(Style::default().fg(Color::DarkGray)));
 		}
 		let paragraph = Paragraph::new(Line::from(spans))
