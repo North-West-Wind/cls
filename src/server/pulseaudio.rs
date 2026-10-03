@@ -24,7 +24,7 @@ pub fn load_null_sink() -> String {
 	if result.is_err() {
 		return String::new();
 	}
-	result.unwrap()
+	result.unwrap().trim_end().to_string()
 }
 
 pub fn unload_module(module: &str) -> Result<(), Box<dyn std::error::Error>> {
