@@ -176,6 +176,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 			log::info("Server is still running! Keep it running for global hot keys");
 			server_thread.join().unwrap();
 		}
+	} else {
+		server_thread.join().unwrap();
 	}
 
 	// Remove global key listener
