@@ -1,11 +1,49 @@
-use std::{format, io::Read, path::Path, process::{Command, Stdio}, sync::Arc, thread::{self, JoinHandle}, time::Duration, vec};
+use std::{format, io::Read, path::Path, process::{Command, Stdio}, sync::{Arc, LazyLock}, thread::{self, JoinHandle}, time::Duration, vec};
 
-use parking_lot::Mutex;
+use indexmap::IndexMap;
+use parking_lot::{Mutex, RwLock};
 use rayon::{iter::ParallelIterator, slice::ParallelSlice};
 use ringbuf::{HeapProd, HeapRb, traits::{Producer, Split}};
 use uuid::Uuid;
 
 use crate::{common::{base::file::SaveableFile, log}, server::ServerState};
+
+// This uses the CLOCK algorithm for replacement
+struct FileCache {
+	files: IndexMap<String, (Vec<f32>, bool)>,
+	capacity: usize,
+	size: usize,
+	clock_hand: usize
+}
+
+impl FileCache {
+	fn new(capacity: usize) -> Self {
+		Self { files: IndexMap::new(), capacity, size: 0, clock_hand: 0 }
+	}
+
+	fn insert(&mut self, path: String, data: Vec<f32>) {
+		self.size += data.len();
+		self.files.insert(path, (data, true));
+		while self.size > self.capacity {
+			loop {
+				self.clock_hand = (self.clock_hand + 1) % self.files.len();
+				let (_, (data, ref_bit)) = self.files.get_index_mut(self.clock_hand).unwrap();
+				if *ref_bit {
+					*ref_bit = false;
+				} else {
+					self.size -= data.len();
+					self.files.shift_remove_index(self.clock_hand);
+					self.clock_hand -= 1;
+					break;
+				}
+			}
+		}
+	}
+
+	fn get(&self, path: &String) -> Option<&Vec<f32>> {
+		self.files.get(path).map(|(data, _)| data)
+	}
+}
 
 pub struct ServerFile {
 	pub base: SaveableFile,
@@ -63,6 +101,8 @@ impl ServerFile {
 	}
 
 	fn play_with_ffmpeg(&self, volume: f32, sample_rate: usize, mut prod: HeapProd<f32>, lock: Arc<Mutex<()>>) -> Result<JoinHandle<()>, Box<dyn std::error::Error>> {
+		static MAX_SAMPLE: usize = 1024 * 1024; // ~1 MB for f32, 21 seconds with 48000 Hz
+		static FILE_CACHE: LazyLock<RwLock<FileCache>> = LazyLock::new(|| RwLock::new(FileCache::new(MAX_SAMPLE * 4))); // ~4 MB
 		let mut result = Command::new("ffmpeg").args([
 			"-loglevel", "-8",
 			"-i", &self.path,
@@ -72,33 +112,61 @@ impl ServerFile {
 			"-"
 		]).stdout(Stdio::piped()).spawn()?;
 		let mut stdout = result.stdout.take().unwrap();
+		let path = self.path.clone();
 		Ok(thread::spawn(move || {
 			let _locked = lock.lock();
-			let mut buf_size = sample_rate * 4 / 16;
-			while buf_size % 4 != 0 {
-				buf_size += 1;
-			}
-			let mut buf = vec![0u8; buf_size];
-			loop {
-				match stdout.read(&mut buf) {
-					Ok(read) => {
-						if read == 0 {
+			let mut load_file = || {
+				let mut buf_size = sample_rate * 4 / 16;
+				while buf_size % 4 != 0 {
+					buf_size += 1;
+				}
+				let mut buf = vec![0u8; buf_size];
+				let mut cached = vec![];
+				let mut complete = false;
+				loop {
+					match stdout.read(&mut buf) {
+						Ok(read) => {
+							if read == 0 {
+								complete = true;
+								break;
+							}
+
+							let read = read / 4;
+							let buf = buf.par_chunks_exact(4).map(|group| f32::from_be_bytes(group.try_into().unwrap()) * volume).collect::<Vec<_>>();
+							let mut offset = prod.push_slice(&buf[..read]);
+							if cached.len() < MAX_SAMPLE {
+								cached.extend_from_slice(&buf);
+							}
+							while offset < read {
+								thread::sleep(Duration::from_millis(10));
+								offset += prod.push_slice(&buf[offset..read]);
+							}
+						},
+						Err(err) => {
+							log::error(format!("ffmpeg error: {:?}", err));
 							break;
 						}
-
-						let read = read / 4;
-						let buf = buf.par_chunks_exact(4).map(|group| f32::from_be_bytes(group.try_into().unwrap()) * volume).collect::<Vec<_>>();
-						let mut offset = prod.push_slice(&buf[..read]);
-						while offset < read {
-							thread::sleep(Duration::from_millis(10));
-							offset += prod.push_slice(&buf[offset..read]);
-						}
-					},
-					Err(err) => {
-						log::error(format!("ffmpeg error: {:?}", err));
-						break;
 					}
 				}
+
+				if complete && cached.len() <= MAX_SAMPLE {
+					FILE_CACHE.write().insert(path.clone(), cached);
+				}
+			};
+			match FILE_CACHE.try_read() {
+				Some(file_cache) => {
+					if let Some(buf) = file_cache.get(&path) {
+						let mut offset = prod.push_slice(&buf);
+						while offset < buf.len() {
+							thread::sleep(Duration::from_millis(10));
+							offset += prod.push_slice(&buf[offset..]);
+						}
+					} else {
+						drop(file_cache);
+						load_file();
+					}
+				},
+				_ => load_file()
 			}
 		}))
 	}
