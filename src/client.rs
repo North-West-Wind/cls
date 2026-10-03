@@ -2,7 +2,7 @@ use std::{collections::HashMap, format, io, sync::Arc, thread, time::Duration, v
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode}};
 use indexmap::IndexMap;
-use nng::{Error::ConnectionRefused, Protocol, Socket};
+use nng::{Error::ConnectionRefused, Protocol, Socket, options::{Options, RecvTimeout}};
 use parking_lot::{Condvar, Mutex, RwLock};
 use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, widgets::{Block, BorderType, Borders, Paragraph}};
 
@@ -241,7 +241,7 @@ impl ClientState {
 		thread::spawn(move || {
 			let result = {
 				match socket_comms.lock().recv() {
-					Ok(msg) => decode_s2c(&msg),
+					Ok(mut msg) => decode_s2c(&mut msg),
 					Err(err) => {
 						log::error(err);
 						return;
@@ -319,6 +319,9 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 		}
 	}
 
+	socket_comms.set_opt::<RecvTimeout>(Some(Duration::from_secs(3)))?;
+	//socket_event.set_opt::<RecvTimeout>(Some(Duration::from_secs(5)))?;
+
 	let redrawer = Redrawer::default();
 
 	let client_state = Arc::new(RwLock::new(ClientState {
@@ -330,7 +333,7 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 		error: String::new(),
 		error_important: false,
 		popup_manager: PopupManager::from(redrawer.clone()),
-		redrawer,
+		redrawer: redrawer.clone(),
 		selection_layer: SelectionLayer::Block,
 		settings_opened: false,
 		main_opened: MainOpened::File,
@@ -363,7 +366,7 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 		files: FilesBlock::default(),
 		help: HelpBlock::default(),
 		info: InfoBlock::default(),
-		log: LogBlock::default(),
+		log: LogBlock::new(redrawer),
 		playing: PlayingBlock::default(),
 		results: ResultsBlock::default(),
 		search: SearchBlock::default(),
@@ -377,8 +380,9 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 	thread::spawn(move || {
 		while client_state_socket.read().running {
 			match socket_event.recv() {
-				Ok(msg) => {
-					match decode_s2c(&msg) {
+				Ok(mut msg) => {
+					log::info(format!("Received server broadcast: {:?}", msg));
+					match decode_s2c(&mut msg) {
 						Ok(s2c) => {
 							use ServerToClient::*;
 							match s2c {
@@ -407,10 +411,10 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 								_ => ()
 							}
 						},
-						Err(err) => log::error(format!("Failed to decode server message: {:?}", err)),
+						Err(err) => log::error(format!("Failed to decode server broadcast: {:?}", err)),
 					}
 				},
-				Err(err) => log::error(err),
+				Err(err) => log::error(format!("Failed to recv server broadcast: {:?}", err)),
 			}
 		}
 	});

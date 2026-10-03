@@ -275,7 +275,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 	while server_state.read().running {
 		let mut msg = server_comms.recv()?;
 		log::info(format!("Received message type {}", msg[0]));
-		match decode_c2s(&msg) {
+		match decode_c2s(&mut msg) {
 			Ok(request) => {
 				use ClientToServer::*;
 				use ServerToClient::*;

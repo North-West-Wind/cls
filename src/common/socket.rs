@@ -1,15 +1,29 @@
-use std::{fmt, vec, write};
+use std::{fmt::{self, Debug, Display}, vec, write};
 
 use nng::Message;
 
-#[derive(Debug, Clone)]
-struct DecodeError;
+#[derive(Clone)]
+struct UnknownMsgTypeError {
+	msg_type: u8
+}
 
-impl std::error::Error for DecodeError {}
+impl std::error::Error for UnknownMsgTypeError {}
 
-impl fmt::Display for DecodeError {
+impl Debug for UnknownMsgTypeError {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "socket stream decode failed")
+    write!(f, "Unknown message type: {}", self.msg_type)
+	}
+}
+
+impl Display for UnknownMsgTypeError {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "Unknown message type: {}", self.msg_type)
+	}
+}
+
+impl UnknownMsgTypeError {
+	fn new(msg_type: u8) -> Self {
+		Self { msg_type }
 	}
 }
 
@@ -39,9 +53,9 @@ pub enum ServerToClient {
 	Stopping(u16)
 }
 
-pub fn decode_c2s(msg: &Message) -> Result<ClientToServer, Box<dyn std::error::Error>> {
+pub fn decode_c2s(msg: &mut Message) -> Result<ClientToServer, Box<dyn std::error::Error>> {
 	use ClientToServer::*;
-	match msg[0] {
+	let result = match msg[0] {
 		1 => Ok(Exit),
 		2 => Ok(Reload),
 		11 => {
@@ -69,13 +83,15 @@ pub fn decode_c2s(msg: &Message) -> Result<ClientToServer, Box<dyn std::error::E
 			let id = u64::from_be_bytes(msg[1..].try_into()?);
 			Ok(StopDialog(id))
 		},
-		_ => Err(Box::from(DecodeError))
-	}
+		_ => Err(UnknownMsgTypeError::new(msg[0]))
+	}?;
+	msg.clear();
+	Ok(result)
 }
 
-pub fn decode_s2c(msg: &Message) -> Result<ServerToClient, Box<dyn std::error::Error>> {
+pub fn decode_s2c(msg: &mut Message) -> Result<ServerToClient, Box<dyn std::error::Error>> {
 	use ServerToClient::*;
-	match msg[0] {
+	let result = match msg[0] {
 		1 => Ok(Success),
 		2 => {
 			let message = String::from_utf8(msg[1..].try_into()?)?;
@@ -91,8 +107,10 @@ pub fn decode_s2c(msg: &Message) -> Result<ServerToClient, Box<dyn std::error::E
 			let id = u16::from_be_bytes(msg[2..6].try_into()?);
 			Ok(Stopping(id))
 		},
-		_ => Err(Box::from(DecodeError))
-	}
+		_ => Err(UnknownMsgTypeError::new(msg[0]))
+	}?;
+	msg.clear();
+	Ok(result)
 }
 
 pub fn encode_c2s(request: ClientToServer) -> Vec<u8> {

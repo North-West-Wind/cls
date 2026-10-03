@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		let result = match subcommand {
 			"exit" => {
 				let _ = socket.send(&encode_c2s(Exit));
-				decode_s2c(&socket.recv()?)
+				decode_s2c(&mut socket.recv()?)
 			},
 			"audio-devices" => {
 				list_audio_devices()?;
@@ -59,12 +59,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 			},
 			"reload" => {
 				let _ = socket.send(&encode_c2s(Reload));
-				decode_s2c(&socket.recv()?)
+				decode_s2c(&mut socket.recv()?)
 			},
 			"play" => {
 				let Some(path) = matches.get_one::<String>("path") else { panic!("Missing path") };
 				let _ = socket.send(&encode_c2s(PlayPath(path.clone())));
-				decode_s2c(&socket.recv()?)
+				decode_s2c(&mut socket.recv()?)
 			},
 			"play-id" => {
 				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
@@ -76,7 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 						if let Some(file_id) = file.id && file_id == id {
 							let path = Path::new(tab).join(name).to_str().unwrap().to_string();
 							let _ = socket.send(&encode_c2s(PlayPath(path)));
-							response = Some(decode_s2c(&socket.recv()?));
+							response = Some(decode_s2c(&mut socket.recv()?));
 						}
 					}
 				}
@@ -93,7 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 				});
 				let Some(wave) = wave else { panic!("No wave with ID {}", id) };
 				let _ = socket.send(&encode_c2s(PlayWave(wave.uid)));
-				decode_s2c(&socket.recv()?)
+				decode_s2c(&mut socket.recv()?)
 			},
 			"play-dialog" => {
 				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
@@ -105,16 +105,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 				});
 				let Some(dialog) = dialog else { panic!("No wave with ID {}", id) };
 				let _ = socket.send(&encode_c2s(PlayDialog(dialog.uid)));
-				decode_s2c(&socket.recv()?)
+				decode_s2c(&mut socket.recv()?)
 			},
 			"play-search" => {
 				let Some(query) = matches.get_one::<String>("query") else { panic!("Missing query") };
 				let _ = socket.send(&encode_c2s(PlaySearch(query.clone())));
-				decode_s2c(&socket.recv()?)
+				decode_s2c(&mut socket.recv()?)
 			},
 			"stop" => {
 				let _ = socket.send(&encode_c2s(StopFiles));
-				decode_s2c(&socket.recv()?)
+				decode_s2c(&mut socket.recv()?)
 			},
 			"stop-wave" => {
 				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
@@ -126,7 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 				});
 				let Some(wave) = wave else { panic!("No wave with ID {}", id) };
 				let _ = socket.send(&encode_c2s(StopWave(wave.uid)));
-				decode_s2c(&socket.recv()?)
+				decode_s2c(&mut socket.recv()?)
 			},
 			"stop-dialog" => {
 				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
@@ -138,7 +138,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 				});
 				let Some(dialog) = dialog else { panic!("No wave with ID {}", id) };
 				let _ = socket.send(&encode_c2s(StopDialog(dialog.uid)));
-				decode_s2c(&socket.recv()?)
+				decode_s2c(&mut socket.recv()?)
 			},
 			_ => panic!("Unknown subcommand {}", subcommand)
 		};
