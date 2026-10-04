@@ -1,4 +1,4 @@
-use std::{format, io::Read, path::Path, process::{Command, Stdio}, sync::{Arc, LazyLock}, thread::{self, JoinHandle}, time::Duration, vec};
+use std::{format, io::Read, path::Path, process::{Command, Stdio}, sync::{Arc, LazyLock, atomic::{AtomicBool, Ordering}}, thread::{self, JoinHandle}, time::Duration, vec};
 
 use indexmap::IndexMap;
 use parking_lot::{Mutex, RwLock};
@@ -82,15 +82,17 @@ impl ServerFile {
 	pub fn play(&self, server_state: &mut ServerState) -> Option<JoinHandle<()>> {
 		let uuid = Uuid::new_v4();
 		let volume = self.base.volume as f32 / 100.0;
+		let stopped = Arc::new(AtomicBool::new(false));
 		let (sample_rate, prod) = {
 			let sample_rate = server_state.sample_rate as usize;
 			let rb = HeapRb::<f32>::new(sample_rate / 16);
 			let (prod, cons) = rb.split();
 			server_state.audio_data.insert(uuid, Arc::new(Mutex::new(cons)));
+			server_state.stoppable.push(stopped.clone());
 			(sample_rate, prod)
 		};
 
-		match self.play_with_ffmpeg(volume, sample_rate, prod, self.lock.clone()) {
+		match self.play_with_ffmpeg(volume, sample_rate, stopped, prod, self.lock.clone()) {
 			Ok(thread) => Some(thread),
 			Err(err) => {
 				log::error(format!("Failed to play file with ffmpeg: {:?}", err));
@@ -100,7 +102,7 @@ impl ServerFile {
 		}
 	}
 
-	fn play_with_ffmpeg(&self, volume: f32, sample_rate: usize, mut prod: HeapProd<f32>, lock: Arc<Mutex<()>>) -> Result<JoinHandle<()>, Box<dyn std::error::Error>> {
+	fn play_with_ffmpeg(&self, volume: f32, sample_rate: usize, stopped: Arc<AtomicBool>, mut prod: HeapProd<f32>, lock: Arc<Mutex<()>>) -> Result<JoinHandle<()>, Box<dyn std::error::Error>> {
 		static MAX_SAMPLE: usize = 1024 * 1024; // ~1 MB for f32, 21 seconds with 48000 Hz
 		static FILE_CACHE: LazyLock<RwLock<FileCache>> = LazyLock::new(|| RwLock::new(FileCache::new(MAX_SAMPLE * 4))); // ~4 MB
 		let mut result = Command::new("ffmpeg").args([
@@ -128,6 +130,10 @@ impl ServerFile {
 						Ok(read) => {
 							if read == 0 {
 								complete = true;
+								break;
+							}
+
+							if stopped.load(Ordering::Relaxed) {
 								break;
 							}
 
@@ -159,7 +165,7 @@ impl ServerFile {
 					if let Some(buf) = file_cache.get(&path) {
 						let buf = buf.par_iter().map(|sample| sample * volume).collect::<Vec<_>>();
 						let mut offset = prod.push_slice(&buf);
-						while offset < buf.len() {
+						while offset < buf.len() && !stopped.load(Ordering::Relaxed) {
 							thread::sleep(Duration::from_millis(10));
 							offset += prod.push_slice(&buf[offset..]);
 						}
