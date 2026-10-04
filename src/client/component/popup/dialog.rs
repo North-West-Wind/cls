@@ -215,7 +215,7 @@ impl DialogPopup {
 			let popup_manager = client_state.popup_manager.clone();
 			client_state.popup_manager.push(PopupComponent::Confirm(ConfirmPopup::new("Discard changes?", "discard", move || { popup_manager.pop(); })));
 		} else {
-			client_state.popup_manager.pop();
+			client_state.popup_manager.pop_defer();
 		}
 		true
 	}
