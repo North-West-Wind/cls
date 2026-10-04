@@ -68,17 +68,31 @@ impl PopupRender for DialogPopup {
 		let width = lines.par_iter().map(|line| { line.width() as u16 }).max().unwrap() + 4;
 		let height = lines.len() as u16 + 2;
 
+		let block = Block::bordered()
+			.padding(Padding::horizontal(1))
+			.border_type(BorderType::Rounded)
+			.title("Editor");
+
+		if width as usize > max_width || height > area.height {
+			let popup_area = Rect {
+				x: (area.width - 25) / 2,
+				y: (area.height - 4) / 2,
+				width: 25,
+				height: 4
+			};
+			f.render_widget(Paragraph::new(vec![
+				Line::from("Window size too small"),
+				Line::from(format!("Need at least {}x{}", width, height))
+			]).block(block).style(Style::default().fg(Color::Red)), popup_area);
+			return;
+		}
+
 		let popup_area = Rect {
 			x: (area.width - width) / 2,
 			y: (area.height - height) / 2,
 			width,
 			height
 		};
-
-		let block = Block::bordered()
-			.padding(Padding::horizontal(1))
-			.border_type(BorderType::Rounded)
-			.title("Editor");
 
 		Clear.render(popup_area, f.buffer_mut());
 		f.render_widget(Paragraph::new(lines).block(block), popup_area);

@@ -4,7 +4,7 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{style::{Color, Style}, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
 use tui_input::{Input, InputRequest, backend::crossterm::EventHandler};
 
-use crate::client::ClientState;
+use crate::{client::ClientState, common::constant::MIN_WIDTH};
 
 use super::{safe_centered_rect, PopupHandleKey, PopupHandlePaste, PopupRender};
 
@@ -35,7 +35,7 @@ impl InputPopup {
 impl PopupRender for InputPopup {
 	fn render(&self, f: &mut Frame) {
 		let area = f.area();
-		let width = (area.width / 2).max(5);
+		let width = (area.width / 2).max(MIN_WIDTH - 2);
 		let height = 3;
 		let input = &self.input;
 		let scroll = input.visual_scroll(width as usize - 5);

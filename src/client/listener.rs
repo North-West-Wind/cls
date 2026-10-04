@@ -49,7 +49,7 @@ pub fn init_key_listener(client_state: AtomicClientState, blocks: AtomicStaticBl
 fn on_resize(client_state: AtomicClientState, width: u16, height: u16) {
 	let mut client_state = client_state.write();
 	if width < MIN_WIDTH || height < MIN_HEIGHT {
-		client_state.error = String::from(format!("Terminal size requires at least {MIN_WIDTH}x{MIN_HEIGHT}.\nCurrent size: {width}x{height}"));
+		client_state.error = String::from(format!("Window size too small\nNeed at least {MIN_WIDTH}x{MIN_HEIGHT}"));
 		client_state.error_important = true;
 	} else {
 		if !client_state.error.is_empty() {

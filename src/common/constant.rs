@@ -2,6 +2,8 @@ pub const APP_NAME: &str = "cls";
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const MIN_WIDTH: u16 = 45;
 pub const MIN_HEIGHT: u16 = 32;
+pub const NO_RENDER_WIDTH: u16 = 21;
+pub const NO_RENDER_HEIGHT: u16 = 4;
 pub const CONFIG_VERSION: u32 = 1;
 
 #[cfg(target_endian = "big")]

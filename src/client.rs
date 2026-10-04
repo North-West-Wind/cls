@@ -6,7 +6,7 @@ use nng::{Error::ConnectionRefused, Protocol, Socket, options::{Options, RecvTim
 use parking_lot::{Condvar, Mutex, RwLock};
 use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, widgets::{Block, BorderType, Borders, Paragraph}};
 
-use crate::{client::{client_ext::{file::ClientFile, wave::ClientWave}, component::{block::{BlockNavigation, BlockRender, BlockRenderArea, dialogs::DialogBlock, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::LogBlock, playing::PlayingBlock, results::ResultsBlock, search::SearchBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupComponent, PopupRender}}, listener::init_key_listener, tab::scan}, common::{base::{dialog::Dialog, wave::Wave}, config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, MIN_HEIGHT, MIN_WIDTH}, log, socket::{ClientToServer, ServerToClient, decode_s2c, encode_c2s}}};
+use crate::{client::{client_ext::{file::ClientFile, wave::ClientWave}, component::{block::{BlockNavigation, BlockRender, BlockRenderArea, dialogs::DialogBlock, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::LogBlock, playing::PlayingBlock, results::ResultsBlock, search::SearchBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupComponent, PopupRender}}, listener::init_key_listener, tab::scan}, common::{base::{dialog::Dialog, wave::Wave}, config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, MIN_HEIGHT, MIN_WIDTH, NO_RENDER_HEIGHT, NO_RENDER_WIDTH}, log, socket::{ClientToServer, ServerToClient, decode_s2c, encode_c2s}}};
 
 mod client_ext;
 mod component;
@@ -445,10 +445,8 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 	// Check minimum terminal size
 	let size = terminal.size()?;
 	if size.width < MIN_WIDTH || size.height < MIN_HEIGHT {
-		let width = size.width;
-		let height = size.height;
 		let mut client_state = client_state.write();
-		client_state.error = String::from(format!("Terminal size requires at least {MIN_WIDTH}x{MIN_HEIGHT}.\nCurrent size: {width}x{height}"));
+		client_state.error = String::from(format!("Window size too small\nNeed at least {MIN_WIDTH}x{MIN_HEIGHT}"));
 		client_state.error_important = true;
 	}
 
@@ -460,8 +458,9 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 	while client_state.read().running {
 		// Render again
 		if let Err(err) = terminal.draw(|f| {
-			draw_blocks(&client_state.read(), &mut blocks.write(), f);
-			draw_popups(&popup_manager.popups.lock(), f);
+			if draw_blocks(&client_state.read(), &mut blocks.write(), f) {
+				draw_popups(&popup_manager.popups.lock(), f);
+			}
 		}) {
 			log::error(err);
 			break;
@@ -489,11 +488,17 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 	Ok(())
 }
 
-fn draw_blocks(client_state: &ClientState, blocks: &mut StaticBlocks, f: &mut Frame) {
+fn draw_blocks(client_state: &ClientState, blocks: &mut StaticBlocks, f: &mut Frame) -> bool {
 	let (error, settings, main_opened) = (client_state.error.clone(), client_state.settings_opened, client_state.main_opened);
 
+	let area = f.area();
+	if area.width < NO_RENDER_WIDTH || area.height < NO_RENDER_HEIGHT {
+		return false;
+	}
+
 	if !error.is_empty() {
-		return draw_error(error, f);
+		draw_error(error, f);
+		return false;
 	}
 
  	let chunks = Layout::default()
@@ -511,7 +516,7 @@ fn draw_blocks(client_state: &ClientState, blocks: &mut StaticBlocks, f: &mut Fr
 
 	if main_opened == MainOpened::Log {
 		blocks.log.render_area(client_state, f, f.area());
-		return;
+		return true;
 	}
 	blocks.info.render_area(client_state, f, chunks[0]);
 	if main_opened == MainOpened::Search {
@@ -544,10 +549,7 @@ fn draw_blocks(client_state: &ClientState, blocks: &mut StaticBlocks, f: &mut Fr
 	}
 	blocks.help.render_area(client_state, f, chunks[3]);
 	blocks.playing.render(client_state, f);
-	// No parallel. Need to draw in order
-	let popups = client_state.popup_manager.popups.clone();
-	let popups = popups.lock();
-	popups.iter().for_each(|popup| popup.render(f));
+	true
 }
 
 fn draw_popups(popups: &Vec<PopupComponent>, f: &mut Frame) {
