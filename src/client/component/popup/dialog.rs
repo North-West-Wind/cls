@@ -99,7 +99,7 @@ impl PopupRender for DialogPopup {
 }
 
 impl PopupHandleKey for DialogPopup {
-	fn handle_key(&mut self, client_state: &mut ClientState, event: KeyEvent) -> bool {
+	fn handle_key(&mut self, client_state: &ClientState, event: KeyEvent) -> bool {
 		use KeyCode::*;
 		match event.code {
 			Up => self.navigate_files(-1),
@@ -134,7 +134,7 @@ impl DialogPopup {
 		false
 	}
 
-	fn add_file(&mut self, client_state: &mut ClientState) -> bool {
+	fn add_file(&mut self, client_state: &ClientState) -> bool {
 		let popup_manager = client_state.popup_manager.clone();
 		client_state.popup_manager.push(PopupComponent::Input(InputPopup::new(String::new(), "Add Dialog File".to_string(), FLAG_FILE, move |value| {
 			let mut new_files= vec![];
@@ -174,7 +174,7 @@ impl DialogPopup {
 		true
 	}
 
-	fn change_delay(&self, client_state: &mut ClientState) -> bool {
+	fn change_delay(&self, client_state: &ClientState) -> bool {
 		let popup_manager = client_state.popup_manager.clone();
 		client_state.popup_manager.push(PopupComponent::Input(InputPopup::new(self.dialog.delay.to_string(), "Dialog Delay".to_string(), FLAG_NUM, move |value| {
 			let Ok(delay) = value.parse::<f32>() else { return; };
@@ -199,7 +199,7 @@ impl DialogPopup {
 		true
 	}
 
-	fn commit_changes(&self, client_state: &mut ClientState) -> bool {
+	fn commit_changes(&self, client_state: &ClientState) -> bool {
 		let callback = self.on_commit.clone();
 		let dialog = self.dialog.clone();
 		thread::spawn(move || (callback)(dialog));
@@ -207,7 +207,7 @@ impl DialogPopup {
 		false
 	}
 
-	fn discard_changes(&self, client_state: &mut ClientState) -> bool {
+	fn discard_changes(&self, client_state: &ClientState) -> bool {
 		if self.changed {
 			let popup_manager = client_state.popup_manager.clone();
 			client_state.popup_manager.push(PopupComponent::Confirm(ConfirmPopup::new("Discard changes?", "discard", move || { popup_manager.pop(); })));

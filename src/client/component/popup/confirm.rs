@@ -34,7 +34,7 @@ impl PopupRender for ConfirmPopup {
 }
 
 impl PopupHandleKey for ConfirmPopup {
-	fn handle_key(&mut self, client_state: &mut ClientState, event: KeyEvent) -> bool {
+	fn handle_key(&mut self, client_state: &ClientState, event: KeyEvent) -> bool {
 		match event.code {
 			KeyCode::Char('y') => {
 				let callback = self.callback.clone();

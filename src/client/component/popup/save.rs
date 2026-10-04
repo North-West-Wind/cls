@@ -40,7 +40,7 @@ impl PopupRender for SavePopup {
 }
 
 impl PopupHandleKey for SavePopup {
-	fn handle_key(&mut self, client_state: &mut ClientState, _event: KeyEvent) -> bool {
+	fn handle_key(&mut self, client_state: &ClientState, _event: KeyEvent) -> bool {
 		if !self.done {
 			return false;
 		}

@@ -53,7 +53,7 @@ impl PopupRender for InputPopup {
 }
 
 impl PopupHandleKey for InputPopup {
-	fn handle_key(&mut self, client_state: &mut ClientState, event: KeyEvent) -> bool {
+	fn handle_key(&mut self, client_state: &ClientState, event: KeyEvent) -> bool {
 		match event.code {
 			KeyCode::Enter => self.complete(client_state, true),
 			KeyCode::Esc => self.complete(client_state, false),
@@ -175,7 +175,7 @@ impl PopupHandlePaste for InputPopup {
 }
 
 impl InputPopup {
-	fn complete(&self, client_state: &mut ClientState, send: bool) -> bool {
+	fn complete(&self, client_state: &ClientState, send: bool) -> bool {
 		if send {
 			let callback = self.callback.clone();
 			let value = self.input.value().to_string().clone();

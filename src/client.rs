@@ -448,10 +448,16 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 	}
 
 	// Render to the terminal
-	let redrawer = client_state.read().redrawer.clone();
+	let (redrawer, popup_manager) = {
+		let client_state = client_state.read();
+		(client_state.redrawer.clone(), client_state.popup_manager.clone())
+	};
 	while client_state.read().running {
 		// Render again
-		if let Err(err) = terminal.draw(|f| { ui(&client_state.read(), &mut blocks.write(), f); }) {
+		if let Err(err) = terminal.draw(|f| {
+			draw_blocks(&client_state.read(), &mut blocks.write(), f);
+			draw_popups(&popup_manager.popups.lock(), f);
+		}) {
 			log::error(err);
 			break;
 		}
@@ -478,7 +484,7 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 	Ok(())
 }
 
-fn ui(client_state: &ClientState, blocks: &mut StaticBlocks, f: &mut Frame) {
+fn draw_blocks(client_state: &ClientState, blocks: &mut StaticBlocks, f: &mut Frame) {
 	let (error, settings, main_opened) = (client_state.error.clone(), client_state.settings_opened, client_state.main_opened);
 
 	if !error.is_empty() {
@@ -536,6 +542,10 @@ fn ui(client_state: &ClientState, blocks: &mut StaticBlocks, f: &mut Frame) {
 	// No parallel. Need to draw in order
 	let popups = client_state.popup_manager.popups.clone();
 	let popups = popups.lock();
+	popups.iter().for_each(|popup| popup.render(f));
+}
+
+fn draw_popups(popups: &Vec<PopupComponent>, f: &mut Frame) {
 	popups.iter().for_each(|popup| popup.render(f));
 }
 

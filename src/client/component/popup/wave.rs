@@ -74,7 +74,7 @@ impl PopupRender for WavePopup {
 }
 
 impl PopupHandleKey for WavePopup {
-	fn handle_key(&mut self, client_state: &mut ClientState, event: KeyEvent) -> bool {
+	fn handle_key(&mut self, client_state: &ClientState, event: KeyEvent) -> bool {
 		use KeyCode::*;
 		match event.code {
 			Up => self.navigate_wave(-1),
@@ -148,7 +148,7 @@ impl WavePopup {
 		true
 	}
 
-	fn popup_frequency(&self, client_state: &mut ClientState) -> bool {
+	fn popup_frequency(&self, client_state: &ClientState) -> bool {
 		let popup_manager = client_state.popup_manager.clone();
 		client_state.popup_manager.push(PopupComponent::Input(InputPopup::new(self.wave.waves[self.selected].frequency.to_string(), "Frequency (Hz)".to_string(), FLAG_NUM, move |value| {
 			let Ok(freq) = value.parse::<f32>() else { return; };
@@ -164,7 +164,7 @@ impl WavePopup {
 		true
 	}
 
-	fn popup_amplitude(&self, client_state: &mut ClientState) -> bool {
+	fn popup_amplitude(&self, client_state: &ClientState) -> bool {
 		let popup_manager = client_state.popup_manager.clone();
 		client_state.popup_manager.push(PopupComponent::Input(InputPopup::new(self.wave.waves[self.selected].amplitude.to_string(), "Amplitude (Default = 1)".to_string(), FLAG_NUM, move |value| {
 			let Ok(amplitude) = value.parse::<f32>() else { return; };
@@ -180,7 +180,7 @@ impl WavePopup {
 		true
 	}
 
-	fn popup_phase(&self, client_state: &mut ClientState) -> bool {
+	fn popup_phase(&self, client_state: &ClientState) -> bool {
 		let popup_manager = client_state.popup_manager.clone();
 		client_state.popup_manager.push(PopupComponent::Input(InputPopup::new(self.wave.waves[self.selected].phase.to_string(), "Amplitude (Default = 1)".to_string(), FLAG_NUM, move |value| {
 			let Ok(phase) = value.parse::<f32>() else { return; };
@@ -196,7 +196,7 @@ impl WavePopup {
 		true
 	}
 
-	fn commit_changes(&self, client_state: &mut ClientState) -> bool {
+	fn commit_changes(&self, client_state: &ClientState) -> bool {
 		let callback = self.on_commit.clone();
 		let wave = self.wave.clone();
 		thread::spawn(move || (callback)(wave));
@@ -204,7 +204,7 @@ impl WavePopup {
 		false
 	}
 
-	fn discard_changes(&self, client_state: &mut ClientState) -> bool {
+	fn discard_changes(&self, client_state: &ClientState) -> bool {
 		if self.changed {
 			let popup_manager = client_state.popup_manager.clone();
 			client_state.popup_manager.push(PopupComponent::Confirm(ConfirmPopup::new("Discard changes?", "discard", move || { popup_manager.pop(); })));

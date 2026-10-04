@@ -43,7 +43,7 @@ impl PopupRender for KeyBindPopup {
 }
 
 impl PopupHandleKey for KeyBindPopup {
-	fn handle_key(&mut self, client_state: &mut ClientState, event: KeyEvent) -> bool {
+	fn handle_key(&mut self, client_state: &ClientState, event: KeyEvent) -> bool {
 		match event.code {
 			KeyCode::Enter => {
 				if !self.recording {

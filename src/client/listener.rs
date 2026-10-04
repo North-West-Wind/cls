@@ -73,7 +73,7 @@ fn on_key(client_state: AtomicClientState, blocks: AtomicStaticBlocks, event: Ke
 		}
 	} else if let mut popups = popup_manager.popups.lock() && !popups.is_empty() {
 		need_redraw = popups.last_mut()
-			.map_or(false, |popup| { popup.handle_key(&mut client_state.write(), event) });
+			.map_or(false, |popup| { popup.handle_key(&client_state.read(), event) });
 	} else {
 		need_redraw = match selection_layer {
 			SelectionLayer::Block => layer::handle_key(client_state.clone(), blocks, event),

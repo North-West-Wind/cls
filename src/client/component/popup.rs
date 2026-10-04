@@ -33,7 +33,7 @@ pub trait PopupRender {
 }
 
 pub trait PopupHandleKey {
-	fn handle_key(&mut self, client_state: &mut ClientState, event: KeyEvent) -> bool;
+	fn handle_key(&mut self, client_state: &ClientState, event: KeyEvent) -> bool;
 }
 
 pub trait PopupHandlePaste {
@@ -60,7 +60,7 @@ impl PopupRender for PopupComponent {
 }
 
 impl PopupHandleKey for PopupComponent {
-	fn handle_key(&mut self, client_state: &mut ClientState, event: KeyEvent) -> bool {
+	fn handle_key(&mut self, client_state: &ClientState, event: KeyEvent) -> bool {
 		use PopupComponent::*;
 		match self {
 			Confirm(popup) => popup.handle_key(client_state, event),
