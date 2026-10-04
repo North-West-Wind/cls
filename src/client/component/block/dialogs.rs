@@ -174,10 +174,9 @@ impl DialogBlock {
 	}
 
 	fn add_dialog(&mut self, client_state: AtomicClientState) -> bool {
-		let dialog = Dialog::default();
 		{
 			let mut client_state = client_state.write();
-			client_state.dialogs.push(dialog);
+			client_state.dialogs.push(Dialog::default());
 			client_state.selected_dialog = client_state.dialogs.len() - 1;
 		}
 		self.edit_dialog(client_state)

@@ -44,7 +44,7 @@ impl PopupHandleKey for SavePopup {
 		if !self.done {
 			return false;
 		}
-		client_state.popup_manager.pop();
+		client_state.popup_manager.pop_defer();
 		return true;
 	}
 }

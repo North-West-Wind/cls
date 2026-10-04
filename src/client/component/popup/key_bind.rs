@@ -52,8 +52,11 @@ impl PopupHandleKey for KeyBindPopup {
 					self.recording = false;
 					let callback = self.callback.clone();
 					let recorded = self.recorded.iter().map(|key| *key).collect();
-					thread::spawn(move || (callback)(recorded));
-					client_state.popup_manager.pop();
+					let popups = client_state.popup_manager.clone();
+					thread::spawn(move || {
+						popups.pop();
+						(callback)(recorded);
+					});
 				}
 				return true;
 			},
@@ -62,7 +65,7 @@ impl PopupHandleKey for KeyBindPopup {
 					self.recording = false;
 				} else {
 					self.recorded.clear();
-					client_state.popup_manager.pop();
+					client_state.popup_manager.pop_defer();
 				}
 				return true;
 			},

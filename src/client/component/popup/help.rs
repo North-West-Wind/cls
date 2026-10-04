@@ -113,7 +113,7 @@ impl PopupHandleKey for HelpPopup {
 	fn handle_key(&mut self, client_state: &ClientState, event: KeyEvent) -> bool {
 		match event.code {
 			KeyCode::Char('q')|KeyCode::Esc => {
-				client_state.popup_manager.pop();
+				client_state.popup_manager.pop_defer();
 				return true
 			},
 			KeyCode::Left => self.prev_page(),

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, format, io, sync::Arc, thread, time::Duration, vec};
+use std::{collections::HashMap, format, io, sync::Arc, thread::{self, JoinHandle}, time::Duration, vec};
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode}};
 use indexmap::IndexMap;
@@ -132,16 +132,21 @@ impl From<Redrawer> for PopupManager {
 }
 
 impl PopupManager {
-	fn push(&self, popup: PopupComponent) {
+	fn push(&self, popup: PopupComponent) -> JoinHandle<()> {
 		let popups = self.popups.clone();
 		let redrawer = self.redrawer.clone();
 		thread::spawn(move || {
 			popups.lock().push(popup);
 			redrawer.notify();
-		});
+		})
 	}
 
 	fn pop(&self) {
+		self.popups.lock().pop();
+		self.redrawer.notify();
+	}
+
+	fn pop_defer(&self) {
 		let popups = self.popups.clone();
 		let redrawer = self.redrawer.clone();
 		thread::spawn(move || {

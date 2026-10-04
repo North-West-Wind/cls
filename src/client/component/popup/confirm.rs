@@ -39,8 +39,10 @@ impl PopupHandleKey for ConfirmPopup {
 			KeyCode::Char('y') => {
 				let callback = self.callback.clone();
 				let popups = client_state.popup_manager.clone();
-				thread::spawn(move || (callback)());
-				popups.pop();
+				thread::spawn(move || {
+					popups.pop();
+					(callback)();
+				});
 			},
 			_ => {
 				client_state.popup_manager.pop();

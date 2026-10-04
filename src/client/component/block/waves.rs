@@ -185,7 +185,11 @@ impl WavesBlock {
 	}
 
 	fn add_wave(&mut self, client_state: AtomicClientState) -> bool {
-		{ client_state.write().waves.push(ClientWave::default()); }
+		{
+			let mut client_state = client_state.write();
+			client_state.waves.push(ClientWave::default());
+			client_state.selected_wave = client_state.waves.len() - 1;
+		}
 		self.edit_wave(client_state)
 	}
 

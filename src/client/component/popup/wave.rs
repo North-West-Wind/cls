@@ -53,7 +53,7 @@ impl PopupRender for WavePopup {
 		}).collect::<Vec<_>>());
 
 		let area = f.area();
-		let width = lines.par_iter().map(|line| { line.width() as u16 }).sum::<u16>() + 4;
+		let width = lines.par_iter().map(|line| { line.width() as u16 }).max().unwrap() + 4;
 		let height = lines.len() as u16 + 2;
 
 		let popup_area = Rect {
@@ -199,8 +199,11 @@ impl WavePopup {
 	fn commit_changes(&self, client_state: &ClientState) -> bool {
 		let callback = self.on_commit.clone();
 		let wave = self.wave.clone();
-		thread::spawn(move || (callback)(wave));
-		client_state.popup_manager.pop();
+		let popups = client_state.popup_manager.clone();
+		thread::spawn(move || {
+			popups.pop();
+			(callback)(wave);
+		});
 		false
 	}
 

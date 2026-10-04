@@ -78,7 +78,7 @@ impl PopupRender for DialogPopup {
 				}));
 		}
 
-		let width = lines.par_iter().map(|line| { line.width() as u16 }).sum::<u16>() + 4;
+		let width = lines.par_iter().map(|line| { line.width() as u16 }).max().unwrap() + 4;
 		let height = lines.len() as u16 + 2;
 
 		let popup_area = Rect {
@@ -202,8 +202,11 @@ impl DialogPopup {
 	fn commit_changes(&self, client_state: &ClientState) -> bool {
 		let callback = self.on_commit.clone();
 		let dialog = self.dialog.clone();
-		thread::spawn(move || (callback)(dialog));
-		client_state.popup_manager.pop();
+		let popups = client_state.popup_manager.clone();
+		thread::spawn(move || {
+			popups.pop();
+			(callback)(dialog);
+		});
 		false
 	}
 

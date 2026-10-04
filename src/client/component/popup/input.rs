@@ -179,8 +179,11 @@ impl InputPopup {
 		if send {
 			let callback = self.callback.clone();
 			let value = self.input.value().to_string().clone();
-			thread::spawn(move || (callback)(&value));
-			client_state.popup_manager.pop();
+			let popup_manager = client_state.popup_manager.clone();
+			thread::spawn(move || {
+				popup_manager.pop();
+				(callback)(&value);
+			});
 		}
 		false
 	}
