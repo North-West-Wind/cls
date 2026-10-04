@@ -64,7 +64,7 @@ impl ServerWave {
 		Some(thread::spawn(move || {
 			playing.store(true, Ordering::Relaxed);
 			let mut buf = vec![0f32; sample_rate / 16];
-			while forced.load(Ordering::Relaxed) || keys.par_iter().all(|key| key.is_pressed()) {
+			while forced.load(Ordering::Relaxed) || !keys.is_empty() && keys.par_iter().all(|key| key.is_pressed()) {
 				for wave in playable.iter_mut() {
 					for ii in 0..buf.len() / 2 {
 						let sample = match wave.wave_type {

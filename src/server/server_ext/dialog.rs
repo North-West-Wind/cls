@@ -47,7 +47,7 @@ impl ServerDialog {
 		Some(thread::spawn(move || {
 			playing.store(true, Ordering::Relaxed);
 			let mut play_next = 0;
-			while forced.load(Ordering::Relaxed) || keys.par_iter().all(|key| { key.is_pressed() }) {
+			while forced.load(Ordering::Relaxed) || !keys.is_empty() && keys.par_iter().all(|key| { key.is_pressed() }) {
 				if random {
 					if play_next == 0 {
 						play_next = rand::thread_rng().gen_range(0..files.len());
