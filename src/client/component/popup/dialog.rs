@@ -65,19 +65,6 @@ impl PopupRender for DialogPopup {
 			})
 		}).collect::<Vec<_>>());
 
-		for ii in (page * page_size)..((page + 1) * page_size).min(self.dialog.files.len()) {
-			let mut file =  self.dialog.files[ii].clone();
-			if file.len() > max_width {
-				file = format!("{}...", file.substring(0, max_width - 3));
-			}
-			lines.push(Line::from(file)
-				.style(if self.selected == ii {
-					Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)
-				} else {
-					Style::default().fg(Color::Green)
-				}));
-		}
-
 		let width = lines.par_iter().map(|line| { line.width() as u16 }).max().unwrap() + 4;
 		let height = lines.len() as u16 + 2;
 
