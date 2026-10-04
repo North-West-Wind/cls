@@ -82,14 +82,14 @@ impl From<&SaveableWave> for Wave {
 	}
 }
 
-impl Into<SaveableWave> for Wave {
-	fn into(self) -> SaveableWave {
+impl Wave {
+	pub fn to_saveable(&self) -> SaveableWave {
 		SaveableWave {
 			uid: self.uid,
-			label: self.label,
+			label: self.label.clone(),
 			id: self.id,
 			keys: self.keys.par_iter().map(|key: &Keyboard| keyboard_to_string(*key)).collect::<HashSet<_>>(),
-			waves: self.waves,
+			waves: self.waves.clone(),
 			volume: self.volume
 		}
 	}

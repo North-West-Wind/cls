@@ -34,9 +34,9 @@ pub(self) struct ServerState {
 	dialogs: HashMap<u64, ServerDialog>,
 
 	// Hotkey map
-	file_keys: HashMap<KeyCombo, String>, // KeyCombo -> File path
-	wave_keys: HashMap<KeyCombo, u64>, // KeyCombo -> Waveform UUID
-	dialog_keys: HashMap<KeyCombo, u64>, // KeyCombo -> Dialog UUID
+	file_keys: HashMap<KeyCombo, HashSet<String>>, // KeyCombo -> File path
+	wave_keys: HashMap<KeyCombo, HashSet<u64>>, // KeyCombo -> Waveform UUID
+	dialog_keys: HashMap<KeyCombo, HashSet<u64>>, // KeyCombo -> Dialog UUID
 
 	// Hotkey
 	stopkey: KeyCombo,
@@ -51,7 +51,7 @@ impl ServerState {
 
 	fn apply_config(&mut self) {
 		let config = &self.config;
-		self.stopkey = KeyCombo::from(config.stop_key.clone());
+		self.stopkey = KeyCombo::from_strings(config.stop_key.clone());
 
 		// Clear all maps
 		self.waves.clear();
@@ -64,18 +64,26 @@ impl ServerState {
 		for (parent, map) in &config.files {
 			for (name, entry) in map {
 				let path = Path::new(&parent).join(name).to_str().unwrap().to_string();
-				let combo = KeyCombo::from(entry.keys.clone());
+				let combo = KeyCombo::from_strings(entry.keys.clone());
 				if !combo.is_empty() && !combo.is_partial() {
-					self.file_keys.insert(combo, path.clone());
+					if let Some(list) = self.file_keys.get_mut(&combo) {
+						list.insert(path.clone());
+					} else {
+						self.file_keys.insert(combo, HashSet::from_iter(vec![path.clone()]));
+					}
 				}
 			}
 		}
 
 		// Load wave hotkeys and IDs
 		config.waves.iter().for_each(|wave| {
-			let combo = KeyCombo::from(wave.keys.clone());
+			let combo = KeyCombo::from_strings(wave.keys.clone());
 			if !combo.is_empty() && !combo.is_partial() {
-				self.wave_keys.insert(combo, wave.uid);
+				if let Some(list) = self.wave_keys.get_mut(&combo) {
+					list.insert(wave.uid);
+				} else {
+					self.wave_keys.insert(combo, HashSet::from_iter(vec![wave.uid]));
+				}
 			}
 			let wave = ServerWave::from(Wave::from(wave));
 			self.waves.insert(wave.base.uid, wave);
@@ -83,9 +91,13 @@ impl ServerState {
 
 		// Load dialog hotkeys and IDs
 		config.dialogs.iter().for_each(|dialog| {
-			let combo = KeyCombo::from(dialog.keys.clone());
+			let combo = KeyCombo::from_strings(dialog.keys.clone());
 			if !combo.is_empty() {
-				self.dialog_keys.insert(combo, dialog.uid);
+				if let Some(list) = self.dialog_keys.get_mut(&combo) {
+					list.insert(dialog.uid);
+				} else {
+					self.dialog_keys.insert(combo, HashSet::from_iter(vec![dialog.uid]));
+				}
 			}
 			let dialog = ServerDialog::from(Dialog::from(dialog));
 			self.dialogs.insert(dialog.base.uid, dialog);
@@ -210,57 +222,66 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 			new_combos.push(new_combo);
 		}
 		new_combos.iter().for_each(|combo| { combos.insert(combo.clone()); });
-		combos.insert(KeyCombo::from(vec![key]));
+		combos.insert(KeyCombo::from_keyboards(vec![key]));
 
 		let server_state_combo = server_state_mki.clone();
 		combos.par_iter().for_each(|combo| {
 			let server_state = server_state_combo.read();
 			// File hotkey
 			if server_state.file_keys.contains_key(combo) {
-				let server_event = server_event_mki.clone();
-				let path = server_state.file_keys.get(combo).unwrap().clone();
-				let file = ServerFile::new(path.clone(), &server_state);
-				let server_state = server_state_combo.clone();
-				let id = id_mki.next();
-				thread::spawn(move || {
-					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(0, id, Path::new(&path).file_name().unwrap().to_str().unwrap().to_string())));
-					let thread = file.play(&mut server_state.write());
-					if let Some(thread) = thread {
-						let _ = thread.join();
-					}
-					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
+				server_state.file_keys.get(combo).unwrap().iter().cloned().for_each(|path| {
+					let file = ServerFile::new(path.clone(), &server_state);
+					let server_event = server_event_mki.clone();
+					let server_state = server_state_combo.clone();
+					let id = id_mki.next();
+					thread::spawn(move || {
+						let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(0, id, Path::new(&path).file_name().unwrap().to_str().unwrap().to_string())));
+						let thread = file.play(&mut server_state.write());
+						if let Some(thread) = thread {
+							let _ = thread.join();
+						}
+						let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
+					});
 				});
 			}
 
 			// Wave hotkey
-			if let Some(uid) = server_state.wave_keys.get(combo) && let Some(wave) = server_state.waves.get(uid) && !wave.playing.load(Ordering::Relaxed) {
-				let wave = wave.clone();
-				let server_state = server_state_combo.clone();
-				let server_event = server_event_mki.clone();
-				let id = id_mki.next();
-				thread::spawn(move || {
-					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(1, id, wave.base.label.clone())));
-					let thread = wave.play(server_state);
-					if let Some(thread) = thread {
-						let _ = thread.join();
+			if let Some(waves) = server_state.wave_keys.get(combo) {
+				waves.iter().for_each(|uid| {
+					if let Some(wave) = server_state.waves.get(uid) && !wave.playing.load(Ordering::Relaxed) {
+						let wave = wave.clone();
+						let server_state = server_state_combo.clone();
+						let server_event = server_event_mki.clone();
+						let id = id_mki.next();
+						thread::spawn(move || {
+							let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(1, id, wave.base.label.clone())));
+							let thread = wave.play(server_state);
+							if let Some(thread) = thread {
+								let _ = thread.join();
+							}
+							let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
+						});
 					}
-					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
 				});
 			}
 
 			// Dialog hotkey
-			if let Some(uid) = server_state.dialog_keys.get(combo) && let Some(dialog) = server_state.dialogs.get(uid) && !dialog.playing.load(Ordering::Relaxed) {
-				let dialog = dialog.clone();
-				let server_state = server_state_combo.clone();
-				let server_event = server_event_mki.clone();
-				let id = id_mki.next();
-				thread::spawn(move || {
-					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(2, id, dialog.base.label.clone())));
-					let thread = dialog.play(server_state);
-					if let Some(thread) = thread {
-						let _ = thread.join();
+			if let Some(dialogs) = server_state.dialog_keys.get(combo) {
+				dialogs.iter().for_each(|uid| {
+					if let Some(dialog) = server_state.dialogs.get(uid) && !dialog.playing.load(Ordering::Relaxed) {
+						let dialog = dialog.clone();
+						let server_state = server_state_combo.clone();
+						let server_event = server_event_mki.clone();
+						let id = id_mki.next();
+						thread::spawn(move || {
+							let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(2, id, dialog.base.label.clone())));
+							let thread = dialog.play(server_state);
+							if let Some(thread) = thread {
+								let _ = thread.join();
+							}
+							let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
+						});
 					}
-					let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
 				});
 			}
 
@@ -367,7 +388,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 							if let Ok(entries) = read_dir(Path::new(tab)) {
 								entries.into_iter().par_bridge().filter_map(|entry| {
 									if let Ok(entry) = entry {
-										let path = entry.path().canonicalize().unwrap();
+										let path = entry.path();
 										if !path.is_dir() && let Some(score) = matcher.fuzzy_match(path.file_name().unwrap().to_str().unwrap(), &query) {
 											return Some((score, format!("{}", path.to_str().unwrap())))
 										}
@@ -431,6 +452,152 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 								msg.push_back(&encode_s2c(Error(format!("Dialog with ID {} not found", uid))));
 							}
 						}
+					},
+					SetLoopback(id, new) => {
+						let mut server_state = server_state.write();
+						match server_state.pa_modules.get(&id) {
+							Some((old, module_num)) => {
+								if *old == new {
+									msg.push_back(&encode_s2c(Error(format!("Loopback {} is already set to {} ({})", id, old, module_num))));
+								} else {
+									let _ = unload_module(module_num);
+									if !new.is_empty() {
+										server_state.pa_modules.insert(id, (new.clone(), loopback(&new)));
+									}
+									msg.push_back(&encode_s2c(Success));
+								}
+							},
+							None => {
+								if !new.is_empty() {
+									server_state.pa_modules.insert(id, (new.clone(), loopback(&new)));
+								}
+								msg.push_back(&encode_s2c(Success));
+							}
+						}
+					},
+					SetSinkVolume(volume) => {
+						server_state.write().config.volume = volume;
+						msg.push_back(&encode_s2c(Success));
+					},
+					SetFile(path, file) => {
+						let pathed = Path::new(&path);
+						let parent = pathed.parent().unwrap().to_str().unwrap().to_string();
+						let name = pathed.file_name().unwrap().to_os_string().into_string().unwrap();
+						let new_combo = KeyCombo::from_strings(file.keys.clone());
+
+						let mut server_state = server_state.write();
+						let old_combo = if let Some(files) = server_state.config.files.get_mut(&parent) {
+							let old_combo = if let Some(old) = files.get_mut(&name) {
+								let combo = KeyCombo::from_strings(old.keys.clone());
+								*old = file;
+								Some(combo)
+							} else {
+								files.insert(name, file);
+								None
+							};
+							msg.push_back(&encode_s2c(Success));
+							old_combo
+						} else {
+							msg.push_back(&encode_s2c(Error(format!("File isn't included in any tab"))));
+							None
+						};
+
+						// Replace key combo
+						if let Some(old_combo) = old_combo && let Some(list) = server_state.file_keys.get_mut(&old_combo) {
+							list.remove(&path);
+						}
+						if !new_combo.is_empty() {
+							if let Some(list) = server_state.file_keys.get_mut(&new_combo) {
+								list.insert(path.clone());
+							} else {
+								server_state.file_keys.insert(new_combo, HashSet::from_iter(vec![path.clone()]));
+							}
+						}
+					},
+					SetWave(uid, wave) => {
+						let new_combo = KeyCombo::from_strings(wave.keys.clone());
+						let mut server_state = server_state.write();
+						let old_combo = 
+						if let Some(server_wave) = server_state.waves.get_mut(&uid) {
+							// Replace existing wave
+							let combo = KeyCombo::from_keyboards(server_wave.base.keys.clone());
+							server_wave.base = Wave::from(&wave);
+							Some(combo)
+						} else {
+							// Create new wave
+							server_state.waves.insert(uid, ServerWave::from(Wave::from(&wave)));
+							None
+						};
+						// Replace key combo
+						if let Some(old_combo) = old_combo && let Some(list) = server_state.wave_keys.get_mut(&old_combo) {
+							list.remove(&uid);
+						}
+						if !new_combo.is_empty() {
+							if let Some(list) = server_state.wave_keys.get_mut(&new_combo) {
+								list.insert(uid);
+							} else {
+								server_state.wave_keys.insert(new_combo, HashSet::from_iter(vec![uid]));
+							}
+						}
+						msg.push_back(&encode_s2c(Success));
+					},
+					SetDialog(uid, dialog) => {
+						let new_combo = KeyCombo::from_strings(dialog.keys.clone());
+						let mut server_state = server_state.write();
+						let old_combo = if let Some(server_dialog) = server_state.dialogs.get_mut(&uid) {
+							// Replace existing dialog
+							let combo = KeyCombo::from_keyboards(server_dialog.base.keys.clone());
+							server_dialog.base = Dialog::from(&dialog);
+							Some(combo)
+						} else {
+							// Create new dialog
+							server_state.dialogs.insert(uid, ServerDialog::from(Dialog::from(&dialog)));
+							None
+						};
+						// Replace key combo
+						if let Some(old_combo) = old_combo && let Some(list) = server_state.dialog_keys.get_mut(&old_combo) {
+							list.remove(&uid);
+						}
+						if !new_combo.is_empty() {
+							if let Some(list) = server_state.dialog_keys.get_mut(&new_combo) {
+								list.insert(uid);
+							} else {
+								server_state.dialog_keys.insert(new_combo, HashSet::from_iter(vec![uid]));
+							}
+						}
+						msg.push_back(&encode_s2c(Success));
+					},
+					DeleteWave(uid) => {
+						let mut server_state = server_state.write();
+						if let Some(wave) = server_state.waves.remove(&uid) {
+							let combo = KeyCombo::from_keyboards(wave.base.keys);
+							if let Some(list) = server_state.wave_keys.get_mut(&combo) {
+								list.remove(&uid);
+							}
+							msg.push_back(&encode_s2c(Success));
+						} else {
+							msg.push_back(&encode_s2c(Error(format!("Wave with UID {} not found", uid))));
+						}
+					},
+					DeleteDialog(uid) => {
+						let mut server_state = server_state.write();
+						if let Some(dialog) = server_state.dialogs.remove(&uid) {
+							let combo = KeyCombo::from_keyboards(dialog.base.keys);
+							if let Some(list) = server_state.dialog_keys.get_mut(&combo) {
+								list.remove(&uid);
+							}
+							msg.push_back(&encode_s2c(Success));
+						} else {
+							msg.push_back(&encode_s2c(Error(format!("Dialog with UID {} not found", uid))));
+						}
+					},
+					SetStopKey(keys) => {
+						server_state.write().stopkey = KeyCombo::from_strings(keys);
+						msg.push_back(&encode_s2c(Success));
+					},
+					SetPlaylistMode(enabled) => {
+						server_state.write().config.playlist_mode = enabled;
+						msg.push_back(&encode_s2c(Success));
 					},
 				}
 				let msg_type = msg[0];

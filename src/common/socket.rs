@@ -1,6 +1,9 @@
 use std::{fmt::{self, Debug, Display}, vec, write};
 
 use nng::Message;
+use serde::Serialize;
+
+use crate::common::base::{dialog::SaveableDialog, file::SaveableFile, wave::SaveableWave};
 
 #[derive(Clone)]
 struct UnknownMsgTypeError {
@@ -40,6 +43,17 @@ pub enum ClientToServer {
 	StopFiles,
 	StopWave(u64),
 	StopDialog(u64),
+
+	// Starts from 21
+	SetLoopback(u8, String),
+	SetSinkVolume(u32),
+	SetFile(String, SaveableFile),
+	SetWave(u64, SaveableWave),
+	SetDialog(u64, SaveableDialog),
+	DeleteWave(u64),
+	DeleteDialog(u64),
+	SetStopKey(Vec<String>),
+	SetPlaylistMode(bool),
 }
 
 pub enum ServerToClient {
@@ -83,6 +97,49 @@ pub fn decode_c2s(msg: &mut Message) -> Result<ClientToServer, Box<dyn std::erro
 			let id = u64::from_be_bytes(msg[1..].try_into()?);
 			Ok(StopDialog(id))
 		},
+		21 => {
+			let loopback = String::from_utf8(msg[2..].try_into()?)?;
+			Ok(SetLoopback(msg[1], loopback))
+		},
+		22 => {
+			let volume = u32::from_be_bytes(msg[1..].try_into()?);
+			Ok(SetSinkVolume(volume))
+		},
+		23 => {
+			let path_length = u32::from_be_bytes(msg[1..5].try_into()?) as usize;
+			let path = String::from_utf8(msg[5..(path_length + 5)].try_into()?)?;
+			let file = rmp_serde::from_slice(&msg[(path_length + 5)..])?;
+			Ok(SetFile(path, file))
+		},
+		24 => {
+			let uid = u64::from_be_bytes(msg[1..9].try_into()?);
+			let wave = rmp_serde::from_slice(&msg[9..])?;
+			Ok(SetWave(uid, wave))
+		},
+		25 => {
+			let uid = u64::from_be_bytes(msg[1..9].try_into()?);
+			let dialog = rmp_serde::from_slice(&msg[9..])?;
+			Ok(SetDialog(uid, dialog))
+		},
+		26 => {
+			let id = u64::from_be_bytes(msg[1..].try_into()?);
+			Ok(DeleteWave(id))
+		},
+		27 => {
+			let id = u64::from_be_bytes(msg[1..].try_into()?);
+			Ok(DeleteDialog(id))
+		},
+		28 => {
+			let mut offset = 5;
+			let mut keys = vec![];
+			for _ in 0..u32::from_be_bytes(msg[1..5].try_into()?) as usize {
+				let len = u32::from_be_bytes(msg[offset..(offset + 4)].try_into()?) as usize;
+				keys.push(String::from_utf8(msg[(offset + 4)..(offset + 4 + len)].try_into()?)?);
+				offset += 4 + len;
+			}
+			Ok(SetStopKey(keys))
+		},
+		29 => Ok(SetPlaylistMode(msg[1] != 0)),
 		_ => Err(UnknownMsgTypeError::new(msg[0]))
 	}?;
 	msg.clear();
@@ -148,7 +205,66 @@ pub fn encode_c2s(request: ClientToServer) -> Vec<u8> {
 			let mut buf = vec![17u8];
 			buf.extend(uid.to_be_bytes());
 			buf
-		}
+		},
+		SetLoopback(id, loopback) => {
+			let mut buf = vec![21u8, id];
+			buf.extend_from_slice(loopback.as_bytes());
+			buf
+		},
+		SetSinkVolume(volume) => {
+			let mut buf = vec![22u8];
+			buf.extend(volume.to_be_bytes());
+			buf
+		},
+		SetFile(path, file) => {
+			let mut buf = vec![23u8];
+			let path_bytes = path.as_bytes();
+			buf.extend((path_bytes.len() as u32).to_be_bytes());
+			buf.extend_from_slice(path.as_bytes());
+			let mut serialized = vec![];
+			file.serialize(&mut rmp_serde::Serializer::new(&mut serialized)).unwrap();
+			buf.extend(serialized);
+			buf
+		},
+		SetWave(uid, wave) => {
+			let mut buf = vec![24u8];
+			buf.extend(uid.to_be_bytes());
+			let mut serialized = vec![];
+			wave.serialize(&mut rmp_serde::Serializer::new(&mut serialized)).unwrap();
+			buf.extend(serialized);
+			buf
+		},
+		SetDialog(uid, dialog) => {
+			let mut buf = vec![25u8];
+			buf.extend(uid.to_be_bytes());
+			let mut serialized = vec![];
+			dialog.serialize(&mut rmp_serde::Serializer::new(&mut serialized)).unwrap();
+			buf.extend(serialized);
+			buf
+		},
+		DeleteWave(uid) => {
+			let mut buf = vec![26u8];
+			buf.extend(uid.to_be_bytes());
+			buf
+		},
+		DeleteDialog(uid) => {
+			let mut buf = vec![27u8];
+			buf.extend(uid.to_be_bytes());
+			buf
+		},
+		SetStopKey(keys) => {
+			let mut buf = vec![28u8];
+			buf.extend((keys.len() as u32).to_be_bytes());
+			keys.iter().for_each(|key| {
+				let key_bytes = key.as_bytes();
+				buf.extend((key_bytes.len() as u32).to_be_bytes());
+				buf.extend_from_slice(key_bytes);
+			});
+			buf
+		},
+		SetPlaylistMode(enabled) => {
+			vec![29u8, if enabled { 1 } else { 0 }]
+		},
 	}
 }
 

@@ -8,7 +8,6 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use indexmap::IndexMap;
 use normpath::PathExt;
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 #[derive(Default)]
 pub struct TabsBlock {
@@ -17,7 +16,7 @@ pub struct TabsBlock {
 
 impl BlockRenderArea for TabsBlock {
 	fn render_area(&mut self, client_state: &ClientState, f: &mut Frame, area: Rect) {
-		let spans = client_state.file_tabs.par_iter().enumerate().map(|(ii, (tab, _))| {
+		let spans = client_state.file_tabs.keys().enumerate().map(|(ii, tab)| {
 			let path = Path::new(tab);
 			let basename = path.file_name();
 			let str = basename.unwrap().to_str().unwrap().to_string();
@@ -90,7 +89,7 @@ impl TabsBlock {
 			popup_manager.push(PopupComponent::Confirm(ConfirmPopup::new("Delete tab?", "delete", move || {
 				let mut client_state = client_state.write();
 				let selected = client_state.selected_tab;
-				client_state.file_tabs.remove(selected);
+				client_state.file_tabs.shift_remove_index(selected);
 				let length = client_state.file_tabs.len();
 				if selected >= length && length != 0 {
 					client_state.selected_tab = length - 1;
@@ -108,7 +107,7 @@ impl TabsBlock {
 		let new_selected = loop_index(selected, delta, client_state.file_tabs.len());
 		if selected != new_selected {
 			if modify {
-				client_state.file_tabs.swap(selected, new_selected as usize);
+				client_state.file_tabs.swap_indices(selected, new_selected);
 			}
 			client_state.selected_tab = new_selected as usize;
 			client_state.selected_file = 0;
@@ -122,7 +121,7 @@ impl TabsBlock {
 			let Ok(norm) = Path::new(value).normalize() else { return; };
 			let index = {
 				let mut client_state = client_state.write();
-				client_state.file_tabs.push((norm.clone().into_os_string().into_string().unwrap(), IndexMap::new()));
+				client_state.file_tabs.insert(norm.clone().into_os_string().into_string().unwrap(), IndexMap::new());
 				client_state.selected_tab = client_state.file_tabs.len() - 1;
 				client_state.selected_tab
 			};

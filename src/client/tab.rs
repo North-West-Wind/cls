@@ -40,8 +40,8 @@ fn ffmpeg_duration(path: &str) -> Option<u128> {
 fn add_duration(client_state: AtomicClientState, tab: String) {
 	let files = {
 		let client_state = client_state.read();
-		let Some((_, files)) = client_state.file_tabs.iter().find(|(key, _)| *key == tab).cloned() else { return; };
-		files
+		let Some(files) = client_state.file_tabs.get(&tab) else { return; };
+		files.clone()
 	};
 	let mut new_files = IndexMap::new();
 	for (filename, info) in files {
@@ -89,7 +89,7 @@ fn add_duration(client_state: AtomicClientState, tab: String) {
 		new_files.insert(filename.clone(), info);
 	}
 	let mut client_state = client_state.write();
-	if let Some((_, files)) = client_state.file_tabs.iter_mut().find(|(key, _)| *key == tab) {
+	if let Some(files) = client_state.file_tabs.get_mut(&tab) {
 		*files = new_files;
 		client_state.redrawer.notify();
 	}
@@ -98,12 +98,13 @@ fn add_duration(client_state: AtomicClientState, tab: String) {
 fn scan_tab(atomic_client_state: AtomicClientState, index: usize) -> Result<(), Box<dyn std::error::Error>> {
 	let client_state = atomic_client_state.clone();
 	let client_state = client_state.read();
-	let tabs = &client_state.file_tabs;
 	let fast_scan = client_state.config.fast_scan;
-	if index >= tabs.len() {
+	if index >= client_state.file_tabs.len() {
 		return Ok(());
 	}
-	let (tab, old_files) = tabs[index].clone();
+	let (tab, old_files) = client_state.file_tabs.get_index(index).unwrap();
+	let tab = tab.clone();
+	let old_files = old_files.clone();
 	drop(client_state);
 	let mut files = IndexMap::new();
 	let path = Path::new(tab.as_str());
@@ -129,7 +130,7 @@ fn scan_tab(atomic_client_state: AtomicClientState, index: usize) -> Result<(), 
 			}
 		}
 		files.sort_keys();
-		atomic_client_state.write().file_tabs[index] = (tab.clone(), files);
+		atomic_client_state.write().file_tabs[index] = files;
 		add_duration(atomic_client_state, tab.clone());
 	}
 	Ok(())

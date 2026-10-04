@@ -1,9 +1,9 @@
-use std::{cmp::max, collections::HashSet};
+use std::{cmp::max, collections::HashSet, vec};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Padding, Paragraph}, Frame};
 use substring::Substring;
 
-use crate::{client::{AtomicClientState, ClientState, component::{block::BlockNavigation, popup::{PopupComponent, input::{FLAG_NONE, InputPopup}, key_bind::KeyBindPopup}}}, common::keyboard::keyboard_to_string};
+use crate::{client::{AtomicClientState, ClientState, component::{block::BlockNavigation, popup::{PopupComponent, input::{FLAG_NONE, InputPopup}, key_bind::KeyBindPopup}}}, common::{keyboard::keyboard_to_string, socket::ClientToServer}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -119,6 +119,7 @@ impl SettingsBlock {
 				client_state.clone().read().popup_manager.push(PopupComponent::KeyBind(KeyBindPopup::new(HashSet::new(), move |keys| {
 					let mut client_state = client_state.write();
 					client_state.config.stop_key = keys.iter().map(|key| keyboard_to_string(*key)).collect();
+					client_state.request(ClientToServer::SetStopKey(client_state.config.stop_key.iter().cloned().collect()));
 				})));
 				true
 			},
@@ -126,6 +127,7 @@ impl SettingsBlock {
 			1 => {
 				let mut client_state = client_state.write();
 				client_state.config.loopback_default = !client_state.config.loopback_default;
+				client_state.request(ClientToServer::SetLoopback(1, if client_state.config.loopback_default { "@DEFAULT_SINK@" } else { "" }.to_string()));
 				true
 			},
 			// Additional loopback
@@ -136,8 +138,10 @@ impl SettingsBlock {
 					let loopback = value.to_string();
 					if selected == 2 {
 						client_state.config.loopback_1 = loopback.clone();
+						client_state.request(ClientToServer::SetLoopback(2, loopback.clone()));
 					} else {
 						client_state.config.loopback_2 = loopback.clone();
+						client_state.request(ClientToServer::SetLoopback(3, loopback.clone()));
 					}
 				})));
 				true
@@ -146,6 +150,7 @@ impl SettingsBlock {
 			4 => {
 				let mut client_state = client_state.write();
 				client_state.config.playlist_mode = !client_state.config.playlist_mode;
+				client_state.request(ClientToServer::SetPlaylistMode(client_state.config.playlist_mode));
 				true
 			},
 			// Fast scan toggle
@@ -163,22 +168,27 @@ impl SettingsBlock {
 		match self.selected {
 			0 => {
 				client_state.config.stop_key.clear();
+				client_state.request(ClientToServer::SetStopKey(vec![]));
 				true
 			},
 			1 => {
 				client_state.config.loopback_default = true;
+				client_state.request(ClientToServer::SetLoopback(1, "@DEFAULT_SINK@".to_string()));
 				true
 			},
 			2 => {
 				client_state.config.loopback_1 = String::new();
+				client_state.request(ClientToServer::SetLoopback(2, "".to_string()));
 				true
 			},
 			3 => {
 				client_state.config.loopback_2 = String::new();
+				client_state.request(ClientToServer::SetLoopback(3, "".to_string()));
 				true
 			},
 			4 => {
 				client_state.config.playlist_mode = false;
+				client_state.request(ClientToServer::SetPlaylistMode(false));
 				true
 			},
 			5 => {

@@ -175,7 +175,7 @@ pub(self) struct ClientState {
 	dirty: bool,
 
 	// Transformed from config
-	file_tabs: Vec<(String, IndexMap<String, ClientFile>)>, // (tab path, (file name, file info)[])
+	file_tabs: IndexMap<String, IndexMap<String, ClientFile>>, // tab path -> (file name -> file info)
 	dialogs: Vec<Dialog>,
 	waves: Vec<ClientWave>,
 
@@ -221,20 +221,17 @@ impl ClientState {
 	fn save_config(&mut self) {
 		self.config.files.clear();
 		self.file_tabs.iter().for_each(|(tab, files)| {
-			let mut config_files = HashMap::new();
+			let mut config_files = IndexMap::new();
 			files.iter().for_each(|(name, file)| {
 				config_files.insert(name.clone(), file.base.clone());
 			});
 			self.config.files.insert(tab.clone(), config_files);
 		});
 
-		self.config.waves = self.waves.iter().map(|wave| wave.base.clone().into()).collect();
-		self.config.dialogs = self.dialogs.iter().map(|dialog| dialog.clone().into()).collect();
+		self.config.waves = self.waves.iter().map(|wave| wave.base.to_saveable()).collect();
+		self.config.dialogs = self.dialogs.iter().map(|dialog| dialog.to_saveable()).collect();
 
 		config::save(&self.config);
-
-		// Reload server
-		self.request(ClientToServer::Reload);
 	}
 
 	fn request(&self, request: ClientToServer) -> bool {
@@ -280,20 +277,6 @@ impl ClientState {
 			BorderType::Rounded
 		};
 		(border_type, style)
-	}
-
-	fn get_file(&self) -> Option<(String, String, ClientFile)> {
-		if self.selected_tab >= self.file_tabs.len() {
-			return None;
-		}
-		let (tab, files) = &self.file_tabs[self.selected_tab];
-		if self.selected_file >= files.len() {
-			return None;
-		}
-		let mut files = files.iter().map(|(name, info)| (name, info)).collect::<Vec<_>>();
-		files.sort_by(|(a, _), (b, _)| a.cmp(b));
-		let (name, info) = files[self.selected_file];
-		return Some((tab.clone(), name.clone(), info.clone()));
 	}
 
 	fn exit(&mut self) {
@@ -344,7 +327,7 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 		settings_opened: false,
 		main_opened: MainOpened::File,
 		scanning: Scanning::None,
-		file_tabs: vec![],
+		file_tabs: IndexMap::new(),
 		dialogs: vec![],
 		waves: vec![],
 		playing: HashMap::new(),

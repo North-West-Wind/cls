@@ -187,7 +187,9 @@ impl WavesBlock {
 	fn add_wave(&mut self, client_state: AtomicClientState) -> bool {
 		{
 			let mut client_state = client_state.write();
-			client_state.waves.push(ClientWave::default());
+			let wave = ClientWave::default();
+			client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.to_saveable()));
+			client_state.waves.push(wave);
 			client_state.selected_wave = client_state.waves.len() - 1;
 		}
 		self.edit_wave(client_state)
@@ -200,6 +202,7 @@ impl WavesBlock {
 		};
 		popup_manager.push(PopupComponent::Wave(WavePopup::new(wave, move |wave| {
 			let mut client_state = client_state.write();
+			client_state.request(ClientToServer::SetWave(wave.uid, wave.to_saveable()));
 			client_state.waves[selected].base = wave;
 		})));
 		true
@@ -214,6 +217,8 @@ impl WavesBlock {
 			let name = value.to_string();
 			let mut client_state = client_state.write();
 			client_state.waves[selected].base.label = name;
+			let wave = &client_state.waves[selected];
+			client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.to_saveable()));
 		})));
 		true
 	}
@@ -222,11 +227,12 @@ impl WavesBlock {
 		client_state.clone().read().popup_manager.push(PopupComponent::Confirm(ConfirmPopup::new("Delete wave?", "delete", move || {
 			let mut client_state = client_state.write();
 			let selected = client_state.selected_wave;
-			client_state.waves.remove(selected);
+			let wave = client_state.waves.remove(selected);
 			let len = client_state.waves.len();
 			if selected >= len && len != 0 {
 				client_state.selected_wave = len - 1;
 			}
+			client_state.request(ClientToServer::DeleteWave(wave.base.uid));
 		})));
 		true
 	}
@@ -235,6 +241,7 @@ impl WavesBlock {
 		{
 			let mut client_state = client_state.write();
 			let wave = client_state.waves[client_state.selected_wave].clone();
+			client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.to_saveable()));
 			client_state.waves.push(wave);
 			client_state.selected_wave = client_state.waves.len() - 1;
 		}
@@ -249,6 +256,8 @@ impl WavesBlock {
 		popup_manager.push(PopupComponent::KeyBind(KeyBindPopup::new(recorded, move |keys| {
 			let mut client_state = client_state.write();
 			client_state.waves[selected].base.keys = keys;
+			let wave = &client_state.waves[selected];
+			client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.to_saveable()));
 		})));
 		true
 	}
@@ -257,6 +266,8 @@ impl WavesBlock {
 		let mut client_state = client_state.write();
 		let selected = client_state.selected_wave;
 		client_state.waves[selected].base.keys.clear();
+		let wave = &client_state.waves[selected];
+		client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.to_saveable()));
 		true
 	}
 
@@ -272,6 +283,8 @@ impl WavesBlock {
 			let Ok(id) = u32::from_str_radix(value, 10) else { return; };
 			let mut client_state = client_state.write();
 			client_state.waves[selected].base.id = Some(id);
+			let wave = &client_state.waves[selected];
+			client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.to_saveable()));
 		})));
 		true
 	}
@@ -280,6 +293,8 @@ impl WavesBlock {
 		let mut client_state = client_state.write();
 		let selected = client_state.selected_wave;
 		client_state.waves[selected].base.id = None;
+		let wave = &client_state.waves[selected];
+		client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.to_saveable()));
 		true
 	}
 }

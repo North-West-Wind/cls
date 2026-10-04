@@ -28,9 +28,10 @@ impl Debug for KeyCombo {
 	}
 }
 
-impl From<Vec<String>> for KeyCombo {
-	fn from(keys: Vec<String>) -> Self {
-		let unique: HashSet<String> = HashSet::from_iter(keys.iter().cloned());
+impl KeyCombo {
+	pub fn from_strings<I, S>(keys: I) -> Self
+	where I: IntoIterator<Item = S>, S: Into<String> {
+		let unique: HashSet<String> = HashSet::from_iter(keys.into_iter().map(|s| s.into()));
 		let keys = unique.iter().filter_map(|key| string_to_keyboard(key)).collect::<Vec<_>>();
 		let mut parsed = IndexSet::from_iter(keys.iter().cloned());
 		let partial = parsed.len() != unique.len();
@@ -42,11 +43,10 @@ impl From<Vec<String>> for KeyCombo {
 			partial
 		}
 	}
-}
 
-impl From<Vec<Keyboard>> for KeyCombo {
-	fn from(keys: Vec<Keyboard>) -> Self {
-		let mut keys = IndexSet::from_iter(keys.iter().cloned());
+	pub fn from_keyboards<I, S>(keys: I) -> Self
+	where I: IntoIterator<Item = S>, S: Into<Keyboard> {
+		let mut keys = IndexSet::from_iter(keys.into_iter().map(|s| s.into()));
 		keys.sort_by(|a, b| a.cmp(b));
 
 		Self {
@@ -54,21 +54,7 @@ impl From<Vec<Keyboard>> for KeyCombo {
 			partial: false
 		}
 	}
-}
 
-impl From<HashSet<String>> for KeyCombo {
-	fn from(keys: HashSet<String>) -> Self {
-		Self::from(keys.into_iter().collect::<Vec<_>>())
-	}
-}
-
-impl From<HashSet<Keyboard>> for KeyCombo {
-	fn from(keys: HashSet<Keyboard>) -> Self {
-		Self::from(keys.into_iter().collect::<Vec<_>>())
-	}
-}
-
-impl KeyCombo {
 	pub fn is_empty(&self) -> bool {
 		self.keys.is_empty()
 	}
@@ -80,7 +66,7 @@ impl KeyCombo {
 	pub fn add_key(&self, key: Keyboard) -> Self {
 		let mut keys = self.keys.iter().map(|key| *key).collect::<Vec<_>>();
 		keys.push(key);
-		Self::from(keys)
+		Self::from_keyboards(keys)
 	}
 
 	pub fn active(&self) -> bool {

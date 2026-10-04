@@ -1,4 +1,4 @@
-use std::{cmp::{max, min}, i32, path::Path, vec};
+use std::{cmp::{max, min}, collections::HashSet, i32, path::Path, vec};
 
 use crate::{client::{AtomicClientState, ClientState, Scanning, component::{block::{BlockNavigation, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, input::{FLAG_INT, InputPopup}, key_bind::KeyBindPopup}}, tab::scan}, common::{keyboard::{keyboard_to_string, string_to_keyboard}, socket::ClientToServer}};
 
@@ -38,61 +38,61 @@ impl BlockRenderArea for FilesBlock {
 			self.range = (0, area.height as i32 - 5);
 			self.height = area.height;
 		}
-		let paragraph: Paragraph;
-		if client_state.file_tabs.len() == 0 {
-			paragraph = Paragraph::new("Add a tab to get started :>").wrap(Wrap { trim: false });
-		} else {
-			let (_, files) = &client_state.file_tabs[client_state.selected_tab];
-			paragraph = if files.len() == 0 {
-					if client_state.scanning == Scanning::All {
-						Paragraph::new("Performing initial scan...").wrap(Wrap { trim: false })
-					} else if client_state.scanning == Scanning::One(client_state.selected_tab) {
-						Paragraph::new("Scanning this directory...\nComeback later :>").wrap(Wrap { trim: false })
-					} else {
-						Paragraph::new("There are no playable files in this directory :<").wrap(Wrap { trim: false })
-					}
+		let paragraph = if client_state.file_tabs.len() == 0 {
+			Paragraph::new("Add a tab to get started :>").wrap(Wrap { trim: false })
+		} else if let Some((_, files)) = client_state.file_tabs.get_index(client_state.selected_tab) {
+			if files.len() == 0 {
+				if client_state.scanning == Scanning::All {
+					Paragraph::new("Performing initial scan...").wrap(Wrap { trim: false })
+				} else if client_state.scanning == Scanning::One(client_state.selected_tab) {
+					Paragraph::new("Scanning this directory...\nComeback later :>").wrap(Wrap { trim: false })
 				} else {
-					let lines = files.iter().enumerate().map(|(ii, (file, info))| {
-						let mut spans = vec![];
-						spans.push(info.base.id.map_or(Span::from(" "), |_| { Span::from("I").style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)) }));
-						if info.base.keys.is_empty() {
-							spans.push(Span::from(" "));
-						} else {
-							spans.push(Span::from("K").style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
-						}
+					Paragraph::new("There are no playable files in this directory :<").wrap(Wrap { trim: false })
+				}
+			} else {
+				let lines = files.iter().enumerate().map(|(ii, (file, info))| {
+					let mut spans = vec![];
+					spans.push(info.base.id.map_or(Span::from(" "), |_| { Span::from("I").style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)) }));
+					if info.base.keys.is_empty() {
 						spans.push(Span::from(" "));
-						let style = if info.duration.is_empty() {
-							let tmp = Style::default().fg(Color::Red);
-							if client_state.selected_file == ii {
-								tmp.add_modifier(Modifier::REVERSED)
-							} else {
-								tmp
-							}
-						} else if client_state.selected_file == ii {
-							Style::default().fg(Color::LightBlue)
-							.add_modifier(Modifier::REVERSED)
-						} else {
-							Style::default().fg(Color::Cyan)
-						};
-						let extra: usize = spans.par_iter().map(|span| { span.width() }).sum();
-						if file.len() + info.duration.len() + extra as usize > area.width as usize - 6 {
-							spans.push(Span::from(file.substring(0, max(0, area.width as i32 - 10 - extra as i32 - info.duration.len() as i32) as usize)).style(style));
-							spans.push(Span::from("... ".to_owned() + &info.duration).style(style));
-						} else {
-							spans.push(Span::from(file.clone()).style(style));
-							spans.push(Span::from(vec![" "; max(0, area.width as i32 - 6 - extra as i32 - file.len() as i32 - info.duration.len() as i32) as usize].join("")).style(style));
-							spans.push(Span::from(info.duration.clone()).style(style));
-						}
-						Line::from(spans)
-					}).collect::<Vec<_>>();
-					if client_state.selected_file < self.range.0 as usize {
-						self.range = (client_state.selected_file as i32, client_state.selected_file as i32 + area.height as i32 - 5);
-					} else if client_state.selected_file > self.range.1 as usize {
-						self.range = (client_state.selected_file as i32 - area.height as i32 + 5, client_state.selected_file as i32);
+					} else {
+						spans.push(Span::from("K").style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
 					}
-					Paragraph::new(lines).scroll((self.range.0 as u16, 0))
-				};
-		}
+					spans.push(Span::from(" "));
+					let style = if info.duration.is_empty() {
+						let tmp = Style::default().fg(Color::Red);
+						if client_state.selected_file == ii {
+							tmp.add_modifier(Modifier::REVERSED)
+						} else {
+							tmp
+						}
+					} else if client_state.selected_file == ii {
+						Style::default().fg(Color::LightBlue)
+						.add_modifier(Modifier::REVERSED)
+					} else {
+						Style::default().fg(Color::Cyan)
+					};
+					let extra: usize = spans.par_iter().map(|span| { span.width() }).sum();
+					if file.len() + info.duration.len() + extra as usize > area.width as usize - 6 {
+						spans.push(Span::from(file.substring(0, max(0, area.width as i32 - 10 - extra as i32 - info.duration.len() as i32) as usize)).style(style));
+						spans.push(Span::from("... ".to_owned() + &info.duration).style(style));
+					} else {
+						spans.push(Span::from(file.clone()).style(style));
+						spans.push(Span::from(vec![" "; max(0, area.width as i32 - 6 - extra as i32 - file.len() as i32 - info.duration.len() as i32) as usize].join("")).style(style));
+						spans.push(Span::from(info.duration.clone()).style(style));
+					}
+					Line::from(spans)
+				}).collect::<Vec<_>>();
+				if client_state.selected_file < self.range.0 as usize {
+					self.range = (client_state.selected_file as i32, client_state.selected_file as i32 + area.height as i32 - 5);
+				} else if client_state.selected_file > self.range.1 as usize {
+					self.range = (client_state.selected_file as i32 - area.height as i32 + 5, client_state.selected_file as i32);
+				}
+				Paragraph::new(lines).scroll((self.range.0 as u16, 0))
+			}
+		} else {
+			Paragraph::new("Selected another tab")
+		};
 		f.render_widget(paragraph.block(block), area);
 	}
 }
@@ -135,10 +135,7 @@ impl BlockNavigation for FilesBlock {
 impl FilesBlock {
 	fn play_file(&self, client_state: AtomicClientState, random: bool) -> bool {
 		let client_state = client_state.read();
-		if client_state.selected_tab >= client_state.file_tabs.len() {
-			return false;
-		}
-		let (tab, files) = &client_state.file_tabs[client_state.selected_tab];
+		let Some((tab, files)) = client_state.file_tabs.get_index(client_state.selected_tab) else { return false };
 		let index;
 		if random {
 			index = rand::thread_rng().gen_range(0..files.len());
@@ -158,10 +155,7 @@ impl FilesBlock {
 
 	fn navigate_file(&mut self, client_state: AtomicClientState, dy: i32) -> bool {
 		let mut client_state = client_state.write();
-		if client_state.file_tabs.is_empty() {
-			return false;
-		}
-		let (_, files) = &client_state.file_tabs[client_state.selected_tab];
+		let Some((_, files)) = client_state.file_tabs.get_index(client_state.selected_tab) else { return false };
 		let files = files.len();
 		let new_selected = if dy.abs() > 1 {
 			min(files as i32 - 1, max(0, client_state.selected_file as i32 + dy)) as usize
@@ -187,15 +181,24 @@ impl FilesBlock {
 	fn set_global_key_bind(&self, client_state: AtomicClientState) -> bool {
 		let (init, popup_manager) = {
 			let client_state = client_state.read();
-			(
-				client_state.file_tabs[client_state.selected_tab].1[client_state.selected_file].base.keys.par_iter().filter_map(|key| string_to_keyboard(key)).collect(),
-				client_state.popup_manager.clone()
-			)
+			let init = if let Some((_, files)) = client_state.file_tabs.get_index(client_state.selected_tab) &&
+				let Some((_, file)) = files.get_index(client_state.selected_file) {
+				file.base.keys.par_iter().filter_map(|key| string_to_keyboard(key)).collect()
+			} else {
+				HashSet::new()
+			};
+			(init, client_state.popup_manager.clone())
 		};
 		popup_manager.push(PopupComponent::KeyBind(KeyBindPopup::new(init, move |keys| {
 			let mut client_state = client_state.write();
 			let (selected_tab, selected_file) = (client_state.selected_tab, client_state.selected_file);
-			client_state.file_tabs[selected_tab].1[selected_file].base.keys = keys.iter().map(|key| keyboard_to_string(*key)).collect();
+			if let Some((tab, files)) = client_state.file_tabs.get_index_mut(selected_tab) &&
+				let Some((name, file)) = files.get_index_mut(selected_file) {
+				file.base.keys = keys.iter().map(|key| keyboard_to_string(*key)).collect();
+				let path = Path::new(tab).join(name).to_str().unwrap().to_string();
+				let file = file.base.clone();
+				client_state.request(ClientToServer::SetFile(path, file));
+			}
 		})));
 		return true;
 	}
@@ -203,14 +206,21 @@ impl FilesBlock {
 	fn unset_global_key_bind(&self, client_state: AtomicClientState) -> bool {
 		let mut client_state = client_state.write();
 		let (selected_tab, selected_file) = (client_state.selected_tab, client_state.selected_file);
-		client_state.file_tabs[selected_tab].1[selected_file].base.keys.clear();
+		if let Some((tab, files)) = client_state.file_tabs.get_index_mut(selected_tab) &&
+				let Some((name, file)) = files.get_index_mut(selected_file) {
+			file.base.keys.clear();
+			let path = Path::new(tab).join(name).to_str().unwrap().to_string();
+			let file = file.base.clone();
+			client_state.request(ClientToServer::SetFile(path, file));
+		}
 		true
 	}
 
 	fn set_file_id(&self, client_state: AtomicClientState) -> bool {
 		let (name, init, popup_manager) = {
 			let client_state = client_state.read();
-			if let Some((name, init)) = client_state.file_tabs[client_state.selected_tab].1.get_index(client_state.selected_file) {
+			if let Some((_, files)) = client_state.file_tabs.get_index(client_state.selected_tab) &&
+				let Some((name, init)) = files.get_index(client_state.selected_file) {
 				(
 					name.clone(),
 					if let Some(id) = init.base.id { id.to_string() } else { String::new() },
@@ -240,7 +250,13 @@ impl FilesBlock {
 			}
 
 			let (selected_tab, selected_file) = (client_state.selected_tab, client_state.selected_file);
-			client_state.file_tabs[selected_tab].1[selected_file].base.id = Some(id);
+			if let Some((tab, files)) = client_state.file_tabs.get_index_mut(selected_tab) &&
+					let Some((name, file)) = files.get_index_mut(selected_file) {
+				file.base.id = Some(id);
+				let path = Path::new(tab).join(name).to_str().unwrap().to_string();
+				let file = file.base.clone();
+				client_state.request(ClientToServer::SetFile(path, file));
+			}
 		})));
 		return true;
 	}
@@ -248,7 +264,13 @@ impl FilesBlock {
 	fn unset_file_id(&self, client_state: AtomicClientState) -> bool {
 		let mut client_state = client_state.write();
 		let (selected_tab, selected_file) = (client_state.selected_tab, client_state.selected_file);
-		client_state.file_tabs[selected_tab].1[selected_file].base.id = None;
+		if let Some((tab, files)) = client_state.file_tabs.get_index_mut(selected_tab) &&
+				let Some((name, file)) = files.get_index_mut(selected_file) {
+			file.base.id = None;
+			let path = Path::new(tab).join(name).to_str().unwrap().to_string();
+			let file = file.base.clone();
+			client_state.request(ClientToServer::SetFile(path, file));
+		}
 		true
 	}
 }

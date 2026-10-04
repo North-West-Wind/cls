@@ -1,5 +1,5 @@
 
-use std::{thread, time::Duration, vec};
+use std::{thread, time::{Duration, SystemTime}, vec};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use rand::Rng;
@@ -176,7 +176,9 @@ impl DialogBlock {
 	fn add_dialog(&mut self, client_state: AtomicClientState) -> bool {
 		{
 			let mut client_state = client_state.write();
-			client_state.dialogs.push(Dialog::default());
+			let dialog = Dialog::default();
+			client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
+			client_state.dialogs.push(dialog);
 			client_state.selected_dialog = client_state.dialogs.len() - 1;
 		}
 		self.edit_dialog(client_state)
@@ -189,6 +191,7 @@ impl DialogBlock {
 		};
 		popups.push(PopupComponent::Dialog(DialogPopup::new(dialog, move |dialog| {
 			let mut client_state = atomic_client_state.write();
+			client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
 			client_state.dialogs[selected] = dialog;
 		})));
 		true
@@ -203,6 +206,8 @@ impl DialogBlock {
 			let name: String = value.to_string();
 			let mut client_state = atomic_client_state.write();
 			client_state.dialogs[selected].label = name.clone();
+			let dialog = &client_state.dialogs[selected];
+			client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
 		})));
 		true
 	}
@@ -212,11 +217,12 @@ impl DialogBlock {
 		popups.push(PopupComponent::Confirm(ConfirmPopup::new("Delete dialog?", "delete", move || {
 			let mut client_state = client_state.write();
 			let selected = client_state.selected_dialog;
-			client_state.dialogs.remove(selected);
+			let dialog = client_state.dialogs.remove(selected);
 			let len = client_state.dialogs.len();
 			if selected >= len && len != 0 {
 				client_state.selected_dialog = len - 1;
 			}
+			client_state.request(ClientToServer::DeleteDialog(dialog.uid));
 		})));
 		true
 	}
@@ -224,7 +230,9 @@ impl DialogBlock {
 	fn duplicate_dialog(&mut self, client_state: AtomicClientState) -> bool {
 		{
 			let mut client_state = client_state.write();
-			let dialog = client_state.dialogs[client_state.selected_dialog].clone();
+			let mut dialog = client_state.dialogs[client_state.selected_dialog].clone();
+			dialog.uid = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64;
+			client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
 			client_state.dialogs.push(dialog);
 			client_state.selected_dialog = client_state.dialogs.len() - 1;
 		}
@@ -239,6 +247,8 @@ impl DialogBlock {
 		popups.push(PopupComponent::KeyBind(KeyBindPopup::new(keys, move |keys| {
 			let mut client_state = atomic_client_state.write();
 			client_state.dialogs[selected].keys = keys;
+			let dialog = &client_state.dialogs[selected];
+			client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
 		})));
 		true
 	}
@@ -246,6 +256,8 @@ impl DialogBlock {
 	fn unset_global_key_bind(&self, client_state: &mut ClientState) -> bool {
 		let selected = client_state.selected_dialog;
 		client_state.dialogs[selected].keys.clear();
+		let dialog = &client_state.dialogs[selected];
+		client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
 		true
 	}
 
@@ -263,6 +275,8 @@ impl DialogBlock {
 			let Ok(id) = u32::from_str_radix(&value, 10) else { return; };
 			let mut client_state = atomic_client_state.write();
 			client_state.dialogs[selected].id = Some(id);
+			let dialog = &client_state.dialogs[selected];
+			client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
 		})));
 		true
 	}
@@ -270,6 +284,8 @@ impl DialogBlock {
 	fn unset_dialog_id(&self, client_state: &mut ClientState) -> bool {
 		let selected = client_state.selected_dialog;
 		client_state.dialogs[selected].id = None;
+		let dialog = &client_state.dialogs[selected];
+		client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
 		true
 	}
 }

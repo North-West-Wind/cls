@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::{client::{AtomicClientState, ClientState, MainOpened, SearchResult, component::block::{BlockNavigation, search::SearchBlock, tabs::TabsBlock}}, common::keyboard::{keyboard_to_string, key_sorter}};
+use crate::{client::{AtomicClientState, ClientState, MainOpened, SearchResult, component::block::{BlockNavigation, search::SearchBlock, tabs::TabsBlock}}, common::{keyboard::{key_sorter, keyboard_to_string}, socket::ClientToServer}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -37,7 +37,8 @@ impl BlockRenderArea for InfoBlock {
 		use MainOpened::*;
 		match client_state.main_opened {
 			File => {
-				if let Some((parent, name, info)) = client_state.get_file() {
+				if let Some((parent, files)) = client_state.file_tabs.get_index(client_state.selected_tab) &&
+						let Some((name, info)) = files.get_index(client_state.selected_file) {
 					lines.push(Line::from(""));
 					lines.push(Line::from(vec![
 						Span::from("Selected "),
@@ -251,14 +252,18 @@ fn volume_line(title: String, volume: u32, width: u16, highlight: bool) -> Line<
 fn change_file_volume(client_state: AtomicClientState, delta: i64) -> bool {
 	let mut client_state = client_state.write();
 	let (selected_tab, selected_file) = (client_state.selected_tab, client_state.selected_file);
-	let (_, files) = &mut client_state.file_tabs[selected_tab];
-	let file = &mut files[selected_file];
+	if let Some((tab, files)) = client_state.file_tabs.get_index_mut(selected_tab) &&
+			let Some((name, file)) = files.get_index_mut(selected_file) {
+		let old_volume = file.base.volume;
+		let new_volume = max(0, old_volume as i64 + delta) as u32;
 
-	let old_volume = file.base.volume;
-	let new_volume = max(0, old_volume as i64 + delta) as u32;
-	if new_volume != old_volume {
-		file.base.volume = new_volume;
-		return true;
+		if new_volume != old_volume {
+			file.base.volume = new_volume;
+			let path = Path::new(tab).join(name).to_str().unwrap().to_string();
+			let file = file.base.clone();
+			client_state.request(ClientToServer::SetFile(path, file));
+			return true;
+		}
 	}
 	false
 }
@@ -271,6 +276,8 @@ fn change_wave_volume(client_state: AtomicClientState, delta: i64) -> bool {
 	let new_volume = max(0, wave.base.volume as i64 + delta) as u32;
 	if new_volume != wave.base.volume {
 		wave.base.volume = new_volume;
+		let wave = wave.base.to_saveable();
+		client_state.request(ClientToServer::SetWave(wave.uid, wave));
 		return true;
 	}
 	false
@@ -284,6 +291,8 @@ fn change_dialog_volume(client_state: AtomicClientState, delta: i64) -> bool {
 	let new_volume = max(0, dialog.volume as i64 + delta) as u32;
 	if new_volume != dialog.volume {
 		dialog.volume = new_volume;
+		let dialog = dialog.to_saveable();
+		client_state.request(ClientToServer::SetDialog(dialog.uid, dialog));
 		return true;
 	}
 	false

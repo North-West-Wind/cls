@@ -1,6 +1,7 @@
 use std::{collections::{HashMap, HashSet}, path::Path, time::SystemTime, vec};
 
 use config::Config;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::common::base::{dialog::SaveableDialog, file::SaveableFile, wave::SaveableWave};
@@ -19,7 +20,7 @@ pub struct ConfigV1 {
 	pub loopback_2: String,
 	pub playlist_mode: bool,
 	pub fast_scan: bool,
-	pub files: HashMap<String, HashMap<String, SaveableFile>>,
+	pub files: IndexMap<String, IndexMap<String, SaveableFile>>,
 	pub waves: Vec<SaveableWave>,
 	pub dialogs: Vec<SaveableDialog>,
 }
@@ -36,7 +37,7 @@ impl Default for ConfigV1 {
 			loopback_2: String::new(),
 			playlist_mode: false,
 			fast_scan: true,
-			files: HashMap::new(),
+			files: IndexMap::new(),
 			waves: vec![],
 			dialogs: vec![],
 		}
@@ -124,7 +125,7 @@ impl ConfigV1 {
 					map.insert(name, entry);
 				},
 				None => {
-					let mut map = HashMap::new();
+					let mut map = IndexMap::new();
 					map.insert(name, entry);
 					cfg.files.insert(parent, map);
 				}

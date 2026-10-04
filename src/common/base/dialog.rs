@@ -65,14 +65,14 @@ impl From<&SaveableDialog> for Dialog {
 	}
 }
 
-impl Into<SaveableDialog> for Dialog {
-	fn into(self) -> SaveableDialog {
+impl Dialog {
+	pub fn to_saveable(&self) -> SaveableDialog {
 		SaveableDialog {
 			uid: self.uid,
-			label: self.label,
+			label: self.label.clone(),
 			id: self.id,
 			keys: self.keys.par_iter().map(|key| keyboard_to_string(*key)).collect::<HashSet<_>>(),
-			files: self.files,
+			files: self.files.clone(),
 			delay: self.delay,
 			random: self.random,
 			sequential: self.sequential,
