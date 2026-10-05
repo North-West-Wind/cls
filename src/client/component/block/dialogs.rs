@@ -170,6 +170,7 @@ impl DialogBlock {
 		}
 		client_state.dialogs.swap(selected, (selected as i32 + dy) as usize);
 		client_state.selected_dialog = (selected as i32 + dy) as usize;
+		client_state.dirty = true;
 		true
 	}
 
@@ -180,6 +181,7 @@ impl DialogBlock {
 			client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
 			client_state.dialogs.push(dialog);
 			client_state.selected_dialog = client_state.dialogs.len() - 1;
+			client_state.dirty = true;
 		}
 		self.edit_dialog(client_state)
 	}
@@ -193,6 +195,7 @@ impl DialogBlock {
 			let mut client_state = atomic_client_state.write();
 			client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
 			client_state.dialogs[selected] = dialog;
+			client_state.dirty = true;
 		})));
 		true
 	}
@@ -208,6 +211,7 @@ impl DialogBlock {
 			client_state.dialogs[selected].label = name.clone();
 			let dialog = &client_state.dialogs[selected];
 			client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
+			client_state.dirty = true;
 		})));
 		true
 	}
@@ -223,6 +227,7 @@ impl DialogBlock {
 				client_state.selected_dialog = len - 1;
 			}
 			client_state.request(ClientToServer::DeleteDialog(dialog.uid));
+			client_state.dirty = true;
 		})));
 		true
 	}
@@ -235,6 +240,7 @@ impl DialogBlock {
 			client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
 			client_state.dialogs.push(dialog);
 			client_state.selected_dialog = client_state.dialogs.len() - 1;
+			client_state.dirty = true;
 		}
 		self.edit_dialog(client_state)
 	}
@@ -249,6 +255,7 @@ impl DialogBlock {
 			client_state.dialogs[selected].keys = keys;
 			let dialog = &client_state.dialogs[selected];
 			client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
+			client_state.dirty = true;
 		})));
 		true
 	}
@@ -258,6 +265,7 @@ impl DialogBlock {
 		client_state.dialogs[selected].keys.clear();
 		let dialog = &client_state.dialogs[selected];
 		client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
+		client_state.dirty = true;
 		true
 	}
 
@@ -277,6 +285,7 @@ impl DialogBlock {
 			client_state.dialogs[selected].id = Some(id);
 			let dialog = &client_state.dialogs[selected];
 			client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
+			client_state.dirty = true;
 		})));
 		true
 	}
@@ -286,6 +295,7 @@ impl DialogBlock {
 		client_state.dialogs[selected].id = None;
 		let dialog = &client_state.dialogs[selected];
 		client_state.request(ClientToServer::SetDialog(dialog.uid, dialog.to_saveable()));
+		client_state.dirty = true;
 		true
 	}
 }

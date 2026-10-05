@@ -232,6 +232,8 @@ impl ClientState {
 		self.config.dialogs = self.dialogs.iter().map(|dialog| dialog.to_saveable()).collect();
 
 		config::save(&self.config);
+
+		self.dirty = false;
 	}
 
 	fn request(&self, request: ClientToServer) -> bool {

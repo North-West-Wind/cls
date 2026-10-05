@@ -198,6 +198,7 @@ impl FilesBlock {
 				let path = Path::new(tab).join(name).to_str().unwrap().to_string();
 				let file = file.base.clone();
 				client_state.request(ClientToServer::SetFile(path, file));
+				client_state.dirty = true;
 			}
 		})));
 		return true;
@@ -212,6 +213,7 @@ impl FilesBlock {
 			let path = Path::new(tab).join(name).to_str().unwrap().to_string();
 			let file = file.base.clone();
 			client_state.request(ClientToServer::SetFile(path, file));
+			client_state.dirty = true;
 		}
 		true
 	}
@@ -256,6 +258,7 @@ impl FilesBlock {
 				let path = Path::new(tab).join(name).to_str().unwrap().to_string();
 				let file = file.base.clone();
 				client_state.request(ClientToServer::SetFile(path, file));
+				client_state.dirty = true;
 			}
 		})));
 		return true;
@@ -270,6 +273,7 @@ impl FilesBlock {
 			let path = Path::new(tab).join(name).to_str().unwrap().to_string();
 			let file = file.base.clone();
 			client_state.request(ClientToServer::SetFile(path, file));
+			client_state.dirty = true;
 		}
 		true
 	}

@@ -119,6 +119,7 @@ impl SettingsBlock {
 				client_state.clone().read().popup_manager.push(PopupComponent::KeyBind(KeyBindPopup::new(HashSet::new(), move |keys| {
 					let mut client_state = client_state.write();
 					client_state.config.stop_key = keys.iter().map(|key| keyboard_to_string(*key)).collect();
+					client_state.dirty = true;
 					client_state.request(ClientToServer::SetStopKey(client_state.config.stop_key.iter().cloned().collect()));
 				})));
 				true
@@ -127,6 +128,7 @@ impl SettingsBlock {
 			1 => {
 				let mut client_state = client_state.write();
 				client_state.config.loopback_default = !client_state.config.loopback_default;
+				client_state.dirty = true;
 				client_state.request(ClientToServer::SetLoopback(1, if client_state.config.loopback_default { "@DEFAULT_SINK@" } else { "" }.to_string()));
 				true
 			},
@@ -138,9 +140,11 @@ impl SettingsBlock {
 					let loopback = value.to_string();
 					if selected == 2 {
 						client_state.config.loopback_1 = loopback.clone();
+						client_state.dirty = true;
 						client_state.request(ClientToServer::SetLoopback(2, loopback.clone()));
 					} else {
 						client_state.config.loopback_2 = loopback.clone();
+						client_state.dirty = true;
 						client_state.request(ClientToServer::SetLoopback(3, loopback.clone()));
 					}
 				})));
@@ -150,6 +154,7 @@ impl SettingsBlock {
 			4 => {
 				let mut client_state = client_state.write();
 				client_state.config.playlist_mode = !client_state.config.playlist_mode;
+				client_state.dirty = true;
 				client_state.request(ClientToServer::SetPlaylistMode(client_state.config.playlist_mode));
 				true
 			},
@@ -157,6 +162,7 @@ impl SettingsBlock {
 			5 => {
 				let mut client_state = client_state.write();
 				client_state.config.fast_scan = !client_state.config.fast_scan;
+				client_state.dirty = true;
 				true
 			},
 			_ => false
@@ -168,31 +174,37 @@ impl SettingsBlock {
 		match self.selected {
 			0 => {
 				client_state.config.stop_key.clear();
+				client_state.dirty = true;
 				client_state.request(ClientToServer::SetStopKey(vec![]));
 				true
 			},
 			1 => {
 				client_state.config.loopback_default = true;
+				client_state.dirty = true;
 				client_state.request(ClientToServer::SetLoopback(1, "@DEFAULT_SINK@".to_string()));
 				true
 			},
 			2 => {
 				client_state.config.loopback_1 = String::new();
+				client_state.dirty = true;
 				client_state.request(ClientToServer::SetLoopback(2, "".to_string()));
 				true
 			},
 			3 => {
 				client_state.config.loopback_2 = String::new();
+				client_state.dirty = true;
 				client_state.request(ClientToServer::SetLoopback(3, "".to_string()));
 				true
 			},
 			4 => {
 				client_state.config.playlist_mode = false;
+				client_state.dirty = true;
 				client_state.request(ClientToServer::SetPlaylistMode(false));
 				true
 			},
 			5 => {
 				client_state.config.fast_scan = false;
+				client_state.dirty = true;
 				true
 			},
 			_ => false

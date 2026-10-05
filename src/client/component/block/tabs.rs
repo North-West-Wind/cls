@@ -108,6 +108,7 @@ impl TabsBlock {
 		if selected != new_selected {
 			if modify {
 				client_state.file_tabs.swap_indices(selected, new_selected);
+				client_state.dirty = true;
 			}
 			client_state.selected_tab = new_selected as usize;
 			client_state.selected_file = 0;
@@ -123,6 +124,7 @@ impl TabsBlock {
 				let mut client_state = client_state.write();
 				client_state.file_tabs.insert(norm.clone().into_os_string().into_string().unwrap(), IndexMap::new());
 				client_state.selected_tab = client_state.file_tabs.len() - 1;
+				client_state.dirty = true;
 				client_state.selected_tab
 			};
 			scan(client_state.clone(), Scanning::One(index));

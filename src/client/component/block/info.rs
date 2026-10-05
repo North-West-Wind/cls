@@ -214,6 +214,8 @@ impl InfoBlock {
 		let new_volume = max(0, old_volume + delta);
 		if new_volume != old_volume {
 			client_state.config.volume = new_volume as u32;
+			client_state.request(ClientToServer::SetSinkVolume(new_volume as u32));
+			client_state.dirty = true;
 			return true
 		}
 		false
@@ -262,6 +264,7 @@ fn change_file_volume(client_state: AtomicClientState, delta: i64) -> bool {
 			let path = Path::new(tab).join(name).to_str().unwrap().to_string();
 			let file = file.base.clone();
 			client_state.request(ClientToServer::SetFile(path, file));
+			client_state.dirty = true;
 			return true;
 		}
 	}
@@ -278,6 +281,7 @@ fn change_wave_volume(client_state: AtomicClientState, delta: i64) -> bool {
 		wave.base.volume = new_volume;
 		let wave = wave.base.to_saveable();
 		client_state.request(ClientToServer::SetWave(wave.uid, wave));
+		client_state.dirty = true;
 		return true;
 	}
 	false
@@ -293,6 +297,7 @@ fn change_dialog_volume(client_state: AtomicClientState, delta: i64) -> bool {
 		dialog.volume = new_volume;
 		let dialog = dialog.to_saveable();
 		client_state.request(ClientToServer::SetDialog(dialog.uid, dialog));
+		client_state.dirty = true;
 		return true;
 	}
 	false
