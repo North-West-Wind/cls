@@ -3,6 +3,7 @@ use std::{panic, path::Path, println, thread};
 use cpal::traits::{DeviceTrait, HostTrait};
 use clap::{command, Arg, ArgAction, Command};
 use nng::{Protocol, Socket};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{client::start_client, common::{config, constant::ADDRESS_COMMS, log, socket::{ClientToServer, ServerToClient, decode_s2c, encode_c2s}}, server::start_server};
 
@@ -70,24 +71,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
 				let Ok(id) = id.parse::<u32>() else { panic!("Could not parse ID") };
 				let config = config::load();
-				let mut response = None;
-				for (tab, files) in &config.files {
-					for (name, file) in files {
+				let path = config.files.par_iter().find_map_any(|(tab, files)| {
+					files.par_iter().find_map_any(|(name, file)| {
 						if let Some(file_id) = file.id && file_id == id {
-							let path = Path::new(tab).join(name).to_str().unwrap().to_string();
-							let _ = socket.send(&encode_c2s(PlayPath(path)));
-							response = Some(decode_s2c(&mut socket.recv()?));
+							Some(Path::new(tab).join(name).to_str().unwrap().to_string())
+						} else {
+							None
 						}
-					}
-				}
-				let Some(response) = response else { panic!("No file with ID {}", id) };
-				response
+					})
+				});
+				let Some(path) = path else { panic!("No file with ID {}", id) };
+				let _ = socket.send(&encode_c2s(PlayPath(path)));
+				decode_s2c(&mut socket.recv()?)
 			},
 			"play-wave" => {
 				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
 				let Ok(id) = id.parse::<u32>() else { panic!("Could not parse ID") };
 				let config = config::load();
-				let wave = config.waves.iter().find(|wave| {
+				let wave = config.waves.par_iter().find_any(|wave| {
 					let Some(wave_id) = wave.id else { return false };
 					wave_id == id
 				});
@@ -99,7 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
 				let Ok(id) = id.parse::<u32>() else { panic!("Could not parse ID") };
 				let config = config::load();
-				let dialog = config.dialogs.iter().find(|dialog| {
+				let dialog = config.dialogs.par_iter().find_any(|dialog| {
 					let Some(dialog_id) = dialog.id else { return false };
 					dialog_id == id
 				});
@@ -120,7 +121,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
 				let Ok(id) = id.parse::<u32>() else { panic!("Could not parse ID") };
 				let config = config::load();
-				let wave = config.waves.iter().find(|wave| {
+				let wave = config.waves.par_iter().find_any(|wave| {
 					let Some(wave_id) = wave.id else { return false };
 					wave_id == id
 				});
@@ -132,7 +133,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
 				let Ok(id) = id.parse::<u32>() else { panic!("Could not parse ID") };
 				let config = config::load();
-				let dialog = config.dialogs.iter().find(|dialog| {
+				let dialog = config.dialogs.par_iter().find_any(|dialog| {
 					let Some(dialog_id) = dialog.id else { return false };
 					dialog_id == id
 				});

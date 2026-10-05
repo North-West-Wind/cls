@@ -1,7 +1,7 @@
 use std::{f32::consts::PI, sync::{Arc, atomic::{AtomicBool, Ordering}}, thread::{self, JoinHandle}, time::Duration, vec};
 
 use parking_lot::Mutex;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::{iter::{IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::ParallelSliceMut};
 use ringbuf::{HeapRb, traits::{Producer, Split}};
 use uuid::Uuid;
 
@@ -65,29 +65,37 @@ impl ServerWave {
 			playing.store(true, Ordering::Relaxed);
 			let mut buf = vec![0f32; sample_rate / 16];
 			while forced.load(Ordering::Relaxed) || !keys.is_empty() && keys.par_iter().all(|key| key.is_pressed()) {
-				for wave in playable.iter_mut() {
-					for ii in 0..buf.len() / 2 {
+				buf.par_chunks_exact_mut(2).enumerate().for_each(|(ii, samples)| {
+					let sample = playable.par_iter().map(|wave| {
+						let mut phase = wave.phase + ((1.0 + ii as f32) / sample_rate as f32) / wave.period;
+						while phase >= 1.0 {
+							phase -= 1.0;
+						}
 						let sample = match wave.wave_type {
-							WaveType::Sine => (PI * 2.0 * wave.phase).sin(),
-							WaveType::Square => if wave.phase > 0.5 { 1.0 } else { -1.0 },
+							WaveType::Sine => (PI * 2.0 * phase).sin(),
+							WaveType::Square => if phase > 0.5 { 1.0 } else { -1.0 },
 							WaveType::Triangle => {
-								let portion = wave.phase;
+								let portion = phase;
 								if portion > 0.5 {
 									-1.0 + (portion - 0.5) * 4.0
 								} else {
 									1.0 - portion * 4.0
 								}
 							},
-							WaveType::Saw => -1.0 + wave.phase * 2.0,
+							WaveType::Saw => -1.0 + phase * 2.0,
 						} * wave.amplitude * wave.volume;
-						buf[ii * 2] += sample;
-						buf[ii * 2 + 1] += sample;
-						wave.phase = wave.phase + (1.0 / sample_rate as f32) / wave.period;
-						if wave.phase >= 1.0 {
-							wave.phase -= 1.0;
-						}
+						sample
+					}).sum::<f32>();
+					samples[0] = sample;
+					samples[1] = sample;
+				});
+				let phase_delta = (buf.len() / 2) as f32;
+				playable.par_iter_mut().for_each(|wave| {
+					wave.phase = wave.phase + (phase_delta / sample_rate as f32) / wave.period;
+					while wave.phase >= 1.0 {
+						wave.phase -= 1.0;
 					}
-				}
+				});
 
 				let mut offset = prod.push_slice(&buf);
 				while offset < buf.len() {

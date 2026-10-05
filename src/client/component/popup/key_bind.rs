@@ -4,6 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use indexmap::IndexSet;
 use mki::Keyboard;
 use ratatui::{style::{Color, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{client::ClientState, common::keyboard::keyboard_to_string};
 
@@ -51,7 +52,7 @@ impl PopupHandleKey for KeyBindPopup {
 				} else {
 					self.recording = false;
 					let callback = self.callback.clone();
-					let recorded = self.recorded.iter().map(|key| *key).collect();
+					let recorded = self.recorded.par_iter().map(|key| *key).collect();
 					let popups = client_state.popup_manager.clone();
 					thread::spawn(move || {
 						popups.pop();

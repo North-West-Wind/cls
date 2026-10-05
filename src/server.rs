@@ -3,7 +3,7 @@ use std::{collections::{HashMap, HashSet}, eprintln, format, fs::read_dir, path:
 use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use nng::{Protocol, Socket};
 use parking_lot::{Mutex, RwLock};
-use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelExtend, ParallelIterator};
 use ringbuf::{HeapCons, traits::Consumer};
 use uuid::Uuid;
 
@@ -216,20 +216,16 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 		// Remove unpressed
 		combos.retain(|combo| combo.active());
 		// Add new combinations
-		let mut new_combos = vec![];
-		for combo in combos.iter() {
-			let new_combo = combo.add_key(key);
-			new_combos.push(new_combo);
-		}
-		new_combos.iter().for_each(|combo| { combos.insert(combo.clone()); });
+		let new_combos = combos.par_iter().map(|combo| combo.add_key(key)).collect::<Vec<_>>();
+		combos.par_extend(new_combos.par_iter().cloned());
 		combos.insert(KeyCombo::from_keyboards(vec![key]));
 
 		let server_state_combo = server_state_mki.clone();
 		combos.par_iter().for_each(|combo| {
 			let server_state = server_state_combo.read();
 			// File hotkey
-			if server_state.file_keys.contains_key(combo) {
-				server_state.file_keys.get(combo).unwrap().iter().cloned().for_each(|path| {
+			if let Some(files) = server_state.file_keys.get(combo) {
+				files.par_iter().cloned().for_each(|path| {
 					let file = ServerFile::new(path.clone(), &server_state);
 					let server_event = server_event_mki.clone();
 					let server_state = server_state_combo.clone();
@@ -247,7 +243,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 
 			// Wave hotkey
 			if let Some(waves) = server_state.wave_keys.get(combo) {
-				waves.iter().for_each(|uid| {
+				waves.par_iter().for_each(|uid| {
 					if let Some(wave) = server_state.waves.get(uid) && !wave.playing.load(Ordering::Relaxed) {
 						let wave = wave.clone();
 						let server_state = server_state_combo.clone();
@@ -267,7 +263,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 
 			// Dialog hotkey
 			if let Some(dialogs) = server_state.dialog_keys.get(combo) {
-				dialogs.iter().for_each(|uid| {
+				dialogs.par_iter().for_each(|uid| {
 					if let Some(dialog) = server_state.dialogs.get(uid) && !dialog.playing.load(Ordering::Relaxed) {
 						let dialog = dialog.clone();
 						let server_state = server_state_combo.clone();

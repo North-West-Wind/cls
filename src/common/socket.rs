@@ -255,6 +255,7 @@ pub fn encode_c2s(request: ClientToServer) -> Vec<u8> {
 		SetStopKey(keys) => {
 			let mut buf = vec![28u8];
 			buf.extend((keys.len() as u32).to_be_bytes());
+			// Need ordering, don't use par_iter
 			keys.iter().for_each(|key| {
 				let key_bytes = key.as_bytes();
 				buf.extend((key_bytes.len() as u32).to_be_bytes());

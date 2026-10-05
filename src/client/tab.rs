@@ -44,6 +44,7 @@ fn add_duration(client_state: AtomicClientState, tab: String) {
 		files.clone()
 	};
 	let mut new_files = IndexMap::new();
+	// Don't parallelize this! We can't spawn too many children
 	for (filename, info) in files {
 		let longpath = Path::new(&tab).join(filename.clone());
 		let filepath = longpath.into_os_string().into_string().unwrap();

@@ -55,6 +55,7 @@ impl ConfigV1 {
 		
 		// Fixing UIDs on waves and dialogs
 		let mut now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64;
+		// Need to ensure uid doesn't repeat, don't use par_iter
 		config.waves.iter_mut().for_each(|wave| {
 			if wave.uid == 0 {
 				wave.uid = now;

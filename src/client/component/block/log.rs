@@ -1,7 +1,9 @@
-use std::{format, io::stdout, sync::{Arc, RwLock, atomic::{AtomicBool, Ordering}}, vec};
+use std::{format, io::stdout, sync::{Arc, atomic::{AtomicBool, Ordering}}, vec};
 
 use crossterm::{execute, style::{Color::{Red, Reset, Yellow}, Print, ResetColor, SetForegroundColor}};
+use parking_lot::RwLock;
 use ratatui::{style::{Color, Style}, text::Line, widgets::{Block, BorderType, Padding, Paragraph}};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{client::{ClientState, Redrawer, component::block::BlockRenderArea}, common::log::{self, LogLevel}};
 
@@ -19,18 +21,16 @@ impl BlockRenderArea for LogBlock {
 			.title("Log");
 
 		let inner_height = area.height as usize - 2;
-		let mut lines = vec![];
-		for (level, body) in self.messages.read().unwrap().iter().rev() {
-			if lines.len() >= inner_height {
-				break
-			}
+		let messages = self.messages.read();
+		let start = messages.len().saturating_sub(inner_height);
+		let lines = self.messages.read()[start..].par_iter().rev().map(|(level, body)| {
 			use LogLevel::*;
-			lines.insert(0, Line::from(body.clone()).style(Style::default().fg(match level {
+			Line::from(body.clone()).style(Style::default().fg(match level {
 				Info => Color::Reset,
 				Warn => Color::Yellow,
 				Error => Color::Red,
-			})));
-		}
+			}))
+		}).collect::<Vec<_>>();
 		f.render_widget(Paragraph::new(lines).block(block), area);
 	}
 }
@@ -45,7 +45,7 @@ impl LogBlock {
 			if flushed_copy.load(Ordering::Relaxed) {
 				log(&level, &message);
 			} else {
-				messages_copy.write().unwrap().push((level, message));
+				messages_copy.write().push((level, message));
 				redrawer.notify();
 			}
 		});
@@ -56,7 +56,8 @@ impl LogBlock {
 	}
 
 	pub fn flush_logs(&mut self) {
-		let mut messages = self.messages.write().unwrap();
+		let mut messages = self.messages.write();
+		// Need order, don't use par_iter
 		messages.iter().for_each(|(level, message)| log(level, message));
 		messages.clear();
 		self.flushed.store(true, Ordering::Relaxed);

@@ -34,7 +34,7 @@ impl ServerDialog {
 		let keys = self.base.keys.clone();
 		let files = {
 			let server_state = server_state.read();
-			self.base.files.iter().map(|path| {
+			self.base.files.par_iter().map(|path| {
 				let mut file = ServerFile::new_with_lock(path.clone(), Arc::new(Mutex::new(())), &server_state);
 				file.base.volume = self.base.volume;
 				file

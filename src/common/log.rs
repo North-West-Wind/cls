@@ -1,5 +1,7 @@
 use std::{sync::{Arc, LazyLock, Mutex}, vec};
 
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogLevel {
 	Info,
@@ -20,7 +22,7 @@ static LOGGER: LazyLock<Mutex<Logger>> = LazyLock::new(|| Mutex::new(Logger { me
 fn log(level: LogLevel, message: String) {
 	let mut logger = LOGGER.lock().unwrap();
 	logger.messages.push((level, message.clone()));
-	logger.callbacks.iter().for_each(|callback| {
+	logger.callbacks.par_iter().for_each(|callback| {
 		callback(level, message.clone());
 	});
 }

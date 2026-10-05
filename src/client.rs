@@ -5,6 +5,7 @@ use indexmap::IndexMap;
 use nng::{Error::ConnectionRefused, Protocol, Socket, options::{Options, RecvTimeout, protocol::pubsub::Subscribe}};
 use parking_lot::{Condvar, Mutex, RwLock};
 use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, widgets::{Block, BorderType, Borders, Paragraph}};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{client::{client_ext::{file::ClientFile, wave::ClientWave}, component::{block::{BlockNavigation, BlockRender, BlockRenderArea, dialogs::DialogBlock, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::LogBlock, playing::PlayingBlock, results::ResultsBlock, search::SearchBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupComponent, PopupRender}}, listener::init_key_listener, tab::scan}, common::{base::{dialog::Dialog, wave::Wave}, config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, MIN_HEIGHT, MIN_WIDTH, NO_RENDER_HEIGHT, NO_RENDER_WIDTH}, log, socket::{ClientToServer, ServerToClient, decode_s2c, encode_c2s}}};
 
@@ -203,7 +204,7 @@ impl ClientState {
 		let config = &self.config;
 		self.dialogs.clear();
 
-		self.file_tabs = config.tabs.iter().map(|tab| {
+		self.file_tabs = config.tabs.par_iter().map(|tab| {
 			let mut files = IndexMap::new();
 			if let Some(config_files) = config.files.get(tab) {
 				config_files.iter().for_each(|(name, file)| {
@@ -214,8 +215,8 @@ impl ClientState {
 		}).collect();
 		// REMEMBER TO SCAN TABS AFTER THIS
 
-		self.waves = config.waves.iter().map(|wave| ClientWave::from(Wave::from(wave))).collect();
-		self.dialogs = config.dialogs.iter().map(|dialog| Dialog::from(dialog)).collect();
+		self.waves = config.waves.par_iter().map(|wave| ClientWave::from(Wave::from(wave))).collect();
+		self.dialogs = config.dialogs.par_iter().map(|dialog| Dialog::from(dialog)).collect();
 	}
 
 	fn save_config(&mut self) {
@@ -228,8 +229,8 @@ impl ClientState {
 			self.config.files.insert(tab.clone(), config_files);
 		});
 
-		self.config.waves = self.waves.iter().map(|wave| wave.base.to_saveable()).collect();
-		self.config.dialogs = self.dialogs.iter().map(|dialog| dialog.to_saveable()).collect();
+		self.config.waves = self.waves.par_iter().map(|wave| wave.base.to_saveable()).collect();
+		self.config.dialogs = self.dialogs.par_iter().map(|dialog| dialog.to_saveable()).collect();
 
 		config::save(&self.config);
 

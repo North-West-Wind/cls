@@ -7,7 +7,7 @@ use super::{loop_index, BlockHandleKey, BlockRenderArea};
 use crossterm::event::KeyCode;
 use rand::Rng;
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Padding, Paragraph, Wrap}, Frame};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator};
 use substring::Substring;
 
 pub struct FilesBlock {
@@ -50,7 +50,7 @@ impl BlockRenderArea for FilesBlock {
 					Paragraph::new("There are no playable files in this directory :<").wrap(Wrap { trim: false })
 				}
 			} else {
-				let lines = files.iter().enumerate().map(|(ii, (file, info))| {
+				let lines = files.par_iter().enumerate().map(|(ii, (file, info))| {
 					let mut spans = vec![];
 					spans.push(info.base.id.map_or(Span::from(" "), |_| { Span::from("I").style(Style::default().fg(Color::LightYellow).add_modifier(Modifier::REVERSED)) }));
 					if info.base.keys.is_empty() {
@@ -194,7 +194,7 @@ impl FilesBlock {
 			let (selected_tab, selected_file) = (client_state.selected_tab, client_state.selected_file);
 			if let Some((tab, files)) = client_state.file_tabs.get_index_mut(selected_tab) &&
 				let Some((name, file)) = files.get_index_mut(selected_file) {
-				file.base.keys = keys.iter().map(|key| keyboard_to_string(*key)).collect();
+				file.base.keys = keys.par_iter().map(|key| keyboard_to_string(*key)).collect();
 				let path = Path::new(tab).join(name).to_str().unwrap().to_string();
 				let file = file.base.clone();
 				client_state.request(ClientToServer::SetFile(path, file));
@@ -235,8 +235,8 @@ impl FilesBlock {
 		popup_manager.push(PopupComponent::Input(InputPopup::new(init, "File ID".to_string(), FLAG_INT, move |value| {
 			let Ok(id) = u32::from_str_radix(value, 10) else { return; };
 			let mut client_state = client_state.write();
-			let existing = client_state.file_tabs.iter_mut().find_map(|(_, files)| {
-				files.iter().find_map(|(name, info)| {
+			let existing = client_state.file_tabs.par_iter_mut().find_map_any(|(_, files)| {
+				files.par_iter().find_map_any(|(name, info)| {
 					if info.base.id == Some(id) {
 						Some(name.clone())
 					} else {

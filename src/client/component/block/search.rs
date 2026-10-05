@@ -7,7 +7,7 @@ use super::{BlockHandleKey, BlockRenderArea};
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use ratatui::{Frame, layout::Rect, style::Color, widgets::{Block, Borders, Padding, Paragraph}};
-use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelExtend, ParallelIterator};
 use tui_input::{Input, backend::crossterm::EventHandler};
 
 #[derive(Default)]
@@ -55,8 +55,8 @@ impl BlockHandleKey for SearchBlock {
 					let client_state = atomic_client_state.read();
 					
 					// Search file
-					client_state.file_tabs.iter().for_each(|(tab, files)| {
-						results.extend(files.iter().par_bridge().filter_map(|(name, info)| {
+					results.par_extend(client_state.file_tabs.par_iter().flat_map(|(tab, files)| {
+						files.par_iter().filter_map(|(name, info)| {
 							if let Some(score) = matcher.fuzzy_match(name, &query) {
 								Some((score, File(FileResult {
 									parent: tab.clone(),
@@ -66,10 +66,10 @@ impl BlockHandleKey for SearchBlock {
 							} else {
 								None
 							}
-						}).collect::<Vec<_>>());
-					});
+						}).collect::<Vec<_>>()
+					}));
 					// Search waves
-					results.extend(client_state.waves.par_iter().filter_map(|wave| {
+					results.par_extend(client_state.waves.par_iter().filter_map(|wave| {
 						if let Some(score) = matcher.fuzzy_match(&wave.base.label, &query) {
 							Some((score, Wave(SimpleResult {
 								uid: wave.base.uid,
@@ -81,9 +81,9 @@ impl BlockHandleKey for SearchBlock {
 						} else {
 							None
 						}
-					}).collect::<Vec<_>>());
+					}));
 					// Search dialogs
-					results.extend(client_state.dialogs.par_iter().filter_map(|dialog| {
+					results.par_extend(client_state.dialogs.par_iter().filter_map(|dialog| {
 						if let Some(score) = matcher.fuzzy_match(&dialog.label, &query) {
 							Some((score, Dialog(SimpleResult {
 								uid: dialog.uid,
@@ -95,7 +95,7 @@ impl BlockHandleKey for SearchBlock {
 						} else {
 							None
 						}
-					}).collect::<Vec<_>>());
+					}));
 					drop(client_state);
 					// Sort
 					results.sort_by_key(|(score, _)| -score);

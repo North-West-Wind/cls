@@ -2,6 +2,7 @@ use std::{collections::HashSet, fmt::Debug, hash::Hash};
 
 use indexmap::IndexSet;
 use mki::Keyboard;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::common::keyboard::string_to_keyboard;
 
@@ -13,6 +14,7 @@ pub struct KeyCombo {
 
 impl Hash for KeyCombo {
 	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+		// Needs ordering, don't use par_iter
 		self.keys.iter().for_each(|key| {
 			key.hash(state);
 		});
@@ -22,7 +24,7 @@ impl Hash for KeyCombo {
 impl Debug for KeyCombo {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("KeyCombo")
-			.field("keys", &self.keys.iter().map(|key| key.to_string()).collect::<Vec<_>>().join(" + "))
+			.field("keys", &self.keys.par_iter().map(|key| key.to_string()).collect::<Vec<_>>().join(" + "))
 			.field("partial", &self.partial)
 			.finish()
 	}
@@ -32,7 +34,7 @@ impl KeyCombo {
 	pub fn from_strings<I, S>(keys: I) -> Self
 	where I: IntoIterator<Item = S>, S: Into<String> {
 		let unique: HashSet<String> = HashSet::from_iter(keys.into_iter().map(|s| s.into()));
-		let keys = unique.iter().filter_map(|key| string_to_keyboard(key)).collect::<Vec<_>>();
+		let keys = unique.par_iter().filter_map(|key| string_to_keyboard(key)).collect::<Vec<_>>();
 		let mut parsed = IndexSet::from_iter(keys.iter().cloned());
 		let partial = parsed.len() != unique.len();
 
@@ -64,12 +66,12 @@ impl KeyCombo {
 	}
 
 	pub fn add_key(&self, key: Keyboard) -> Self {
-		let mut keys = self.keys.iter().map(|key| *key).collect::<Vec<_>>();
+		let mut keys = self.keys.par_iter().map(|key| *key).collect::<Vec<_>>();
 		keys.push(key);
 		Self::from_keyboards(keys)
 	}
 
 	pub fn active(&self) -> bool {
-		self.keys.iter().all(|key| key.is_pressed())
+		self.keys.par_iter().all(|key| key.is_pressed())
 	}
 }
