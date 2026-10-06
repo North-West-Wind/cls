@@ -133,7 +133,8 @@ fn read_samples(buf: &mut [f32], volume: u32, active: &mut HashSet<Uuid>, audio_
 	audio_data.retain(|uuid, consumer| {
 		let read = consumer.lock().pop_slice(&mut in_buf);
 		if read > 0 {
-			buf.par_iter_mut().zip(in_buf.par_iter()).for_each(|(dst, src)| *dst += src * volume);
+			active.insert(*uuid);
+			buf[..read].par_iter_mut().zip(in_buf[..read].par_iter()).for_each(|(dst, src)| *dst += src * volume);
 			true
 		} else if active.remove(uuid) {
 			false
