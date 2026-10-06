@@ -1,25 +1,9 @@
 use std::{format, time::Duration};
 use crossterm::event::{Event, KeyEvent, KeyEventKind, poll, read};
-use mki::Action;
 
-use crate::{client::{AtomicClientState, AtomicStaticBlocks, ClientState, SelectionLayer, component::{block, layer, popup::{PopupHandleGlobalKey, PopupHandleKey, PopupHandlePaste}}}, common::{constant::{MIN_HEIGHT, MIN_WIDTH}, log}};
+use crate::{client::{AtomicClientState, AtomicStaticBlocks, ClientState, SelectionLayer, component::{block, layer, popup::{PopupHandleKey, PopupHandlePaste}}}, common::{constant::{MIN_HEIGHT, MIN_WIDTH}, log}};
 
 pub fn init_key_listener(client_state: AtomicClientState, blocks: AtomicStaticBlocks) -> Result<(), Box<dyn std::error::Error>> {
-	// Global key listener
-	log::info("Starting global key listener...");
-	let (popup_manager, redrawer) = {
-		let client_state = client_state.read();
-		(client_state.popup_manager.clone(), client_state.redrawer.clone())
-	};
-	mki::bind_any_key(Action::handle_kb(move |key| {
-		let mut popups = popup_manager.popups.lock();
-		let last_popup = popups.last_mut();
-		if let Some(popup) = last_popup && popup.has_global_key_handler() {
-			popup.handle_global_key(key);
-			redrawer.notify();
-		}
-	}));
-
 	// Local key listener
 	log::info("Starting local key listener...");
 	while client_state.read().running {

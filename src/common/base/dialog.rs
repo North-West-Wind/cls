@@ -1,10 +1,9 @@
-use std::{collections::HashSet, time::SystemTime, vec};
+use std::{collections::HashSet, str::FromStr, time::SystemTime, vec};
 
-use mki::Keyboard;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
-use crate::common::keyboard::{keyboard_to_string, string_to_keyboard};
+use crate::common::keyboard::AnyKey;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct SaveableDialog {
@@ -25,7 +24,7 @@ pub struct Dialog {
 	pub uid: u64,
 	pub label: String,
 	pub id: Option<u32>,
-	pub keys: HashSet<Keyboard>,
+	pub keys: HashSet<AnyKey>,
 	pub files: Vec<String>,
 	pub delay: f32,
 	pub random: bool,
@@ -55,7 +54,7 @@ impl From<&SaveableDialog> for Dialog {
 			uid: dialog.uid,
 			label: dialog.label.clone(),
 			id: dialog.id,
-			keys: dialog.keys.par_iter().filter_map(|key| string_to_keyboard(key)).collect::<HashSet<_>>(),
+			keys: dialog.keys.par_iter().filter_map(|key| AnyKey::from_str(key).ok()).collect::<HashSet<_>>(),
 			files: dialog.files.clone(),
 			delay: dialog.delay,
 			random: dialog.random,
@@ -71,7 +70,7 @@ impl Dialog {
 			uid: self.uid,
 			label: self.label.clone(),
 			id: self.id,
-			keys: self.keys.par_iter().map(|key| keyboard_to_string(*key)).collect::<HashSet<_>>(),
+			keys: self.keys.par_iter().map(|key| key.to_string()).collect::<HashSet<_>>(),
 			files: self.files.clone(),
 			delay: self.delay,
 			random: self.random,

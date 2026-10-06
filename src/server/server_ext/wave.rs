@@ -18,16 +18,14 @@ struct PlayableWave {
 #[derive(Clone, Default)]
 pub struct ServerWave {
 	pub base: Wave,
-	pub forced: Arc<AtomicBool>,
-	pub playing: Arc<AtomicBool>,
+	pub active: Arc<AtomicBool>,
 }
 
 impl From<Wave> for ServerWave {
 	fn from(base: Wave) -> Self {
 		Self {
 			base,
-			forced: Arc::new(AtomicBool::new(false)),
-			playing: Arc::new(AtomicBool::new(false)),
+			active: Arc::new(AtomicBool::new(false)),
 		}
 	}
 }
@@ -58,13 +56,10 @@ impl ServerWave {
 			(sample_rate, prod)
 		};
 
-		let forced = self.forced.clone();
-		let playing = self.playing.clone();
-		let keys = self.base.keys.clone();
+		let active = self.active.clone();
 		Some(thread::spawn(move || {
-			playing.store(true, Ordering::Relaxed);
 			let mut buf = vec![0f32; sample_rate / 16];
-			while forced.load(Ordering::Relaxed) || !keys.is_empty() && keys.par_iter().all(|key| key.is_pressed()) {
+			while active.load(Ordering::Relaxed) {
 				buf.par_chunks_exact_mut(2).enumerate().for_each(|(ii, samples)| {
 					let sample = playable.par_iter().map(|wave| {
 						let mut phase = wave.phase + ((1.0 + ii as f32) / sample_rate as f32) / wave.period;
@@ -104,7 +99,6 @@ impl ServerWave {
 				}
 				buf.fill(0.0);
 			}
-			playing.store(false, Ordering::Relaxed);
 		}))
 	}
 }

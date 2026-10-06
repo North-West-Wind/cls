@@ -181,9 +181,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		server_thread.join().unwrap();
 	}
 
-	// Remove global key listener
-	mki::remove_any_key_bind();
-
 	Ok(())
 }
 

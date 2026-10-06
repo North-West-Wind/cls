@@ -4,7 +4,7 @@ use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span},
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use substring::Substring;
 
-use crate::{client::{AtomicClientState, ClientState, component::{block::BlockNavigation, popup::{PopupComponent, input::{FLAG_NONE, InputPopup}, key_bind::KeyBindPopup}}}, common::{keyboard::keyboard_to_string, socket::ClientToServer}};
+use crate::{client::{AtomicClientState, ClientState, component::{block::BlockNavigation, popup::{PopupComponent, input::{FLAG_NONE, InputPopup}, key_bind::KeyBindPopup}}}, common::socket::ClientToServer};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -119,7 +119,7 @@ impl SettingsBlock {
 			0 => {
 				client_state.clone().read().popup_manager.push(PopupComponent::KeyBind(KeyBindPopup::new(HashSet::new(), move |keys| {
 					let mut client_state = client_state.write();
-					client_state.config.stop_key = keys.par_iter().map(|key| keyboard_to_string(*key)).collect();
+					client_state.config.stop_key = keys.par_iter().map(|key| key.to_string()).collect();
 					client_state.dirty = true;
 					client_state.request(ClientToServer::SetStopKey(client_state.config.stop_key.par_iter().cloned().collect()));
 				})));

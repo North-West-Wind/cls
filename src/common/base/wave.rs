@@ -1,10 +1,9 @@
-use std::{collections::HashSet, time::SystemTime, vec};
+use std::{collections::HashSet, str::FromStr, time::SystemTime, vec};
 
-use mki::Keyboard;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
-use crate::common::keyboard::{keyboard_to_string, string_to_keyboard};
+use crate::common::keyboard::AnyKey;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
@@ -51,7 +50,7 @@ pub struct Wave {
 	pub uid: u64,
 	pub label: String,
 	pub id: Option<u32>,
-	pub keys: HashSet<Keyboard>,
+	pub keys: HashSet<AnyKey>,
 	pub waves: Vec<SingleWave>,
 	pub volume: u32,
 }
@@ -75,7 +74,7 @@ impl From<&SaveableWave> for Wave {
 			uid: wave.uid,
 			label: wave.label.clone(),
 			id: wave.id,
-			keys: wave.keys.par_iter().filter_map(|key| string_to_keyboard(key)).collect::<HashSet<_>>(),
+			keys: wave.keys.par_iter().filter_map(|key| AnyKey::from_str(key).ok()).collect::<HashSet<_>>(),
 			waves: wave.waves.clone(),
 			volume: wave.volume,
 		}
@@ -88,7 +87,7 @@ impl Wave {
 			uid: self.uid,
 			label: self.label.clone(),
 			id: self.id,
-			keys: self.keys.par_iter().map(|key: &Keyboard| keyboard_to_string(*key)).collect::<HashSet<_>>(),
+			keys: self.keys.par_iter().map(|key| key.to_string()).collect::<HashSet<_>>(),
 			waves: self.waves.clone(),
 			volume: self.volume
 		}

@@ -1,13 +1,14 @@
 use std::{collections::{HashMap, HashSet}, eprintln, format, fs::read_dir, path::Path, println, sync::{Arc, atomic::{AtomicBool, AtomicU16, Ordering}}, thread, time::Duration, vec};
 
 use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
+use handy_keys::KeyboardListener;
 use nng::{Protocol, Socket};
 use parking_lot::{Mutex, RwLock};
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelExtend, ParallelIterator};
 use ringbuf::{HeapCons, traits::Consumer};
 use uuid::Uuid;
 
-use crate::{common::{base::{dialog::Dialog, wave::Wave}, config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, APP_NAME}, log, socket::{ClientToServer, ServerToClient, decode_c2s, encode_c2s, encode_s2c}}, server::{audio::create_audio_player, keys::KeyCombo, pulseaudio::{load_null_sink, loopback, unload_module}, server_ext::{dialog::ServerDialog, file::ServerFile, wave::ServerWave}}};
+use crate::{common::{base::{dialog::Dialog, wave::Wave}, config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, APP_NAME}, keyboard::AnyKey, log, socket::{ClientToServer, ServerToClient, decode_c2s, encode_c2s, encode_s2c}}, server::{audio::create_audio_player, keys::KeyCombo, pulseaudio::{load_null_sink, loopback, unload_module}, server_ext::{dialog::ServerDialog, file::ServerFile, wave::ServerWave}}};
 
 mod audio;
 mod keys;
@@ -78,7 +79,10 @@ impl ServerState {
 		// Load wave hotkeys and IDs
 		config.waves.iter().for_each(|wave| {
 			let combo = KeyCombo::from_strings(wave.keys.clone());
-			if !combo.is_empty() && !combo.is_partial() {
+			if !combo.is_empty() {
+				if combo.is_partial() {
+					log::warn(format!("Parsed hotkey of wave {} is partial: {}", wave.label, combo));
+				}
 				if let Some(list) = self.wave_keys.get_mut(&combo) {
 					list.insert(wave.uid);
 				} else {
@@ -207,95 +211,149 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 	log::info("Set SIGTERM handler");
 
 	// Global Key Listener
-	let combos: Mutex<HashSet<KeyCombo>> = Mutex::new(HashSet::new());
-	let server_state_mki = server_state.clone();
-	let server_event_mki = server_event.clone();
+	let server_state_key = server_state.clone();
+	let server_event_key = server_event.clone();
 	let id_mki = id.clone();
-	mki::bind_any_key(mki::Action::handle_kb(move |key| {
-		let mut combos = combos.lock();
-		// Remove unpressed
-		combos.retain(|combo| combo.active());
-		// Add new combinations
-		let new_combos = combos.par_iter().map(|combo| combo.add_key(key)).collect::<Vec<_>>();
-		combos.par_extend(new_combos.par_iter().cloned());
-		combos.insert(KeyCombo::from_keyboards(vec![key]));
-
-		let server_state_combo = server_state_mki.clone();
-		combos.par_iter().for_each(|combo| {
-			let server_state = server_state_combo.read();
-			// File hotkey
-			if let Some(files) = server_state.file_keys.get(combo) {
-				files.par_iter().cloned().for_each(|path| {
-					let file = ServerFile::new(path.clone(), &server_state);
-					let server_event = server_event_mki.clone();
-					let server_state = server_state_combo.clone();
-					let id = id_mki.next();
-					thread::spawn(move || {
-						let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(0, id, Path::new(&path).file_name().unwrap().to_str().unwrap().to_string())));
-						let thread = file.play(&mut server_state.write());
-						if let Some(thread) = thread {
-							let _ = thread.join();
-						}
-						let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
-					});
-				});
+	thread::spawn(move || {
+		#[cfg(target_os = "macos")]
+		{
+			use handy_keys::{check_accessibility, open_accessibility_settings};
+			if !check_accessibility() {
+				open_accessibility_settings().unwrap();
 			}
+		}
 
-			// Wave hotkey
-			if let Some(waves) = server_state.wave_keys.get(combo) {
-				waves.par_iter().for_each(|uid| {
-					if let Some(wave) = server_state.waves.get(uid) && !wave.playing.load(Ordering::Relaxed) {
-						let wave = wave.clone();
-						let server_state = server_state_combo.clone();
-						let server_event = server_event_mki.clone();
-						let id = id_mki.next();
-						thread::spawn(move || {
-							let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(1, id, wave.base.label.clone())));
-							let thread = wave.play(server_state);
-							if let Some(thread) = thread {
-								let _ = thread.join();
+		let listener = KeyboardListener::new().unwrap();
+		let mut combos: HashSet<KeyCombo> = HashSet::new();
+		let mut modifiers = HashSet::new();
+
+		let mut pressed = vec![];
+		let mut released = vec![];
+
+		while server_state_key.read().running {
+			if let Ok(event) = listener.recv() {
+				// Isolate keys and modifiers
+				pressed.clear();
+				released.clear();
+				if let Some(key) = event.key {
+					if event.is_key_down {
+						pressed.push(AnyKey::K(key));
+					} else {
+						released.push(AnyKey::K(key));
+					}
+				}
+				let mut new_modifiers = AnyKey::split_modifiers(event.modifiers);
+				new_modifiers.retain(|modifier| {
+					if !modifiers.contains(modifier) {
+						modifiers.insert(*modifier);
+						pressed.push(*modifier);
+						false
+					} else {
+						true
+					}
+				});
+				new_modifiers.iter().for_each(|modifier| {
+					modifiers.remove(modifier);
+					released.push(*modifier);
+				});
+
+				// Remove unpressed
+				let removed = combos.extract_if(|combo| released.iter().any(|key| combo.has_key(key))).map(|combo| (combo, false)).collect::<Vec<_>>();
+				// Add new combinations
+				pressed.iter().for_each(|key| {
+					let new_combos = combos.par_iter().map(|combo| combo.with_new_key(*key)).collect::<Vec<_>>();
+					combos.par_extend(new_combos.par_iter().cloned());
+					combos.insert(KeyCombo::from_keys(vec![*key]));
+				});
+
+				combos.par_iter().map(|combo| (combo.clone(), true)).chain(removed.par_iter().cloned()).for_each(|(combo, active)| {
+					let server_state_key = server_state_key.clone();
+					let server_state = server_state_key.read();
+					// File hotkey
+					if active && let Some(files) = server_state.file_keys.get(&combo) {
+						files.par_iter().cloned().for_each(|path| {
+							let file = ServerFile::new(path.clone(), &server_state);
+							let server_event = server_event_key.clone();
+							let server_state = server_state_key.clone();
+							let id = id_mki.next();
+							thread::spawn(move || {
+								let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(0, id, Path::new(&path).file_name().unwrap().to_str().unwrap().to_string())));
+								let thread = file.play(&mut server_state.write());
+								if let Some(thread) = thread {
+									let _ = thread.join();
+								}
+								let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
+							});
+						});
+					}
+
+					// Wave hotkey
+					if let Some(waves) = server_state.wave_keys.get(&combo) {
+						waves.par_iter().for_each(|uid| {
+							if let Some(wave) = server_state.waves.get(uid) {
+								if active && !wave.active.load(Ordering::Relaxed) {
+									let wave = wave.clone();
+									let server_state = server_state_key.clone();
+									let server_event = server_event_key.clone();
+									let id = id_mki.next();
+									thread::spawn(move || {
+										let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(1, id, wave.base.label.clone())));
+										wave.active.store(true, Ordering::Relaxed);
+										let thread = wave.play(server_state);
+										if let Some(thread) = thread {
+											let _ = thread.join();
+										}
+										let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
+									});
+								} else if !active {
+									wave.active.store(false, Ordering::Relaxed);
+								}
 							}
-							let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
+						});
+					}
+
+					// Dialog hotkey
+					if let Some(dialogs) = server_state.dialog_keys.get(&combo) {
+						dialogs.par_iter().for_each(|uid| {
+							if let Some(dialog) = server_state.dialogs.get(uid) {
+								if active && !dialog.active.load(Ordering::Relaxed) {
+									let dialog = dialog.clone();
+									let server_state = server_state_key.clone();
+									let server_event = server_event_key.clone();
+									let id = id_mki.next();
+									thread::spawn(move || {
+										let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(2, id, dialog.base.label.clone())));
+										dialog.active.store(true, Ordering::Relaxed);
+										let thread = dialog.play(server_state);
+										if let Some(thread) = thread {
+											let _ = thread.join();
+										}
+										let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
+									});
+								} else if !active {
+									dialog.active.store(false, Ordering::Relaxed);
+								}
+							}
+						});
+					}
+
+					// Stop hotkey
+					if !server_state.stopkey.is_empty() && server_state.stopkey == combo && active {
+						drop(server_state);
+						let mut server_state = server_state_key.write();
+						server_state.stoppable.drain(0..).par_bridge().for_each(|signal| signal.store(true, Ordering::Relaxed));
+						// Consume all audio data
+						server_state.audio_data.drain().par_bridge().for_each(|(_, cons)| {
+							let mut cons = cons.lock();
+							while let read = cons.skip(usize::MAX) && read > 0 {
+								thread::sleep(Duration::from_millis(10));
+							}
 						});
 					}
 				});
 			}
-
-			// Dialog hotkey
-			if let Some(dialogs) = server_state.dialog_keys.get(combo) {
-				dialogs.par_iter().for_each(|uid| {
-					if let Some(dialog) = server_state.dialogs.get(uid) && !dialog.playing.load(Ordering::Relaxed) {
-						let dialog = dialog.clone();
-						let server_state = server_state_combo.clone();
-						let server_event = server_event_mki.clone();
-						let id = id_mki.next();
-						thread::spawn(move || {
-							let _ = server_event.lock().send(&encode_s2c(ServerToClient::Playing(2, id, dialog.base.label.clone())));
-							let thread = dialog.play(server_state);
-							if let Some(thread) = thread {
-								let _ = thread.join();
-							}
-							let _ = server_event.lock().send(&encode_s2c(ServerToClient::Stopping(id)));
-						});
-					}
-				});
-			}
-
-			// Stop hotkey
-			if !server_state.stopkey.is_empty() && server_state.stopkey == *combo {
-				drop(server_state);
-				let mut server_state = server_state_combo.write();
-				server_state.stoppable.drain(0..).par_bridge().for_each(|signal| signal.store(true, Ordering::Relaxed));
-				// Consume all audio data
-				server_state.audio_data.drain().par_bridge().for_each(|(_, cons)| {
-					let mut cons = cons.lock();
-					while let read = cons.skip(usize::MAX) && read > 0 {
-						thread::sleep(Duration::from_millis(10));
-					}
-				});
-			}
-		});
-	}));
+		}
+	});
 	log::info("Set global key listener");
 
 	// Socket listener - the main thing keeping this running
@@ -335,7 +393,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 					},
 					PlayWave(uid) => {
 						if let Some(wave) = server_state.read().waves.get(&uid).cloned() {
-							if wave.playing.load(Ordering::Relaxed) {
+							if wave.active.load(Ordering::Relaxed) {
 								msg.push_back(&encode_s2c(Error(format!("Wave with ID {} is already playing", uid))));
 							} else {
 								msg.push_back(&encode_s2c(Success));
@@ -344,7 +402,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 								let id = id.next();
 								thread::spawn(move || {
 									let _ = server_event.lock().send(&encode_s2c(Playing(1, id, wave.base.label.clone())));
-									wave.forced.store(true, Ordering::Relaxed);
+									wave.active.store(true, Ordering::Relaxed);
 									if let Some(thread) = wave.play(server_state) {
 										let _ = thread.join();
 									}
@@ -357,7 +415,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 					},
 					PlayDialog(uid) => {
 						if let Some(dialog) = server_state.read().dialogs.get(&uid).cloned() {
-							if dialog.playing.load(Ordering::Relaxed) {
+							if dialog.active.load(Ordering::Relaxed) {
 								msg.push_back(&encode_s2c(Error(format!("Dialog with ID {} is already playing", uid))));
 							} else {
 								msg.push_back(&encode_s2c(Success));
@@ -366,7 +424,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 								let id = id.next();
 								thread::spawn(move || {
 									let _ = server_event.lock().send(&encode_s2c(Playing(2, id, dialog.base.label.clone())));
-									dialog.forced.store(true, Ordering::Relaxed);
+									dialog.active.store(true, Ordering::Relaxed);
 									if let Some(thread) = dialog.play(server_state) {
 										let _ = thread.join();
 									}
@@ -430,7 +488,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 					StopWave(uid) => {
 						match server_state.read().waves.get(&uid) {
 							Some(wave) => {
-								wave.forced.store(false, Ordering::Relaxed);
+								wave.active.store(false, Ordering::Relaxed);
 								msg.push_back(&encode_s2c(Success));
 							},
 							None => {
@@ -441,7 +499,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 					StopDialog(uid) => {
 						match server_state.read().dialogs.get(&uid) {
 							Some(dialog) => {
-								dialog.forced.store(false, Ordering::Relaxed);
+								dialog.active.store(false, Ordering::Relaxed);
 								msg.push_back(&encode_s2c(Success));
 							},
 							None => {
@@ -516,7 +574,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 						let old_combo = 
 						if let Some(server_wave) = server_state.waves.get_mut(&uid) {
 							// Replace existing wave
-							let combo = KeyCombo::from_keyboards(server_wave.base.keys.clone());
+							let combo = KeyCombo::from_keys(server_wave.base.keys.clone());
 							server_wave.base = Wave::from(&wave);
 							Some(combo)
 						} else {
@@ -542,7 +600,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 						let mut server_state = server_state.write();
 						let old_combo = if let Some(server_dialog) = server_state.dialogs.get_mut(&uid) {
 							// Replace existing dialog
-							let combo = KeyCombo::from_keyboards(server_dialog.base.keys.clone());
+							let combo = KeyCombo::from_keys(server_dialog.base.keys.clone());
 							server_dialog.base = Dialog::from(&dialog);
 							Some(combo)
 						} else {
@@ -566,7 +624,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 					DeleteWave(uid) => {
 						let mut server_state = server_state.write();
 						if let Some(wave) = server_state.waves.remove(&uid) {
-							let combo = KeyCombo::from_keyboards(wave.base.keys);
+							let combo = KeyCombo::from_keys(wave.base.keys);
 							if let Some(list) = server_state.wave_keys.get_mut(&combo) {
 								list.remove(&uid);
 							}
@@ -578,7 +636,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 					DeleteDialog(uid) => {
 						let mut server_state = server_state.write();
 						if let Some(dialog) = server_state.dialogs.remove(&uid) {
-							let combo = KeyCombo::from_keyboards(dialog.base.keys);
+							let combo = KeyCombo::from_keys(dialog.base.keys);
 							if let Some(list) = server_state.dialog_keys.get_mut(&combo) {
 								list.remove(&uid);
 							}

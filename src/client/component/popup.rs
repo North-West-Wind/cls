@@ -4,7 +4,6 @@ use crossterm::event::KeyEvent;
 use help::HelpPopup;
 use input::InputPopup;
 use key_bind::KeyBindPopup;
-use mki::Keyboard;
 use ratatui::{layout::Rect, Frame};
 use save::SavePopup;
 
@@ -38,10 +37,6 @@ pub trait PopupHandleKey {
 
 pub trait PopupHandlePaste {
 	fn handle_paste(&mut self, data: String) -> bool;
-}
-
-pub trait PopupHandleGlobalKey {
-	fn handle_global_key(&mut self, key: Keyboard);
 }
 
 impl PopupRender for PopupComponent {
@@ -78,24 +73,6 @@ impl PopupHandlePaste for PopupComponent {
 	fn handle_paste(&mut self, data: String) -> bool {
 		match self {
 			PopupComponent::Input(popup) => popup.handle_paste(data),
-			_ => false,
-		}
-	}
-}
-
-impl PopupHandleGlobalKey for PopupComponent {
-	fn handle_global_key(&mut self, key: Keyboard) {
-		match self {
-			PopupComponent::KeyBind(popup) => popup.handle_global_key(key),
-			_ => (),
-		}
-	}
-}
-
-impl PopupComponent {
-	pub fn has_global_key_handler(&self) -> bool {
-		match self {
-			PopupComponent::KeyBind(_) => true,
 			_ => false,
 		}
 	}

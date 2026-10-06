@@ -1,97 +1,101 @@
-use std::{cmp::Ordering, format, str::FromStr};
+use std::{cmp::Ordering, error::Error, fmt::Display, str::FromStr};
 
-use mki::Keyboard;
+use handy_keys::{Key, Modifiers};
 use regex::Regex;
-use substring::Substring;
+use serde::{Deserialize, Serialize};
 
-pub fn keyboard_to_string(keyboard: Keyboard) -> String {
-	use Keyboard::*;
-	let str = match keyboard {
-		Number0 => "0",
-		Number1 => "1",
-		Number2 => "2",
-		Number3 => "3",
-		Number4 => "4",
-		Number5 => "5",
-		Number6 => "6",
-		Number7 => "7",
-		Number8 => "8",
-		Number9 => "9",
-		Comma => ",",
-		Period => ".",
-		Slash => "/",
-		SemiColon => ";",
-		Apostrophe => "'",
-		LeftBrace => "[",
-		RightBrace => "]",
-		BackwardSlash => "\\",
-		Grave => "`",
-		Other(code) => match code {
-			56 => "LeftAlt",
-			100 => "RightAlt",
-			125 => "LeftSuper",
-			12 => "_",
-			13 => "=",
-			55 => "N*",
-			71 => "N7",
-			72 => "N8",
-			73 => "N9",
-			74 => "N-",
-			75 => "N4",
-			76 => "N5",
-			77 => "N6",
-			78 => "N+",
-			79 => "N1",
-			80 => "N2",
-			81 => "N3",
-			82 => "N0",
-			83 => "N.",
-			98 => "N/",
-			_ => "",
-		},
-		_ => ""
-	}.to_string();
-	if str.is_empty() {
-		return match keyboard {
-			Other(code) => format!("({})", code),
-			_ => format!("{:?}", keyboard)
-		};
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseAnyKeyError;
+
+impl Display for ParseAnyKeyError {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    "invalid key".fmt(f)
 	}
-	str
 }
 
-pub fn string_to_keyboard(string: &str) -> Option<Keyboard> {
-	use Keyboard::Other;
-	match string {
-		"LeftAlt" => Some(Other(56)),
-		"RightAlt" => Some(Other(100)),
-		"LeftSuper" => Some(Other(125)),
-		"_" => Some(Other(12)),
-		"=" => Some(Other(13)),
-		"N*" => Some(Other(55)),
-		"N7" => Some(Other(71)),
-		"N8" => Some(Other(72)),
-		"N9" => Some(Other(73)),
-		"N-" => Some(Other(74)),
-		"N4" => Some(Other(75)),
-		"N5" => Some(Other(76)),
-		"N6" => Some(Other(77)),
-		"N+" => Some(Other(78)),
-		"N1" => Some(Other(79)),
-		"N2" => Some(Other(80)),
-		"N3" => Some(Other(81)),
-		"N0" => Some(Other(82)),
-		"N." => Some(Other(83)),
-		"N/" => Some(Other(98)),
-		_ => {
-			if string.starts_with("(") && string.ends_with(")") {
-				let parsed = i32::from_str_radix(string.substring(1, string.len() - 1), 10);
-				if parsed.is_ok() {
-					return Some(Other(parsed.unwrap()));
-				}
+impl Error for ParseAnyKeyError {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AnyKey {
+	M(Modifiers),
+	K(Key),
+}
+
+impl FromStr for AnyKey {
+	type Err = ParseAnyKeyError;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		if let Ok(key) = Key::from_str(s) {
+			Ok(AnyKey::K(key))
+		} else if let Ok(modifier) = Modifiers::from_str(s) {
+			Ok(AnyKey::M(modifier))
+		} else {
+			match s.to_lowercase().as_str() {
+				"leftsuper" => Ok(AnyKey::M(Modifiers::CMD_LEFT)),
+				"rightsuper" => Ok(AnyKey::M(Modifiers::CMD_RIGHT)),
+				"leftshift" => Ok(AnyKey::M(Modifiers::SHIFT_LEFT)),
+				"rightshift" => Ok(AnyKey::M(Modifiers::SHIFT_RIGHT)),
+				"leftctrl" => Ok(AnyKey::M(Modifiers::CTRL_LEFT)),
+				"rightctrl" => Ok(AnyKey::M(Modifiers::CTRL_RIGHT)),
+				"leftalt" => Ok(AnyKey::M(Modifiers::OPT_LEFT)),
+				"rightalt" => Ok(AnyKey::M(Modifiers::OPT_RIGHT)),
+				"n0" => Ok(AnyKey::K(Key::Keypad0)),
+				"n1" => Ok(AnyKey::K(Key::Keypad1)),
+				"n2" => Ok(AnyKey::K(Key::Keypad2)),
+				"n3" => Ok(AnyKey::K(Key::Keypad3)),
+				"n4" => Ok(AnyKey::K(Key::Keypad4)),
+				"n5" => Ok(AnyKey::K(Key::Keypad5)),
+				"n6" => Ok(AnyKey::K(Key::Keypad6)),
+				"n7" => Ok(AnyKey::K(Key::Keypad7)),
+				"n8" => Ok(AnyKey::K(Key::Keypad8)),
+				"n9" => Ok(AnyKey::K(Key::Keypad9)),
+				"n." => Ok(AnyKey::K(Key::KeypadDecimal)),
+				"n+" => Ok(AnyKey::K(Key::KeypadPlus)),
+				"n-" => Ok(AnyKey::K(Key::KeypadMinus)),
+				"n*" => Ok(AnyKey::K(Key::KeypadMultiply)),
+				"n/" => Ok(AnyKey::K(Key::KeypadDivide)),
+				_ => Err(ParseAnyKeyError)
 			}
-			Keyboard::from_str(&string).ok()
 		}
+	}
+}
+
+impl ToString for AnyKey {
+	fn to_string(&self) -> String {
+		match self {
+			AnyKey::K(key) => key.to_string(),
+			AnyKey::M(modifiers) => modifiers.to_string()
+		}
+	}
+}
+
+impl PartialOrd for AnyKey {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		if let AnyKey::M(_) = self && let AnyKey::K(_) = other {
+			Some(Ordering::Less)
+		} else if let AnyKey::K(_) = self && let AnyKey::M(_) = other {
+			Some(Ordering::Greater)
+		} else {
+			self.to_string().partial_cmp(&other.to_string())
+		}
+	}
+}
+
+impl Ord for AnyKey {
+	fn cmp(&self, other: &Self) -> Ordering {
+		if let AnyKey::M(_) = self && let AnyKey::K(_) = other {
+			Ordering::Less
+		} else if let AnyKey::K(_) = self && let AnyKey::M(_) = other {
+			Ordering::Greater
+		} else {
+			self.to_string().cmp(&other.to_string())
+		}
+	}
+}
+
+impl AnyKey {
+	pub fn split_modifiers(modifiers: Modifiers) -> Vec<AnyKey> {
+		modifiers.to_string().split('+').map(|s| AnyKey::M(Modifiers::from_str(s).unwrap())).collect()
 	}
 }
 

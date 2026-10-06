@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::{Line, Span, Text}, widgets::{Block, Borders, Padding, Paragraph}, Frame};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::{client::{AtomicClientState, ClientState, MainOpened, SearchResult, component::block::{BlockNavigation, search::SearchBlock, tabs::TabsBlock}}, common::{keyboard::{key_sorter, keyboard_to_string}, socket::ClientToServer}};
+use crate::{client::{AtomicClientState, ClientState, MainOpened, SearchResult, component::block::{BlockNavigation, search::SearchBlock, tabs::TabsBlock}}, common::{keyboard::key_sorter, socket::ClientToServer}};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -79,7 +79,7 @@ impl BlockRenderArea for InfoBlock {
 					if wave.base.keys.is_empty() {
 						spans.push(Span::from("None").style(Style::default().fg(Color::Red)));
 					} else {
-						let mut keys = wave.base.keys.par_iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
+						let mut keys = wave.base.keys.par_iter().map(|key| key.to_string()).collect::<Vec<String>>();
 						keys.sort_by(|a, b| key_sorter(a, b));
 						spans.push(Span::from(format!(" {{{}}} ", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
 					}
@@ -103,7 +103,7 @@ impl BlockRenderArea for InfoBlock {
 					if dialog.keys.is_empty() {
 						spans.push(Span::from("None").style(Style::default().fg(Color::Red)));
 					} else {
-						let mut keys = dialog.keys.par_iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
+						let mut keys = dialog.keys.par_iter().map(|key| key.to_string()).collect::<Vec<String>>();
 						keys.sort_by(|a, b| key_sorter(a, b));
 						spans.push(Span::from(format!(" {{{}}} ", keys.join(" "))).style(Style::default().fg(Color::LightGreen).add_modifier(Modifier::REVERSED)));
 					}
@@ -125,7 +125,7 @@ impl BlockRenderArea for InfoBlock {
 						Wave(result) => {
 							client_state.waves.par_iter().find_any(|wave| wave.base.uid == result.uid).map_or((String::new(), 0, None, None, "Wave"), |wave| {
 								(format!("{} ({})", result.main, result.sub), wave.base.volume, if wave.base.keys.is_empty() { None } else {
-									let mut keys = wave.base.keys.par_iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
+									let mut keys = wave.base.keys.par_iter().map(|key| key.to_string()).collect::<Vec<String>>();
 									keys.sort_by(|a, b| key_sorter(a, b));
 									Some(format!("{{{}}}", keys.join(" ")))
 								}, wave.base.id, "Wave")
@@ -134,7 +134,7 @@ impl BlockRenderArea for InfoBlock {
 						Dialog(result) => {
 							client_state.dialogs.par_iter().find_any(|dialog| dialog.uid == result.uid).map_or((String::new(), 0, None, None, "Dialog"), |dialog| {
 								(result.main.clone(), dialog.volume, if dialog.keys.is_empty() { None } else {
-									let mut keys = dialog.keys.par_iter().map(|key| keyboard_to_string(*key)).collect::<Vec<String>>();
+									let mut keys = dialog.keys.par_iter().map(|key| key.to_string()).collect::<Vec<String>>();
 									keys.sort_by(|a, b| key_sorter(a, b));
 									Some(format!("{{{}}}", keys.join(" ")))
 								}, dialog.id, "Dialog")
