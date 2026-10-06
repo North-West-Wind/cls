@@ -1,7 +1,7 @@
 use std::{cmp::max, collections::HashSet, format, sync::{Arc, atomic::{AtomicBool, Ordering}}, thread, vec};
 
 use crossterm::event::{KeyCode, KeyEvent};
-use handy_keys::KeyboardListener;
+use handy_keys::{Key, KeyboardListener};
 use indexmap::IndexSet;
 use parking_lot::Mutex;
 use ratatui::{style::{Color, Style}, text::Line, widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget}, Frame};
@@ -52,6 +52,7 @@ impl PopupHandleKey for KeyBindPopup {
 					self.recording.store(true, Ordering::Relaxed);
 					let recording = self.recording.clone();
 					let recorded = self.recorded.clone();
+					let redrawer = client_state.redrawer.clone();
 					thread::spawn(move || {
 						#[cfg(target_os = "macos")]
 						{
@@ -67,9 +68,10 @@ impl PopupHandleKey for KeyBindPopup {
 							if let Ok(event) = listener.recv() && event.is_key_down {
 								let mut recorded = recorded.lock();
 								recorded.extend(AnyKey::split_modifiers(event.modifiers));
-								if let Some(key) = event.key {
+								if let Some(key) = event.key && key != Key::Return && key != Key::Escape {
 									recorded.insert(AnyKey::K(key));
 								}
+								redrawer.notify();
 							}
 						}
 					});

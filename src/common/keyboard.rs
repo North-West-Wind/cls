@@ -95,7 +95,12 @@ impl Ord for AnyKey {
 
 impl AnyKey {
 	pub fn split_modifiers(modifiers: Modifiers) -> Vec<AnyKey> {
-		modifiers.to_string().split('+').map(|s| AnyKey::M(Modifiers::from_str(s).unwrap())).collect()
+		let str = modifiers.to_string();
+		if str.is_empty() {
+			vec![]
+		} else {
+			str.split('+').map(|s| AnyKey::M(Modifiers::from_str(s).unwrap())).collect()
+		}
 	}
 }
 
