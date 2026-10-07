@@ -2,7 +2,7 @@ use std::{collections::HashMap, format, io, sync::Arc, thread::{self, JoinHandle
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode}};
 use indexmap::IndexMap;
-use nng::{Error::ConnectionRefused, Protocol, Socket, options::{Options, RecvTimeout, protocol::pubsub::Subscribe}};
+use nng::{Error::ConnectionRefused, Protocol, Socket, options::{Options, RecvTimeout, SendTimeout, protocol::pubsub::Subscribe}};
 use parking_lot::{Condvar, Mutex, RwLock};
 use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, widgets::{Block, BorderType, Borders, Paragraph}};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -311,6 +311,7 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 	}
 
 	socket_comms.set_opt::<RecvTimeout>(Some(Duration::from_secs(3)))?;
+	socket_comms.set_opt::<SendTimeout>(Some(Duration::from_secs(3)))?;
 	socket_event.set_opt::<RecvTimeout>(Some(Duration::from_secs(3)))?;
 	socket_event.set_opt::<Subscribe>(vec![])?; // Subscribe to all topics
 

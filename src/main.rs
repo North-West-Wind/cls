@@ -1,8 +1,8 @@
-use std::{panic, path::Path, println, thread};
+use std::{panic, path::Path, println, thread, time::Duration};
 
 use cpal::traits::{DeviceTrait, HostTrait};
 use clap::{command, Arg, ArgAction, Command};
-use nng::{Protocol, Socket};
+use nng::{Protocol, Socket, options::{Options, RecvTimeout, SendTimeout}};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{client::start_client, common::{config, constant::ADDRESS_COMMS, log, socket::{ClientToServer, ServerToClient, decode_s2c, encode_c2s}}, server::start_server};
@@ -48,6 +48,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	if let Some((subcommand, matches)) = matches.subcommand() {
 		use ClientToServer::*;
 		let socket = Socket::new(Protocol::Req0)?;
+		socket.set_opt::<SendTimeout>(Some(Duration::from_secs(3)))?;
+		socket.set_opt::<RecvTimeout>(Some(Duration::from_secs(3)))?;
 		socket.dial(ADDRESS_COMMS)?;
 		let result = match subcommand {
 			"exit" => {
