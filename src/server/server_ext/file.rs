@@ -4,7 +4,6 @@ use indexmap::IndexMap;
 use parking_lot::{Mutex, RwLock};
 use rayon::{iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::ParallelSlice};
 use ringbuf::{HeapProd, HeapRb, traits::{Producer, Split}};
-use uuid::Uuid;
 
 use crate::{common::{base::file::SaveableFile, log}, server::ServerState};
 
@@ -80,14 +79,13 @@ impl ServerFile {
 	}
 
 	pub fn play(&self, server_state: &mut ServerState) -> Option<JoinHandle<()>> {
-		let uuid = Uuid::new_v4();
 		let volume = self.base.volume as f32 / 100.0;
 		let stopped = Arc::new(AtomicBool::new(false));
 		let (sample_rate, prod) = {
 			let sample_rate = server_state.sample_rate as usize;
 			let rb = HeapRb::<f32>::new(sample_rate / 16);
 			let (prod, cons) = rb.split();
-			server_state.audio_data.insert(uuid, Arc::new(Mutex::new(cons)));
+			server_state.audio_sender.send(cons).unwrap();
 			server_state.stoppable.push(stopped.clone());
 			(sample_rate, prod)
 		};
@@ -96,7 +94,6 @@ impl ServerFile {
 			Ok(thread) => Some(thread),
 			Err(err) => {
 				log::error(format!("Failed to play file with ffmpeg: {:?}", err));
-				server_state.audio_data.remove(&uuid);
 				None
 			}
 		}

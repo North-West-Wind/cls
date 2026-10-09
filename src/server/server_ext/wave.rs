@@ -1,9 +1,7 @@
 use std::{f32::consts::PI, sync::{Arc, atomic::{AtomicBool, Ordering}}, thread::{self, JoinHandle}, time::Duration, vec};
 
-use parking_lot::Mutex;
 use rayon::{iter::{IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::ParallelSliceMut};
 use ringbuf::{HeapRb, traits::{Producer, Split}};
-use uuid::Uuid;
 
 use crate::{common::base::wave::{Wave, WaveType}, server::AtomicServerState};
 
@@ -46,13 +44,12 @@ impl ServerWave {
 			}
 		}).collect::<Vec<PlayableWave>>();
 
-		let uuid = Uuid::new_v4();
 		let (sample_rate, mut prod) = {
-			let mut server_state = server_state.write();
+			let server_state = server_state.read();
 			let sample_rate = server_state.sample_rate as usize;
 			let rb = HeapRb::<f32>::new(sample_rate / 16);
 			let (prod, cons) = rb.split();
-			server_state.audio_data.insert(uuid, Arc::new(Mutex::new(cons)));
+			server_state.audio_sender.send(cons).unwrap();
 			(sample_rate, prod)
 		};
 

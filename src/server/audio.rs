@@ -1,11 +1,9 @@
-use std::{collections::{HashMap, HashSet}, format, io::{self, BufWriter, Write}, process::{Child, ChildStdin, Command, Stdio}, str::FromStr, sync::Arc, thread, time::{Duration, SystemTime}, vec};
+use std::{format, io::{self, BufWriter, Write}, process::{Child, ChildStdin, Command, Stdio}, str::FromStr, sync::mpsc::Receiver, thread, time::{Duration, SystemTime}, vec};
 
 use cmd_exists::cmd_exists;
 use cpal::{DeviceId, SampleFormat, traits::{DeviceTrait, HostTrait, StreamTrait}};
-use parking_lot::Mutex;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator};
 use ringbuf::{HeapCons, traits::Consumer};
-use uuid::Uuid;
 
 use crate::{common::{constant::{APP_NAME, ENDIANESS}, log}, server::AtomicServerState};
 
@@ -36,7 +34,7 @@ fn spawn_pacat(sample_rate: u32) -> Pacat {
 	}
 }
 
-pub fn create_audio_player(atomic_server_state: AtomicServerState) {
+pub fn create_audio_player(atomic_server_state: AtomicServerState, rx: Receiver<HeapCons<f32>>) {
 	let server_state = atomic_server_state.clone();
 	let mut server_state = server_state.write();
 	if server_state.no_pacat || cmd_exists("pacat").is_err() {
@@ -65,25 +63,30 @@ pub fn create_audio_player(atomic_server_state: AtomicServerState) {
 		let err_callback = |err| {
 			log::error(err);
 		};
-		let mut active = HashSet::new();
+		let mut audio_data = vec![];
 		let stream = device.build_output_stream(&config, move |data: &mut [f32], _| {
-			let mut server_state = atomic_server_state.write();
-			let volume = server_state.config.volume;
-			read_samples(data, volume, &mut active, &mut server_state.audio_data);
+			let volume = atomic_server_state.read().config.volume;
+			if let Ok(cons) = rx.try_recv() {
+				audio_data.push((cons, false));
+			}
+			read_samples(data, volume, &mut audio_data);
 		}, err_callback, None).expect("Failed to create stream");
 		stream.play().unwrap();
 	} else {
 		let server_state = atomic_server_state.clone();
 		thread::spawn(move || {
 			let mut pacat_holder: Option<Pacat> = None;
-			let mut active = HashSet::new();
+			let mut audio_data = vec![];
 			let mut buf = [0_f32; CHUNK_SIZE];
 			while server_state.read().running {
+				if let Ok(cons) = rx.try_recv() {
+					audio_data.push((cons, false));
+				}
 				let (sample_rate, available) = {
-					let server_state = &mut server_state.write();
+					let server_state = server_state.read();
 					let sample_rate = server_state.sample_rate;
 					let volume = server_state.config.volume;
-					let available = read_samples(&mut buf, volume, &mut active, &mut server_state.audio_data);
+					let available = read_samples(&mut buf, volume, &mut audio_data);
 					(sample_rate, available)
 				};
 				if available {
@@ -123,20 +126,20 @@ pub fn create_audio_player(atomic_server_state: AtomicServerState) {
 	}
 }
 
-fn read_samples(buf: &mut [f32], volume: u32, active: &mut HashSet<Uuid>, audio_data: &mut HashMap<Uuid, Arc<Mutex<HeapCons<f32>>>>) -> bool {
+fn read_samples(buf: &mut [f32], volume: u32, audio_data: &mut Vec<(HeapCons<f32>, bool)>) -> bool {
 	if audio_data.is_empty() {
 		return false;
 	}
 	let volume = volume as f32 / 100.0;
 	let mut in_buf = vec![0f32; buf.len()];
 	// Read data from ring buffers & remove inactive
-	audio_data.retain(|uuid, consumer| {
-		let read = consumer.lock().pop_slice(&mut in_buf);
+	audio_data.retain_mut(|(consumer, active)| {
+		let read = consumer.pop_slice(&mut in_buf);
 		if read > 0 {
-			active.insert(*uuid);
+			*active = true;
 			buf[..read].par_iter_mut().zip(in_buf[..read].par_iter()).for_each(|(dst, src)| *dst += src * volume);
 			true
-		} else if active.remove(uuid) {
+		} else if *active {
 			false
 		} else {
 			true

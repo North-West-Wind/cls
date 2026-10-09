@@ -1,12 +1,11 @@
-use std::{collections::{HashMap, HashSet}, eprintln, format, fs::read_dir, path::Path, println, sync::{Arc, atomic::{AtomicBool, AtomicU16, Ordering}}, thread, time::Duration, vec};
+use std::{collections::{HashMap, HashSet}, eprintln, format, fs::read_dir, path::Path, println, sync::{Arc, atomic::{AtomicBool, AtomicU16, Ordering}, mpsc::{self, Sender}}, thread, vec};
 
 use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 use handy_keys::KeyboardListener;
 use nng::{Protocol, Socket};
 use parking_lot::{Mutex, RwLock};
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelExtend, ParallelIterator};
-use ringbuf::{HeapCons, traits::Consumer};
-use uuid::Uuid;
+use ringbuf::HeapCons;
 
 use crate::{common::{base::{dialog::Dialog, wave::Wave}, config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, APP_NAME}, keyboard::AnyKey, log, socket::{ClientToServer, ServerToClient, decode_c2s, encode_c2s, encode_s2c}}, server::{audio::create_audio_player, keys::KeyCombo, pulseaudio::{load_null_sink, loopback, unload_module}, server_ext::{dialog::ServerDialog, file::ServerFile, wave::ServerWave}}};
 
@@ -26,7 +25,7 @@ pub(self) struct ServerState {
 	pa_modules: HashMap<u8, (String, String)>, // ID -> (Name, Module num)
 
 	// Audio data
-	audio_data: HashMap<Uuid, Arc<Mutex<HeapCons<f32>>>>,
+	audio_sender: Sender<HeapCons<f32>>,
 	stoppable: Vec<Arc<AtomicBool>>,
 	playlist_lock: Arc<Mutex<()>>,
 
@@ -160,6 +159,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 	}
 
 	log::info("Starting server...");
+	let (tx, rx) = mpsc::channel();
 	let server_state = Arc::new(RwLock::new(ServerState {
 		config: config::load(),
 		running: true,
@@ -171,7 +171,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 		pa_modules: HashMap::new(),
 
 		// Audio data
-		audio_data: HashMap::new(),
+		audio_sender: tx,
 		stoppable: vec![],
 		playlist_lock: Arc::new(Mutex::new(())),
 
@@ -204,7 +204,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 	server_state.write().apply_config();
 
 	// Create audio player
-	create_audio_player(server_state.clone());
+	create_audio_player(server_state.clone(), rx);
 
 	// Termination signal handler
 	let _ = ctrlc::set_handler(move || ServerState::exit());
@@ -342,13 +342,6 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 						drop(server_state);
 						let mut server_state = server_state_key.write();
 						server_state.stoppable.drain(0..).par_bridge().for_each(|signal| signal.store(true, Ordering::Relaxed));
-						// Consume all audio data
-						server_state.audio_data.drain().par_bridge().for_each(|(_, cons)| {
-							let mut cons = cons.lock();
-							while let read = cons.skip(usize::MAX) && read > 0 {
-								thread::sleep(Duration::from_millis(10));
-							}
-						});
 					}
 				});
 			}
@@ -476,13 +469,6 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 					StopFiles => {
 						let mut server_state = server_state.write();
 						server_state.stoppable.drain(0..).par_bridge().for_each(|signal| signal.store(true, Ordering::Relaxed));
-						// Consume all audio data
-						server_state.audio_data.drain().par_bridge().for_each(|(_, cons)| {
-							let mut cons = cons.lock();
-							while let read = cons.skip(usize::MAX) && read > 0 {
-								thread::sleep(Duration::from_millis(10));
-							}
-						});
 						msg.push_back(&encode_s2c(Success));
 					},
 					StopWave(uid) => {
