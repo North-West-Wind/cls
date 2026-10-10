@@ -258,19 +258,20 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 							released.push(AnyKey::K(key));
 						}
 					}
-					let mut new_modifiers = AnyKey::split_modifiers(event.modifiers);
-					new_modifiers.retain(|modifier| {
-						if !modifiers.contains(modifier) {
-							modifiers.insert(*modifier);
-							pressed.push(*modifier);
+					let current_modifiers = AnyKey::split_modifiers(event.modifiers);
+					modifiers.retain(|modifer| {
+						if !current_modifiers.contains(modifer) {
+							released.push(*modifer);
 							false
 						} else {
 							true
 						}
 					});
-					new_modifiers.iter().for_each(|modifier| {
-						modifiers.remove(modifier);
-						released.push(*modifier);
+					current_modifiers.iter().for_each(|modifier| {
+						if !modifiers.contains(modifier) {
+							modifiers.insert(*modifier);
+							pressed.push(*modifier);
+						}
 					});
 
 					// Remove unpressed
