@@ -1,17 +1,18 @@
-use std::{collections::HashMap, format, io, sync::Arc, thread::{self, JoinHandle}, time::Duration, vec};
+use std::{collections::HashMap, format, io, sync::Arc, thread::{self, JoinHandle}, vec};
 
 use crossterm::{event::{DisableMouseCapture, EnableMouseCapture}, execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode}};
 use indexmap::IndexMap;
-use nng::{Error::ConnectionRefused, Protocol, Socket, options::{Options, RecvTimeout, SendTimeout, protocol::pubsub::Subscribe}};
 use parking_lot::{Condvar, Mutex, RwLock};
 use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, widgets::{Block, BorderType, Borders, Paragraph}};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::{client::{client_ext::{file::ClientFile, wave::ClientWave}, component::{block::{BlockNavigation, BlockRender, BlockRenderArea, dialogs::DialogBlock, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::LogBlock, playing::PlayingBlock, results::ResultsBlock, search::SearchBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupComponent, PopupRender}}, listener::init_key_listener, tab::scan}, common::{base::{dialog::Dialog, wave::Wave}, config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, MIN_HEIGHT, MIN_WIDTH, NO_RENDER_HEIGHT, NO_RENDER_WIDTH}, log, socket::{ClientToServer, ServerToClient, decode_s2c, encode_c2s}}};
+use crate::{client::{client_ext::{file::ClientFile, wave::ClientWave}, component::{block::{BlockNavigation, BlockRender, BlockRenderArea, dialogs::DialogBlock, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::LogBlock, playing::PlayingBlock, results::ResultsBlock, search::SearchBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupComponent, PopupRender}}, listener::init_key_listener, sender::TcpSender, subscriber::TcpSubscriber, tab::scan}, common::{base::{dialog::Dialog, wave::Wave}, config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, MIN_HEIGHT, MIN_WIDTH, NO_RENDER_HEIGHT, NO_RENDER_WIDTH}, log, socket::{ClientToServer, ServerToClient}}};
 
 mod client_ext;
 mod component;
 mod listener;
+mod sender;
+mod subscriber;
 mod tab;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -162,13 +163,16 @@ pub(self) struct ClientState {
 	running: bool,
 
 	// Communication
-	socket_comms: Arc<Mutex<Socket>>,
+	tcp_sender: TcpSender,
 
+	// Multi-threaded managers
+	redrawer: Redrawer,
+	popup_manager: PopupManager,
+
+	// Render states
 	error: String,
 	error_important: bool,
-	redrawer: Redrawer,
 	selection_layer: SelectionLayer,
-	popup_manager: PopupManager,
 	settings_opened: bool,
 	main_opened: MainOpened,
 	scanning: Scanning,
@@ -198,15 +202,11 @@ pub(self) type AtomicClientState = Arc<RwLock<ClientState>>;
 impl ClientState {
 	fn load_config(&mut self) {
 		self.config = config::load();
-	}
-
-	fn apply_config(&mut self) {
-		let config = &self.config;
 		self.dialogs.clear();
 
-		self.file_tabs = config.tabs.par_iter().map(|tab| {
+		self.file_tabs = self.config.tabs.par_iter().map(|tab| {
 			let mut files = IndexMap::new();
-			if let Some(config_files) = config.files.get(tab) {
+			if let Some(config_files) = self.config.files.get(tab) {
 				config_files.iter().for_each(|(name, file)| {
 					files.insert(name.clone(), ClientFile::from(file.clone()));
 				});
@@ -215,8 +215,8 @@ impl ClientState {
 		}).collect();
 		// REMEMBER TO SCAN TABS AFTER THIS
 
-		self.waves = config.waves.par_iter().map(|wave| ClientWave::from(Wave::from(wave))).collect();
-		self.dialogs = config.dialogs.par_iter().map(|dialog| Dialog::from(dialog)).collect();
+		self.waves = self.config.waves.par_iter().map(|wave| ClientWave::from(Wave::from(wave))).collect();
+		self.dialogs = self.config.dialogs.par_iter().map(|dialog| Dialog::from(dialog)).collect();
 	}
 
 	fn save_config(&mut self) {
@@ -238,28 +238,13 @@ impl ClientState {
 	}
 
 	fn request(&self, request: ClientToServer) -> bool {
-		if let Err((_, err)) = self.socket_comms.lock().send(&encode_c2s(request)) {
-			log::error(err);
-			return false;
-		};
-		let socket_comms = self.socket_comms.clone();
-		thread::spawn(move || {
-			let result = {
-				match socket_comms.lock().recv() {
-					Ok(mut msg) => decode_s2c(&mut msg),
-					Err(err) => {
-						log::error(err);
-						return;
-					}
-				}
-			};
-			match result {
-				Err(err) => log::error(err),
-				Ok(ServerToClient::Error(message)) => log::error(message),
-				_ => ()
+		match self.tcp_sender.send(request) {
+			Ok(_) => true,
+			Err(err) => {
+				log::error(format!("TCP sender tx send error: {:?}", err));
+				false
 			}
-		});
-		true
+		}
 	}
 
 	fn borders(&self, id: u8) -> (BorderType, Style) {
@@ -285,43 +270,24 @@ impl ClientState {
 	fn exit(&mut self) {
 		self.running = false;
 		self.redrawer.notify();
+		self.tcp_sender.shutdown();
 	}
 }
 
 pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>> {
-	let mut retries = 5;
-	let socket_comms = Socket::new(Protocol::Req0)?;
-	while let Err(ConnectionRefused) = socket_comms.dial(ADDRESS_COMMS) {
-		retries -= 1;
-		if retries == 0 {
-			return Err(Box::new(ConnectionRefused));
-		} else {
-			thread::sleep(Duration::from_secs(1));
-		}
-	}
-	retries = 5;
-	let socket_event = Socket::new(Protocol::Sub0)?;
-	while let Err(ConnectionRefused) = socket_event.dial(ADDRESS_EVENT) {
-		retries -= 1;
-		if retries == 0 {
-			return Err(Box::new(ConnectionRefused));
-		} else {
-			thread::sleep(Duration::from_secs(1));
-		}
-	}
-
-	socket_comms.set_opt::<RecvTimeout>(Some(Duration::from_secs(3)))?;
-	socket_comms.set_opt::<SendTimeout>(Some(Duration::from_secs(3)))?;
-	socket_event.set_opt::<RecvTimeout>(Some(Duration::from_secs(3)))?;
-	socket_event.set_opt::<Subscribe>(vec![])?; // Subscribe to all topics
-
 	let redrawer = Redrawer::default();
+	// Log block setup
+	let log_block = LogBlock::new(redrawer.clone());
+
+	// Sockets
+	let tcp_sender = TcpSender::connect(ADDRESS_COMMS);
+	let subscriber = TcpSubscriber::connect(ADDRESS_EVENT);
 
 	let client_state = Arc::new(RwLock::new(ClientState {
 		config: config::load(),
 		running: true,
 
-		socket_comms: Arc::new(Mutex::new(socket_comms)),
+		tcp_sender,
 
 		error: String::new(),
 		error_important: false,
@@ -348,7 +314,7 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 		search_state: SearchState::Initial
 	}));
 
-	client_state.write().apply_config();
+	client_state.write().load_config();
 	{
 		let client_state = client_state.clone();
 		thread::spawn(move || scan(client_state, Scanning::All));
@@ -359,7 +325,7 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 		files: FilesBlock::default(),
 		help: HelpBlock::default(),
 		info: InfoBlock::default(),
-		log: LogBlock::new(redrawer),
+		log: log_block,
 		playing: PlayingBlock::default(),
 		results: ResultsBlock::default(),
 		search: SearchBlock::default(),
@@ -372,45 +338,38 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 	let client_state_socket = client_state.clone();
 	thread::spawn(move || {
 		while client_state_socket.read().running {
-			match socket_event.recv() {
-				Ok(mut msg) => {
-					log::info(format!("Received server broadcast: {:?}", msg));
-					match decode_s2c(&mut msg) {
-						Ok(s2c) => {
-							use ServerToClient::*;
-							match s2c {
-								Error(err) => log::error(err),
-								Reload => {
-									let mut client_state = client_state_socket.write();
-									client_state.load_config();
-									client_state.apply_config();
-									scan(client_state_socket.clone(), Scanning::All);
-								},
-								Playing(playing_type, id, message) => {
-									let mut client_state = client_state_socket.write();
-									let color = match playing_type {
-										1 => Color::LightCyan,
-										2 => Color::LightYellow,
-										_ => Color::LightGreen
-									};
-									client_state.playing.insert(id, (message, color));
-									client_state.redrawer.notify();
-								},
-								Stopping(id) => {
-									let mut client_state = client_state_socket.write();
-									client_state.playing.remove(&id);
-									client_state.redrawer.notify();
-								},
-								_ => ()
-							}
+			match subscriber.recv() {
+				Ok(msg) => {
+					use ServerToClient::*;
+					match msg {
+						Error(err) => log::error(err),
+						Reload => {
+							let mut client_state = client_state_socket.write();
+							client_state.load_config();
+							scan(client_state_socket.clone(), Scanning::All);
 						},
-						Err(err) => log::error(format!("Failed to decode server broadcast: {:?}", err)),
+						Playing(playing_type, id, message) => {
+							let mut client_state = client_state_socket.write();
+							let color = match playing_type {
+								1 => Color::LightCyan,
+								2 => Color::LightYellow,
+								_ => Color::LightGreen
+							};
+							client_state.playing.insert(id, (message, color));
+							client_state.redrawer.notify();
+						},
+						Stopping(id) => {
+							let mut client_state = client_state_socket.write();
+							client_state.playing.remove(&id);
+							client_state.redrawer.notify();
+						},
+						_ => ()
 					}
 				},
-				Err(err) if err == nng::Error::TimedOut => (), // Ignore server timeout
 				Err(err) => log::error(format!("Failed to recv server broadcast: {:?}", err)),
 			}
 		}
+		subscriber.shutdown();
 	});
 
 	// Key listeners

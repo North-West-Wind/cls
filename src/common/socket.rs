@@ -1,6 +1,5 @@
-use std::{fmt::{self, Debug, Display}, vec, write};
+use std::{fmt::{self, Debug, Display}, io::{self, ErrorKind, Read}, net::TcpStream, vec, write};
 
-use nng::Message;
 use serde::Serialize;
 
 use crate::common::base::{dialog::SaveableDialog, file::SaveableFile, wave::SaveableWave};
@@ -30,6 +29,7 @@ impl UnknownMsgTypeError {
 	}
 }
 
+#[derive(Debug, PartialEq)]
 pub enum ClientToServer {
 	// Starts from 1
 	Exit,
@@ -56,6 +56,7 @@ pub enum ClientToServer {
 	SetPlaylistMode(bool),
 }
 
+#[derive(Debug, PartialEq)]
 pub enum ServerToClient {
 	// Starts from 1
 	Success,
@@ -67,7 +68,7 @@ pub enum ServerToClient {
 	Stopping(u16)
 }
 
-pub fn decode_c2s(msg: &mut Message) -> Result<ClientToServer, Box<dyn std::error::Error>> {
+pub fn decode_c2s(msg: &[u8]) -> Result<ClientToServer, Box<dyn std::error::Error>> {
 	use ClientToServer::*;
 	let result = match msg[0] {
 		1 => Ok(Exit),
@@ -142,11 +143,10 @@ pub fn decode_c2s(msg: &mut Message) -> Result<ClientToServer, Box<dyn std::erro
 		29 => Ok(SetPlaylistMode(msg[1] != 0)),
 		_ => Err(UnknownMsgTypeError::new(msg[0]))
 	}?;
-	msg.clear();
 	Ok(result)
 }
 
-pub fn decode_s2c(msg: &mut Message) -> Result<ServerToClient, Box<dyn std::error::Error>> {
+pub fn decode_s2c(msg: &[u8]) -> Result<ServerToClient, Box<dyn std::error::Error>> {
 	use ServerToClient::*;
 	let result = match msg[0] {
 		1 => Ok(Success),
@@ -166,11 +166,10 @@ pub fn decode_s2c(msg: &mut Message) -> Result<ServerToClient, Box<dyn std::erro
 		},
 		_ => Err(UnknownMsgTypeError::new(msg[0]))
 	}?;
-	msg.clear();
 	Ok(result)
 }
 
-pub fn encode_c2s(request: ClientToServer) -> Vec<u8> {
+pub fn encode_c2s(request: &ClientToServer) -> Vec<u8> {
 	use ClientToServer::*;
 	match request {
 		Exit => vec![1u8],
@@ -207,7 +206,7 @@ pub fn encode_c2s(request: ClientToServer) -> Vec<u8> {
 			buf
 		},
 		SetLoopback(id, loopback) => {
-			let mut buf = vec![21u8, id];
+			let mut buf = vec![21u8, *id];
 			buf.extend_from_slice(loopback.as_bytes());
 			buf
 		},
@@ -264,12 +263,12 @@ pub fn encode_c2s(request: ClientToServer) -> Vec<u8> {
 			buf
 		},
 		SetPlaylistMode(enabled) => {
-			vec![29u8, if enabled { 1 } else { 0 }]
+			vec![29u8, if *enabled { 1 } else { 0 }]
 		},
 	}
 }
 
-pub fn encode_s2c(response: ServerToClient) -> Vec<u8> {
+pub fn encode_s2c(response: &ServerToClient) -> Vec<u8> {
 	use ServerToClient::*;
 	match response {
 		Success => vec![1u8],
@@ -280,7 +279,7 @@ pub fn encode_s2c(response: ServerToClient) -> Vec<u8> {
 		},
 		Reload => vec![3u8],
 		Playing(playing_type, id, message) => {
-			let mut buf = vec![11u8, playing_type];
+			let mut buf = vec![11u8, *playing_type];
 			buf.extend(id.to_be_bytes());
 			buf.extend_from_slice(message.as_bytes());
 			buf
@@ -290,5 +289,40 @@ pub fn encode_s2c(response: ServerToClient) -> Vec<u8> {
 			buf.extend(id.to_be_bytes());
 			buf
 		}
+	}
+}
+
+pub trait ReadToPause {
+	fn read_to_pause(&mut self, pending: &mut Vec<u8>) -> io::Result<bool>;
+}
+
+impl ReadToPause for TcpStream {
+	fn read_to_pause(&mut self, data: &mut Vec<u8>) -> io::Result<bool> {
+		let mut buf = [0; 1024];
+		let mut closed = false;
+		loop {
+			match self.read(&mut buf) {
+				Ok(0) => {
+					closed = true;
+					break;
+				},
+				Ok(read) => {
+					if read >= buf.len() {
+						data.extend(buf);
+					} else {
+						data.extend_from_slice(&buf[..read]);
+						break;
+					}
+				},
+				Err(err) => {
+					if err.kind() == ErrorKind::TimedOut || err.kind() == ErrorKind::WouldBlock {
+						break;
+					} else {
+						return Err(err);
+					}
+				}
+			}
+		}
+		Ok(closed)
 	}
 }

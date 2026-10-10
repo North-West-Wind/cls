@@ -1,11 +1,10 @@
-use std::{panic, path::Path, println, thread, time::Duration};
+use std::{io::Write, net::TcpStream, panic, path::Path, println, thread, time::Duration};
 
 use cpal::traits::{DeviceTrait, HostTrait};
 use clap::{command, Arg, ArgAction, Command};
-use nng::{Protocol, Socket, options::{Options, RecvTimeout, SendTimeout}};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::{client::start_client, common::{config, constant::ADDRESS_COMMS, log, socket::{ClientToServer, ServerToClient, decode_s2c, encode_c2s}}, server::start_server};
+use crate::{client::start_client, common::{config, constant::ADDRESS_COMMS, log, socket::{ClientToServer, ReadToPause, ServerToClient, decode_s2c, encode_c2s}}, server::start_server};
 
 mod client;
 mod common;
@@ -47,27 +46,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// All subcommands are currently used for IPC
 	if let Some((subcommand, matches)) = matches.subcommand() {
 		use ClientToServer::*;
-		let socket = Socket::new(Protocol::Req0)?;
-		socket.set_opt::<SendTimeout>(Some(Duration::from_secs(3)))?;
-		socket.set_opt::<RecvTimeout>(Some(Duration::from_secs(3)))?;
-		socket.dial(ADDRESS_COMMS)?;
+		let mut stream = TcpStream::connect(ADDRESS_COMMS)?;
+		stream.set_read_timeout(Some(Duration::from_secs(3)))?;
+		stream.set_write_timeout(Some(Duration::from_secs(1)))?;
+		let mut buf = vec![];
 		let result = match subcommand {
 			"exit" => {
-				let _ = socket.send(&encode_c2s(Exit));
-				decode_s2c(&mut socket.recv()?)
+				stream.write_all(&encode_c2s(&Exit))?;
+				stream.read_to_pause(&mut buf)?;
+				decode_s2c(&buf)
 			},
 			"audio-devices" => {
 				list_audio_devices()?;
 				return Ok(())
 			},
 			"reload" => {
-				let _ = socket.send(&encode_c2s(Reload));
-				decode_s2c(&mut socket.recv()?)
+				stream.write_all(&encode_c2s(&Reload))?;
+				stream.read_to_pause(&mut buf)?;
+				decode_s2c(&buf)
 			},
 			"play" => {
 				let Some(path) = matches.get_one::<String>("path") else { panic!("Missing path") };
-				let _ = socket.send(&encode_c2s(PlayPath(path.clone())));
-				decode_s2c(&mut socket.recv()?)
+				stream.write_all(&encode_c2s(&PlayPath(path.clone())))?;
+				stream.read_to_pause(&mut buf)?;
+				decode_s2c(&buf)
 			},
 			"play-id" => {
 				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
@@ -83,8 +85,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 					})
 				});
 				let Some(path) = path else { panic!("No file with ID {}", id) };
-				let _ = socket.send(&encode_c2s(PlayPath(path)));
-				decode_s2c(&mut socket.recv()?)
+				stream.write_all(&encode_c2s(&PlayPath(path)))?;
+				stream.read_to_pause(&mut buf)?;
+				decode_s2c(&buf)
 			},
 			"play-wave" => {
 				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
@@ -95,8 +98,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 					wave_id == id
 				});
 				let Some(wave) = wave else { panic!("No wave with ID {}", id) };
-				let _ = socket.send(&encode_c2s(PlayWave(wave.uid)));
-				decode_s2c(&mut socket.recv()?)
+				stream.write_all(&encode_c2s(&PlayWave(wave.uid)))?;
+				stream.read_to_pause(&mut buf)?;
+				decode_s2c(&buf)
 			},
 			"play-dialog" => {
 				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
@@ -107,17 +111,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 					dialog_id == id
 				});
 				let Some(dialog) = dialog else { panic!("No wave with ID {}", id) };
-				let _ = socket.send(&encode_c2s(PlayDialog(dialog.uid)));
-				decode_s2c(&mut socket.recv()?)
+				stream.write_all(&encode_c2s(&PlayDialog(dialog.uid)))?;
+				stream.read_to_pause(&mut buf)?;
+				decode_s2c(&buf)
 			},
 			"play-search" => {
 				let Some(query) = matches.get_one::<String>("query") else { panic!("Missing query") };
-				let _ = socket.send(&encode_c2s(PlaySearch(query.clone())));
-				decode_s2c(&mut socket.recv()?)
+				stream.write_all(&encode_c2s(&PlaySearch(query.clone())))?;
+				stream.read_to_pause(&mut buf)?;
+				decode_s2c(&buf)
 			},
 			"stop" => {
-				let _ = socket.send(&encode_c2s(StopFiles));
-				decode_s2c(&mut socket.recv()?)
+				stream.write_all(&encode_c2s(&StopFiles))?;
+				stream.read_to_pause(&mut buf)?;
+				decode_s2c(&buf)
 			},
 			"stop-wave" => {
 				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
@@ -128,8 +135,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 					wave_id == id
 				});
 				let Some(wave) = wave else { panic!("No wave with ID {}", id) };
-				let _ = socket.send(&encode_c2s(StopWave(wave.uid)));
-				decode_s2c(&mut socket.recv()?)
+				stream.write_all(&encode_c2s(&StopWave(wave.uid)))?;
+				stream.read_to_pause(&mut buf)?;
+				decode_s2c(&buf)
 			},
 			"stop-dialog" => {
 				let Some(id) = matches.get_one::<String>("id") else { panic!("Missing id") };
@@ -140,8 +148,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 					dialog_id == id
 				});
 				let Some(dialog) = dialog else { panic!("No wave with ID {}", id) };
-				let _ = socket.send(&encode_c2s(StopDialog(dialog.uid)));
-				decode_s2c(&mut socket.recv()?)
+				stream.write_all(&encode_c2s(&StopDialog(dialog.uid)))?;
+				stream.read_to_pause(&mut buf)?;
+				decode_s2c(&buf)
 			},
 			_ => panic!("Unknown subcommand {}", subcommand)
 		};
@@ -169,7 +178,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	// Start server
 	let server_thread = thread::spawn(move || {
-		let _ = start_server(no_pacat, cpal_device, !daemon);
+		if let Err(err) = start_server(no_pacat, cpal_device, !daemon) {
+			log::error(format!("Server error: {:?}", err));
+		}
 	});
 
 	// Wait for client to exit

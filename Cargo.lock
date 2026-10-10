@@ -204,16 +204,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cc"
-version = "1.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f360145194ee8e21db5ee7f3fcd4fe52210864c75c985dae33218202c8bbe040"
-dependencies = [
- "find-msvc-tools",
- "shlex",
-]
-
-[[package]]
 name = "cesu8"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -277,7 +267,6 @@ dependencies = [
  "handy-keys",
  "indexmap",
  "mime_guess",
- "nng",
  "normpath",
  "parking_lot",
  "rand",
@@ -291,15 +280,6 @@ dependencies = [
  "substring",
  "tui-input",
  "uuid",
-]
-
-[[package]]
-name = "cmake"
-version = "0.1.58"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0f78a02292a74a88ac736019ab962ece0bc380e3f977bf72e376c5d78ff0678"
-dependencies = [
- "cc",
 ]
 
 [[package]]
@@ -724,12 +704,6 @@ dependencies = [
  "thiserror 1.0.69",
  "winapi",
 ]
-
-[[package]]
-name = "find-msvc-tools"
-version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
 
 [[package]]
 name = "finl_unicode"
@@ -1243,26 +1217,6 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
-]
-
-[[package]]
-name = "nng"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20a18ed7ec1c8ff1658bcfea2ce76dcedf8be21dd9e8dd2e9762ba9632d16203"
-dependencies = [
- "log",
- "nng-sys",
-]
-
-[[package]]
-name = "nng-sys"
-version = "1.4.0-rc.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50d0e7f39a8fd1792a710da9351320e864dc799cf439960e332c977b2f876da6"
-dependencies = [
- "cmake",
- "version_check",
 ]
 
 [[package]]
@@ -2142,12 +2096,6 @@ dependencies = [
  "cpufeatures",
  "digest",
 ]
-
-[[package]]
-name = "shlex"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "signal-hook"
