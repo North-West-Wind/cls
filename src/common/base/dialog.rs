@@ -1,26 +1,12 @@
-use std::{collections::HashSet, str::FromStr, time::SystemTime, vec};
+use std::{collections::HashSet, time::SystemTime, vec};
 
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
 use crate::common::keyboard::AnyKey;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct SaveableDialog {
 	#[serde(default)]
-	pub uid: u64,
-	pub label: String,
-	pub id: Option<u32>,
-	pub keys: HashSet<String>,
-	pub files: Vec<String>,
-	pub delay: f32,
-	pub random: bool,
-	pub sequential: bool,
-	pub volume: u32,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct Dialog {
 	pub uid: u64,
 	pub label: String,
 	pub id: Option<u32>,
@@ -32,7 +18,7 @@ pub struct Dialog {
 	pub volume: u32,
 }
 
-impl Default for Dialog {
+impl Default for SaveableDialog {
 	fn default() -> Self {
 		Self {
 			uid: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64,
@@ -44,38 +30,6 @@ impl Default for Dialog {
 			random: true,
 			sequential: false,
 			volume: 100,
-		}
-	}
-}
-
-impl From<&SaveableDialog> for Dialog {
-	fn from(dialog: &SaveableDialog) -> Self {
-		Self {
-			uid: dialog.uid,
-			label: dialog.label.clone(),
-			id: dialog.id,
-			keys: dialog.keys.par_iter().filter_map(|key| AnyKey::from_str(key).ok()).collect::<HashSet<_>>(),
-			files: dialog.files.clone(),
-			delay: dialog.delay,
-			random: dialog.random,
-			sequential: dialog.sequential,
-			volume: dialog.volume
-		}
-	}
-}
-
-impl Dialog {
-	pub fn to_saveable(&self) -> SaveableDialog {
-		SaveableDialog {
-			uid: self.uid,
-			label: self.label.clone(),
-			id: self.id,
-			keys: self.keys.par_iter().map(|key| key.to_string()).collect::<HashSet<_>>(),
-			files: self.files.clone(),
-			delay: self.delay,
-			random: self.random,
-			sequential: self.sequential,
-			volume: self.volume
 		}
 	}
 }

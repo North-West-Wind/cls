@@ -6,7 +6,7 @@ use parking_lot::RwLock;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelExtend, ParallelIterator};
 use ringbuf::HeapCons;
 
-use crate::{common::{base::{dialog::Dialog, wave::Wave}, config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, APP_NAME}, keyboard::AnyKey, log, socket::{ClientToServer, ServerToClient, encode_c2s}}, server::{audio::create_audio_player, broadcaster::TcpBroadcaster, keys::KeyCombo, pulseaudio::{load_null_sink, loopback, unload_module}, receiver::TcpReceiver, server_ext::{dialog::ServerDialog, file::ServerFile, wave::ServerWave}}};
+use crate::{common::{config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, APP_NAME}, keyboard::AnyKey, log, socket::{ClientToServer, ServerToClient, encode_c2s}}, server::{audio::create_audio_player, broadcaster::TcpBroadcaster, keys::KeyCombo, pulseaudio::{load_null_sink, loopback, unload_module}, receiver::TcpReceiver, server_ext::{dialog::ServerDialog, file::ServerFile, wave::ServerWave}}};
 
 mod audio;
 mod broadcaster;
@@ -57,7 +57,7 @@ impl ServerState {
 		
 		// Load hotkeys
 		let mut hotkeys = self.hotkeys.write();
-		hotkeys.stopkey = KeyCombo::from_strings(config.stop_key.clone());
+		hotkeys.stopkey = KeyCombo::from_keys(config.stop_key);
 
 		// Clear hotkeys
 		hotkeys.file_keys.clear();
@@ -68,7 +68,7 @@ impl ServerState {
 		for (parent, map) in &config.files {
 			for (name, entry) in map {
 				let path = Path::new(&parent).join(name).to_str().unwrap().to_string();
-				let combo = KeyCombo::from_strings(entry.keys.clone());
+				let combo = KeyCombo::from_keys(entry.keys.clone());
 				if !combo.is_empty() && !combo.is_partial() {
 					if let Some(list) = hotkeys.file_keys.get_mut(&combo) {
 						list.insert(path.clone());
@@ -80,8 +80,8 @@ impl ServerState {
 		}
 
 		// Load wave hotkeys and IDs
-		let waves = config.waves.iter().map(|wave| {
-			let combo = KeyCombo::from_strings(wave.keys.clone());
+		let waves = config.waves.iter().cloned().map(|wave| {
+			let combo = KeyCombo::from_keys(wave.keys.clone());
 			if !combo.is_empty() {
 				if combo.is_partial() {
 					log::warn(format!("Parsed hotkey of wave {} is partial: {}", wave.label, combo));
@@ -92,13 +92,13 @@ impl ServerState {
 					hotkeys.wave_keys.insert(combo, HashSet::from_iter(vec![wave.uid]));
 				}
 			}
-			let wave = ServerWave::from(Wave::from(wave));
+			let wave = ServerWave::from(wave);
 			(wave.base.uid, wave)
 		}).collect::<HashMap<_, _>>();
 
 		// Load dialog hotkeys and IDs
-		let dialogs = config.dialogs.iter().map(|dialog| {
-			let combo = KeyCombo::from_strings(dialog.keys.clone());
+		let dialogs = config.dialogs.iter().cloned().map(|dialog| {
+			let combo = KeyCombo::from_keys(dialog.keys.clone());
 			if !combo.is_empty() {
 				if let Some(list) = hotkeys.dialog_keys.get_mut(&combo) {
 					list.insert(dialog.uid);
@@ -106,7 +106,7 @@ impl ServerState {
 					hotkeys.dialog_keys.insert(combo, HashSet::from_iter(vec![dialog.uid]));
 				}
 			}
-			let dialog = ServerDialog::from(Dialog::from(dialog));
+			let dialog = ServerDialog::from(dialog);
 			(dialog.base.uid, dialog)
 		}).collect::<HashMap<_, _>>();
 
@@ -558,11 +558,11 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 				let pathed = Path::new(&path);
 				let parent = pathed.parent().unwrap().to_str().unwrap().to_string();
 				let name = pathed.file_name().unwrap().to_os_string().into_string().unwrap();
-				let new_combo = KeyCombo::from_strings(file.keys.clone());
+				let new_combo = KeyCombo::from_keys(file.keys.clone());
 
 				let old_combo = if let Some(files) = server_state.state.write().config.files.get_mut(&parent) {
 					let old_combo = if let Some(old) = files.get_mut(&name) {
-						let combo = KeyCombo::from_strings(old.keys.clone());
+						let combo = KeyCombo::from_keys(old.keys.clone());
 						*old = file.clone();
 						Some(combo)
 					} else {
@@ -590,16 +590,16 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 				}
 			},
 			SetWave(uid, wave) => {
-				let new_combo = KeyCombo::from_strings(wave.keys.clone());
+				let new_combo = KeyCombo::from_keys(wave.keys.clone());
 				let old_combo = 
 				if let Some(server_wave) = server_state.waves.write().get_mut(&uid) {
 					// Replace existing wave
 					let combo = KeyCombo::from_keys(server_wave.base.keys.clone());
-					server_wave.base = Wave::from(wave);
+					server_wave.base = wave.clone();
 					Some(combo)
 				} else {
 					// Create new wave
-					server_state.waves.write().insert(*uid, ServerWave::from(Wave::from(wave)));
+					server_state.waves.write().insert(*uid, ServerWave::from(wave.clone()));
 					None
 				};
 				// Replace key combo
@@ -617,15 +617,15 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 				request.reply(Success);
 			},
 			SetDialog(uid, dialog) => {
-				let new_combo = KeyCombo::from_strings(dialog.keys.clone());
+				let new_combo = KeyCombo::from_keys(dialog.keys.clone());
 				let old_combo = if let Some(server_dialog) = server_state.dialogs.write().get_mut(&uid) {
 					// Replace existing dialog
 					let combo = KeyCombo::from_keys(server_dialog.base.keys.clone());
-					server_dialog.base = Dialog::from(dialog);
+					server_dialog.base = dialog.clone();
 					Some(combo)
 				} else {
 					// Create new dialog
-					server_state.dialogs.write().insert(*uid, ServerDialog::from(Dialog::from(dialog)));
+					server_state.dialogs.write().insert(*uid, ServerDialog::from(dialog.clone()));
 					None
 				};
 				// Replace key combo
@@ -665,7 +665,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 				}
 			},
 			SetStopKey(keys) => {
-				server_state.hotkeys.write().stopkey = KeyCombo::from_strings(keys);
+				server_state.hotkeys.write().stopkey = KeyCombo::from_keys(keys.clone());
 				request.reply(Success);
 			},
 			SetPlaylistMode(enabled) => {

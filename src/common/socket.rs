@@ -1,8 +1,8 @@
-use std::{fmt::{self, Debug, Display}, io::{self, ErrorKind, Read}, net::TcpStream, vec, write};
+use std::{fmt::{self, Debug, Display}, io::{self, ErrorKind, Read}, net::TcpStream, str::FromStr, vec, write};
 
 use serde::Serialize;
 
-use crate::common::base::{dialog::SaveableDialog, file::SaveableFile, wave::SaveableWave};
+use crate::common::{base::{dialog::SaveableDialog, file::SaveableFile, wave::SaveableWave}, keyboard::AnyKey};
 
 #[derive(Clone)]
 struct UnknownMsgTypeError {
@@ -52,7 +52,7 @@ pub enum ClientToServer {
 	SetDialog(u64, SaveableDialog),
 	DeleteWave(u64),
 	DeleteDialog(u64),
-	SetStopKey(Vec<String>),
+	SetStopKey(Vec<AnyKey>),
 	SetPlaylistMode(bool),
 }
 
@@ -141,7 +141,8 @@ pub fn decode_c2s(msg: &[u8]) -> Result<ClientToServer, Box<dyn std::error::Erro
 			let mut keys = vec![];
 			for _ in 0..u32::from_be_bytes(msg[1..5].try_into()?) as usize {
 				let len = u32::from_be_bytes(msg[offset..(offset + 4)].try_into()?) as usize;
-				keys.push(String::from_utf8(msg[(offset + 4)..(offset + 4 + len)].try_into()?)?);
+				let key = AnyKey::from_str(&String::from_utf8(msg[(offset + 4)..(offset + 4 + len)].try_into()?)?)?;
+				keys.push(key);
 				offset += 4 + len;
 			}
 			Ok(SetStopKey(keys))
@@ -268,6 +269,7 @@ pub fn encode_c2s(request: &ClientToServer) -> Vec<u8> {
 			buf.extend((keys.len() as u32).to_be_bytes());
 			// Need ordering, don't use par_iter
 			keys.iter().for_each(|key| {
+				let key = key.to_string();
 				let key_bytes = key.as_bytes();
 				buf.extend((key_bytes.len() as u32).to_be_bytes());
 				buf.extend_from_slice(key_bytes);

@@ -2,10 +2,12 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::common::keyboard::AnyKey;
+
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct SaveableFile {
 	pub volume: u32,
-	pub keys: HashSet<String>,
+	pub keys: HashSet<AnyKey>,
 	pub id: Option<u32>,
 }
 

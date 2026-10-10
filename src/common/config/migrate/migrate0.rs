@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use config::Config;
 use serde::{Deserialize, Serialize};
 
+use crate::common::keyboard::AnyKey;
+
 use super::get_config_path;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -11,9 +13,9 @@ pub struct ConfigV0 {
 	pub tabs: Vec<String>,
 	pub volume: u32,
 	pub file_volume: HashMap<String, u32>,
-	pub file_key: HashMap<String, Vec<String>>,
+	pub file_key: HashMap<String, Vec<AnyKey>>,
 	pub file_id: HashMap<String, u32>,
-	pub stop_key: Vec<String>,
+	pub stop_key: Vec<AnyKey>,
 	pub loopback_1: String,
 	pub loopback_2: String,
 	pub playlist_mode: bool,

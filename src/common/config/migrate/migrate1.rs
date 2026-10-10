@@ -4,7 +4,7 @@ use config::Config;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
-use crate::common::base::{file::SaveableFile, wave::SingleWave};
+use crate::common::{base::{file::SaveableFile, wave::SingleWave}, keyboard::AnyKey};
 
 use super::{get_config_path, migrate0::ConfigV0};
 
@@ -12,7 +12,7 @@ use super::{get_config_path, migrate0::ConfigV0};
 pub(crate) struct SaveableWave {
 	pub label: String,
 	pub id: Option<u32>,
-	pub keys: HashSet<String>,
+	pub keys: HashSet<AnyKey>,
 	pub waves: Vec<SingleWave>,
 	pub volume: u32,
 }
@@ -21,7 +21,7 @@ pub(crate) struct SaveableWave {
 pub(crate) struct SaveableDialog {
 	pub label: String,
 	pub id: Option<u32>,
-	pub keys: HashSet<String>,
+	pub keys: HashSet<AnyKey>,
 	pub files: Vec<String>,
 	pub delay: f32,
 	pub random: bool,
@@ -35,7 +35,7 @@ pub struct ConfigV1 {
 	pub version: u32,
 	pub tabs: Vec<String>,
 	pub volume: u32,
-	pub stop_key: HashSet<String>,
+	pub stop_key: HashSet<AnyKey>,
 	pub loopback_default: bool,
 	pub loopback_1: String,
 	pub loopback_2: String,

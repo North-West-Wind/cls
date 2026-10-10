@@ -4,14 +4,14 @@ use config::Config;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
-use crate::common::{base::{dialog::SaveableDialog, file::SaveableFile, wave::SaveableWave}, config::{get_config_path, migrate::migrate1::ConfigV1}};
+use crate::common::{base::{dialog::SaveableDialog, file::SaveableFile, wave::SaveableWave}, config::{get_config_path, migrate::migrate1::ConfigV1}, keyboard::AnyKey};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(default)]
 pub struct ConfigV2 {
 	pub version: u32,
 	pub volume: u32,
-	pub stop_key: HashSet<String>,
+	pub stop_key: HashSet<AnyKey>,
 	pub loopbacks: Vec<String>,
 	pub playlist_mode: bool,
 	pub fast_scan: bool,
@@ -50,7 +50,7 @@ impl ConfigV2 {
 	pub(super) fn from_v1(config: ConfigV1) -> ConfigV2 {
 		let mut cfg = ConfigV2::default();
 		cfg.volume = config.volume;
-		cfg.stop_key = HashSet::from_iter(config.stop_key.into_iter());
+		cfg.stop_key = config.stop_key.clone();
 		if config.loopback_default {
 			cfg.loopbacks.push("@DEFAULT_SINK@".to_string());
 		}

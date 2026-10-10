@@ -1,14 +1,14 @@
 use std::format;
 
-use crate::common::base::wave::Wave;
+use crate::common::base::wave::SaveableWave;
 
 #[derive(Debug, Default, Clone)]
 pub struct ClientWave {
-	pub base: Wave
+	pub base: SaveableWave
 }
 
-impl From<Wave> for ClientWave {
-	fn from(value: Wave) -> Self {
+impl From<SaveableWave> for ClientWave {
+	fn from(value: SaveableWave) -> Self {
 		Self { base: value }
 	}
 }

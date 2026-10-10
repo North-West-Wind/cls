@@ -5,11 +5,13 @@ use regex::Regex;
 use serde::{Deserialize, Serialize, de};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseAnyKeyError;
+pub struct ParseAnyKeyError {
+	name: String
+}
 
 impl Display for ParseAnyKeyError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    "invalid key".fmt(f)
+		write!(f, "invalid key: {}", self.name)
 	}
 }
 
@@ -39,6 +41,7 @@ impl FromStr for AnyKey {
 				"rightctrl" => Ok(AnyKey::M(Modifiers::CTRL_RIGHT)),
 				"leftalt" => Ok(AnyKey::M(Modifiers::OPT_LEFT)),
 				"rightalt" => Ok(AnyKey::M(Modifiers::OPT_RIGHT)),
+				"_" => Ok(AnyKey::K(Key::Minus)),
 				"n0" => Ok(AnyKey::K(Key::Keypad0)),
 				"n1" => Ok(AnyKey::K(Key::Keypad1)),
 				"n2" => Ok(AnyKey::K(Key::Keypad2)),
@@ -54,7 +57,7 @@ impl FromStr for AnyKey {
 				"n-" => Ok(AnyKey::K(Key::KeypadMinus)),
 				"n*" => Ok(AnyKey::K(Key::KeypadMultiply)),
 				"n/" => Ok(AnyKey::K(Key::KeypadDivide)),
-				_ => Err(ParseAnyKeyError)
+				_ => Err(ParseAnyKeyError { name: s.to_string() })
 			}
 		}
 	}
@@ -76,7 +79,7 @@ impl PartialOrd for AnyKey {
 		} else if let AnyKey::K(_) = self && let AnyKey::M(_) = other {
 			Some(Ordering::Greater)
 		} else {
-			self.to_string().partial_cmp(&other.to_string())
+			Some(key_sorter(&self.to_string(), &other.to_string()))
 		}
 	}
 }
@@ -88,7 +91,7 @@ impl Ord for AnyKey {
 		} else if let AnyKey::K(_) = self && let AnyKey::M(_) = other {
 			Ordering::Greater
 		} else {
-			self.to_string().cmp(&other.to_string())
+			key_sorter(&self.to_string(), &other.to_string())
 		}
 	}
 }
@@ -103,8 +106,8 @@ impl Serialize for AnyKey {
 impl<'de> Deserialize<'de> for AnyKey {
 	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
 	where D: serde::Deserializer<'de> {
-		let s: &str = Deserialize::deserialize(deserializer)?;
-		Self::from_str(s).map_err(de::Error::custom)
+		let s = String::deserialize(deserializer)?;
+		Self::from_str(&s).map_err(de::Error::custom)
 	}
 }
 

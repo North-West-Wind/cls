@@ -3,17 +3,17 @@ use ratatui::{layout::Rect, style::{Color, Modifier, Style}, text::Line, widgets
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::{format, sync::Arc, thread, vec};
 
-use crate::{client::{ClientState, component::popup::{PopupComponent, PopupHandleKey, PopupRender, confirm::ConfirmPopup, input::{FLAG_NUM, InputPopup}}}, common::base::wave::{SingleWave, Wave, WaveType}};
+use crate::{client::{ClientState, component::popup::{PopupComponent, PopupHandleKey, PopupRender, confirm::ConfirmPopup, input::{FLAG_NUM, InputPopup}}}, common::base::wave::{SingleWave, SaveableWave, WaveType}};
 
 pub struct WavePopup {
-	pub(super) wave: Wave,
+	pub(super) wave: SaveableWave,
 	pub(super) selected: usize,
 	pub(super) changed: bool,
-	pub(super) on_commit: Arc<Box<dyn Fn(Wave) + Send + Sync>>
+	pub(super) on_commit: Arc<Box<dyn Fn(SaveableWave) + Send + Sync>>
 }
 
 impl WavePopup {
-	pub fn new(wave: Wave, on_commit: impl Fn(Wave) + Send + Sync + 'static) -> Self {
+	pub fn new(wave: SaveableWave, on_commit: impl Fn(SaveableWave) + Send + Sync + 'static) -> Self {
 		Self {
 			wave: wave.clone(),
 			selected: 0,

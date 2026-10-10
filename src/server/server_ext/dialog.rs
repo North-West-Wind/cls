@@ -4,16 +4,16 @@ use parking_lot::RwLock;
 use rand::Rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::{common::base::dialog::Dialog, server::{AudioData, server_ext::file::ServerFile}};
+use crate::{common::base::dialog::SaveableDialog, server::{AudioData, server_ext::file::ServerFile}};
 
 #[derive(Clone, Default)]
 pub struct ServerDialog {
-	pub base: Dialog,
+	pub base: SaveableDialog,
 	pub active: Arc<AtomicBool>,
 }
 
-impl From<Dialog> for ServerDialog {
-	fn from(base: Dialog) -> Self {
+impl From<SaveableDialog> for ServerDialog {
+	fn from(base: SaveableDialog) -> Self {
 		Self {
 			base,
 			active: Arc::new(AtomicBool::new(false)),

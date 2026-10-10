@@ -188,7 +188,7 @@ impl WavesBlock {
 		{
 			let mut client_state = client_state.write();
 			let wave = ClientWave::default();
-			client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.to_saveable()));
+			client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.clone()));
 			client_state.waves.push(wave);
 			client_state.selected_wave = client_state.waves.len() - 1;
 			client_state.dirty = true;
@@ -203,7 +203,7 @@ impl WavesBlock {
 		};
 		popup_manager.push(PopupComponent::Wave(WavePopup::new(wave, move |wave| {
 			let mut client_state = client_state.write();
-			client_state.request(ClientToServer::SetWave(wave.uid, wave.to_saveable()));
+			client_state.request(ClientToServer::SetWave(wave.uid, wave.clone()));
 			client_state.waves[selected].base = wave;
 			client_state.dirty = true;
 		})));
@@ -220,7 +220,7 @@ impl WavesBlock {
 			let mut client_state = client_state.write();
 			client_state.waves[selected].base.label = name;
 			let wave = &client_state.waves[selected];
-			client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.to_saveable()));
+			client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.clone()));
 			client_state.dirty = true;
 		})));
 		true
@@ -245,7 +245,7 @@ impl WavesBlock {
 		{
 			let mut client_state = client_state.write();
 			let wave = client_state.waves[client_state.selected_wave].clone();
-			client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.to_saveable()));
+			client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.clone()));
 			client_state.waves.push(wave);
 			client_state.selected_wave = client_state.waves.len() - 1;
 			client_state.dirty = true;
@@ -262,7 +262,7 @@ impl WavesBlock {
 			let mut client_state = client_state.write();
 			client_state.waves[selected].base.keys = keys;
 			let wave = &client_state.waves[selected];
-			client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.to_saveable()));
+			client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.clone()));
 			client_state.dirty = true;
 		})));
 		true
@@ -273,7 +273,7 @@ impl WavesBlock {
 		let selected = client_state.selected_wave;
 		client_state.waves[selected].base.keys.clear();
 		let wave = &client_state.waves[selected];
-		client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.to_saveable()));
+		client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.clone()));
 		client_state.dirty = true;
 		true
 	}
@@ -291,7 +291,7 @@ impl WavesBlock {
 			let mut client_state = client_state.write();
 			client_state.waves[selected].base.id = Some(id);
 			let wave = &client_state.waves[selected];
-			client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.to_saveable()));
+			client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.clone()));
 			client_state.dirty = true;
 		})));
 		true
@@ -302,7 +302,7 @@ impl WavesBlock {
 		let selected = client_state.selected_wave;
 		client_state.waves[selected].base.id = None;
 		let wave = &client_state.waves[selected];
-		client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.to_saveable()));
+		client_state.request(ClientToServer::SetWave(wave.base.uid, wave.base.clone()));
 		client_state.dirty = true;
 		true
 	}

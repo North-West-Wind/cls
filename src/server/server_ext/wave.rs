@@ -3,7 +3,7 @@ use std::{f32::consts::PI, sync::{Arc, atomic::{AtomicBool, Ordering}, mpsc::Sen
 use rayon::{iter::{IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::ParallelSliceMut};
 use ringbuf::{HeapCons, HeapRb, traits::{Producer, Split}};
 
-use crate::{common::base::wave::{Wave, WaveType}};
+use crate::{common::base::wave::{SaveableWave, WaveType}};
 
 struct PlayableWave {
 	pub wave_type: WaveType,
@@ -15,12 +15,12 @@ struct PlayableWave {
 
 #[derive(Clone, Default)]
 pub struct ServerWave {
-	pub base: Wave,
+	pub base: SaveableWave,
 	pub active: Arc<AtomicBool>,
 }
 
-impl From<Wave> for ServerWave {
-	fn from(base: Wave) -> Self {
+impl From<SaveableWave> for ServerWave {
+	fn from(base: SaveableWave) -> Self {
 		Self {
 			base,
 			active: Arc::new(AtomicBool::new(false)),

@@ -6,17 +6,17 @@ use ratatui::{Frame, layout::Rect, style::{Color, Modifier, Style}, text::Line, 
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use substring::Substring;
 
-use crate::{client::{ClientState, component::popup::{PopupComponent, PopupHandleKey, PopupRender, confirm::ConfirmPopup, input::{FLAG_FILE, FLAG_NUM, InputPopup}}}, common::base::dialog::Dialog};
+use crate::{client::{ClientState, component::popup::{PopupComponent, PopupHandleKey, PopupRender, confirm::ConfirmPopup, input::{FLAG_FILE, FLAG_NUM, InputPopup}}}, common::base::dialog::SaveableDialog};
 
 pub struct DialogPopup {
-	pub(super) dialog: Dialog,
+	pub(super) dialog: SaveableDialog,
 	pub(super) selected: usize,
 	pub(super) changed: bool,
-	pub(super) on_commit: Arc<Box<dyn Fn(Dialog) + Send + Sync>>
+	pub(super) on_commit: Arc<Box<dyn Fn(SaveableDialog) + Send + Sync>>
 }
 
 impl DialogPopup {
-	pub fn new(dialog: Dialog, on_commit: impl Fn(Dialog) + Send + Sync + 'static) -> Self {
+	pub fn new(dialog: SaveableDialog, on_commit: impl Fn(SaveableDialog) + Send + Sync + 'static) -> Self {
 		Self {
 			dialog: dialog.clone(),
 			selected: 0,

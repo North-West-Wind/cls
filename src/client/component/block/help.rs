@@ -2,7 +2,7 @@ use std::{format, vec};
 
 use ratatui::{Frame, layout::Rect, style::{Color, Style}, text::{Line, Span}, widgets::Paragraph};
 
-use crate::{client::ClientState, common::keyboard::key_sorter};
+use crate::client::ClientState;
 
 use super::BlockRenderArea;
 
@@ -16,9 +16,10 @@ impl BlockRenderArea for HelpBlock {
 			Span::from("s to save").style(if client_state.dirty { Style::default().fg(Color::Yellow) } else { Style::default().fg(Color::DarkGray) }),
 		];
 		if !client_state.config.stop_key.is_empty() {
-			let mut keys = client_state.config.stop_key.clone().into_iter().collect::<Vec<String>>();
-			keys.sort_by(|a, b| key_sorter(a, b));
-			spans.push(Span::from(format!(", {} to stop", keys.join(" + "))).style(Style::default().fg(Color::DarkGray)));
+			let mut keys = client_state.config.stop_key.iter().collect::<Vec<_>>();
+			keys.sort();
+			let keys = keys.iter().map(|key| key.to_string()).collect::<Vec<_>>().join(" + ");
+			spans.push(Span::from(format!(", {} to stop", keys)).style(Style::default().fg(Color::DarkGray)));
 		}
 		let paragraph = Paragraph::new(Line::from(spans))
 			.style(Style::default().fg(Color::DarkGray));

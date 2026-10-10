@@ -6,7 +6,7 @@ use parking_lot::{Condvar, Mutex, RwLock};
 use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, widgets::{Block, BorderType, Borders, Paragraph}};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::{client::{client_ext::{file::ClientFile, wave::ClientWave}, component::{block::{BlockNavigation, BlockRender, BlockRenderArea, dialogs::DialogBlock, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::LogBlock, playing::PlayingBlock, results::ResultsBlock, search::SearchBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupComponent, PopupRender}}, listener::init_key_listener, sender::TcpSender, subscriber::TcpSubscriber, tab::scan}, common::{base::{dialog::Dialog, wave::Wave}, config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, MIN_HEIGHT, MIN_WIDTH, NO_RENDER_HEIGHT, NO_RENDER_WIDTH}, log, socket::{ClientToServer, ServerToClient}}};
+use crate::{client::{client_ext::{file::ClientFile, wave::ClientWave}, component::{block::{BlockNavigation, BlockRender, BlockRenderArea, dialogs::DialogBlock, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::LogBlock, playing::PlayingBlock, results::ResultsBlock, search::SearchBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupComponent, PopupRender}}, listener::init_key_listener, sender::TcpSender, subscriber::TcpSubscriber, tab::scan}, common::{base::dialog::SaveableDialog, config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, MIN_HEIGHT, MIN_WIDTH, NO_RENDER_HEIGHT, NO_RENDER_WIDTH}, log, socket::{ClientToServer, ServerToClient}}};
 
 mod client_ext;
 mod component;
@@ -181,7 +181,7 @@ pub(self) struct ClientState {
 
 	// Transformed from config
 	file_tabs: IndexMap<String, IndexMap<String, ClientFile>>, // tab path -> (file name -> file info)
-	dialogs: Vec<Dialog>,
+	dialogs: Vec<SaveableDialog>,
 	waves: Vec<ClientWave>,
 
 	// States for blocks
@@ -214,8 +214,8 @@ impl ClientState {
 		log::info(format!("File tabs order after load_config: {}", self.file_tabs.keys().cloned().collect::<Vec<_>>().join(", ")));
 		// REMEMBER TO SCAN TABS AFTER THIS
 
-		self.waves = self.config.waves.par_iter().map(|wave| ClientWave::from(Wave::from(wave))).collect();
-		self.dialogs = self.config.dialogs.par_iter().map(|dialog| Dialog::from(dialog)).collect();
+		self.waves = self.config.waves.par_iter().map(|wave| ClientWave::from(wave.clone())).collect();
+		self.dialogs = self.config.dialogs.clone();
 	}
 
 	fn save_config(&mut self) {
@@ -228,8 +228,8 @@ impl ClientState {
 			self.config.files.insert(tab.clone(), config_files);
 		});
 
-		self.config.waves = self.waves.par_iter().map(|wave| wave.base.to_saveable()).collect();
-		self.config.dialogs = self.dialogs.par_iter().map(|dialog| dialog.to_saveable()).collect();
+		self.config.waves = self.waves.par_iter().map(|wave| wave.base.clone()).collect();
+		self.config.dialogs = self.dialogs.par_iter().map(|dialog| dialog.clone()).collect();
 
 		config::save(&self.config);
 

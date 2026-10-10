@@ -48,9 +48,10 @@ impl BlockRenderArea for InfoBlock {
 					let hotkey = if info.base.keys.is_empty() {
 						None
 					} else {
-						let mut keys = info.base.keys.clone().into_iter().collect::<Vec<String>>();
-						keys.sort_by(|a, b| key_sorter(a, b));
-						Some(format!("{{{}}}", keys.join(" ")))
+						let mut keys = info.base.keys.iter().collect::<Vec<_>>();
+						keys.sort();
+						let keys = keys.iter().map(|key| key.to_string()).collect::<Vec<_>>().join(" ");
+						Some(format!("{{{}}}", keys))
 					};
 					let file_id = info.base.id;
 					lines.push(volume_line("File Volume".to_string(), volume, area.width, self.selected == 1));
@@ -116,18 +117,20 @@ impl BlockRenderArea for InfoBlock {
 					let (name, volume, keys, id, volume_label) = match &client_state.search_results[client_state.selected_result].1 {
 						File(result) => {
 							let keys = if result.info.base.keys.is_empty() { None } else {
-								let mut keys: Vec<String> = result.info.base.keys.clone().into_iter().collect();
-								keys.sort_by(|a, b| key_sorter(a, b));
-								Some(format!("{{{}}}", keys.join(" ")))
+								let mut keys = result.info.base.keys.iter().collect::<Vec<_>>();
+								keys.sort();
+								let keys = keys.iter().map(|key| key.to_string()).collect::<Vec<_>>().join(" ");
+								Some(format!("{{{}}}", keys))
 							};
 							(result.name.clone(), result.info.base.volume, keys, result.info.base.id, "File")
 						},
 						Wave(result) => {
 							client_state.waves.par_iter().find_any(|wave| wave.base.uid == result.uid).map_or((String::new(), 0, None, None, "Wave"), |wave| {
 								(format!("{} ({})", result.main, result.sub), wave.base.volume, if wave.base.keys.is_empty() { None } else {
-									let mut keys = wave.base.keys.par_iter().map(|key| key.to_string()).collect::<Vec<String>>();
-									keys.sort_by(|a, b| key_sorter(a, b));
-									Some(format!("{{{}}}", keys.join(" ")))
+									let mut keys = wave.base.keys.iter().collect::<Vec<_>>();
+									keys.sort();
+									let keys = keys.iter().map(|key| key.to_string()).collect::<Vec<_>>().join(" ");
+									Some(format!("{{{}}}", keys))
 								}, wave.base.id, "Wave")
 							})
 						},
@@ -279,7 +282,7 @@ fn change_wave_volume(client_state: AtomicClientState, delta: i64) -> bool {
 	let new_volume = max(0, wave.base.volume as i64 + delta) as u32;
 	if new_volume != wave.base.volume {
 		wave.base.volume = new_volume;
-		let wave = wave.base.to_saveable();
+		let wave = wave.base.clone();
 		client_state.request(ClientToServer::SetWave(wave.uid, wave));
 		client_state.dirty = true;
 		return true;
@@ -295,7 +298,7 @@ fn change_dialog_volume(client_state: AtomicClientState, delta: i64) -> bool {
 	let new_volume = max(0, dialog.volume as i64 + delta) as u32;
 	if new_volume != dialog.volume {
 		dialog.volume = new_volume;
-		let dialog = dialog.to_saveable();
+		let dialog = dialog.clone();
 		client_state.request(ClientToServer::SetDialog(dialog.uid, dialog));
 		client_state.dirty = true;
 		return true;

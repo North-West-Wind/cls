@@ -1,6 +1,6 @@
-use std::{cmp::{max, min}, collections::HashSet, path::Path, str::FromStr, vec};
+use std::{cmp::{max, min}, collections::HashSet, path::Path, vec};
 
-use crate::{client::{AtomicClientState, ClientState, Scanning, component::{block::{BlockNavigation, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, input::{FLAG_INT, InputPopup}, key_bind::KeyBindPopup}}, tab::scan}, common::{keyboard::AnyKey, socket::ClientToServer}};
+use crate::{client::{AtomicClientState, ClientState, Scanning, component::{block::{BlockNavigation, settings::SettingsBlock, tabs::TabsBlock}, popup::{PopupComponent, input::{FLAG_INT, InputPopup}, key_bind::KeyBindPopup}}, tab::scan}, common::socket::ClientToServer};
 
 use super::{loop_index, BlockHandleKey, BlockRenderArea};
 
@@ -183,7 +183,7 @@ impl FilesBlock {
 			let client_state = client_state.read();
 			let init = if let Some((_, files)) = client_state.file_tabs.get_index(client_state.selected_tab) &&
 				let Some((_, file)) = files.get_index(client_state.selected_file) {
-				file.base.keys.par_iter().filter_map(|key| AnyKey::from_str(key).ok()).collect()
+				file.base.keys.clone()
 			} else {
 				HashSet::new()
 			};
@@ -194,7 +194,7 @@ impl FilesBlock {
 			let (selected_tab, selected_file) = (client_state.selected_tab, client_state.selected_file);
 			if let Some((tab, files)) = client_state.file_tabs.get_index_mut(selected_tab) &&
 				let Some((name, file)) = files.get_index_mut(selected_file) {
-				file.base.keys = keys.par_iter().map(|key| key.to_string()).collect();
+				file.base.keys = keys;
 				let path = Path::new(tab).join(name).to_str().unwrap().to_string();
 				let file = file.base.clone();
 				client_state.request(ClientToServer::SetFile(path, file));

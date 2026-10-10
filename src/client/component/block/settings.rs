@@ -40,14 +40,13 @@ impl BlockRenderArea for SettingsBlock {
 		}
 
 		let mut lines = vec![];
-		let stop_key;
-		if config.stop_key.is_empty() {
-			stop_key = "".to_string();
+		let stop_key = if config.stop_key.is_empty() {
+			"".to_string()
 		} else {
-			let mut keys = Vec::from_iter(config.stop_key.clone().into_iter());
+			let mut keys = config.stop_key.iter().collect::<Vec<_>>();
 			keys.sort();
-			stop_key = format!("{}", keys.join(" + "));
-		}
+			keys.iter().map(|key| key.to_string()).collect::<Vec<_>>().join(" + ")
+		};
 		self.left_right_line("Stop Key".to_string(), stop_key, width as usize, &mut lines);
 		self.left_right_line("Loopbacks".to_string(), config.loopbacks.join(","), width as usize, &mut lines);
 		self.left_right_line("Playlist Mode".to_string(), config.playlist_mode.to_string(), width as usize, &mut lines);
@@ -117,7 +116,7 @@ impl SettingsBlock {
 			0 => {
 				client_state.clone().read().popup_manager.push(PopupComponent::KeyBind(KeyBindPopup::new(HashSet::new(), move |keys| {
 					let mut client_state = client_state.write();
-					client_state.config.stop_key = keys.par_iter().map(|key| key.to_string()).collect();
+					client_state.config.stop_key = keys.clone();
 					client_state.dirty = true;
 					client_state.request(ClientToServer::SetStopKey(client_state.config.stop_key.par_iter().cloned().collect()));
 				})));

@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt::{Debug, Display}, hash::Hash, str::FromStr};
+use std::{fmt::{Debug, Display}, hash::Hash};
 
 use indexmap::IndexSet;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -36,25 +36,10 @@ impl Display for KeyCombo {
 }
 
 impl KeyCombo {
-	pub fn from_strings<I, S>(keys: I) -> Self
-	where I: IntoIterator<Item = S>, S: Into<String> {
-		let unique: HashSet<String> = HashSet::from_iter(keys.into_iter().map(|s| s.into()));
-		let keys = unique.par_iter().filter_map(|key| AnyKey::from_str(key).ok()).collect::<Vec<_>>();
-		let mut parsed = IndexSet::from_iter(keys.iter().cloned());
-		let partial = parsed.len() != unique.len();
-
-		parsed.sort_by(|a, b| a.cmp(b));
-
-		Self {
-			keys: parsed,
-			partial
-		}
-	}
-
 	pub fn from_keys<I, S>(keys: I) -> Self
 	where I: IntoIterator<Item = S>, S: Into<AnyKey> {
 		let mut keys = IndexSet::from_iter(keys.into_iter().map(|s| s.into()));
-		keys.sort_by(|a, b| a.cmp(b));
+		keys.sort();
 
 		Self {
 			keys,
