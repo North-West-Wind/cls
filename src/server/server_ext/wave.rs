@@ -1,9 +1,9 @@
-use std::{f32::consts::PI, sync::{Arc, atomic::{AtomicBool, Ordering}}, thread::{self, JoinHandle}, time::Duration, vec};
+use std::{f32::consts::PI, sync::{Arc, atomic::{AtomicBool, Ordering}, mpsc::Sender}, thread::{self, JoinHandle}, time::Duration, vec};
 
 use rayon::{iter::{IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::ParallelSliceMut};
-use ringbuf::{HeapRb, traits::{Producer, Split}};
+use ringbuf::{HeapCons, HeapRb, traits::{Producer, Split}};
 
-use crate::{common::base::wave::{Wave, WaveType}, server::AtomicServerState};
+use crate::{common::base::wave::{Wave, WaveType}};
 
 struct PlayableWave {
 	pub wave_type: WaveType,
@@ -29,7 +29,7 @@ impl From<Wave> for ServerWave {
 }
 
 impl ServerWave {
-	pub fn play(&self, server_state: AtomicServerState) -> Option<JoinHandle<()>> {
+	pub fn play(&self, sample_rate: u32, audio_sender: &mut Sender<HeapCons<f32>>) -> Option<JoinHandle<()>> {
 		if self.base.waves.len() == 0 {
 			return None;
 		}
@@ -44,18 +44,16 @@ impl ServerWave {
 			}
 		}).collect::<Vec<PlayableWave>>();
 
-		let (sample_rate, mut prod) = {
-			let server_state = server_state.read();
-			let sample_rate = server_state.sample_rate as usize;
-			let rb = HeapRb::<f32>::new(sample_rate / 16);
+		let mut prod = {
+			let rb = HeapRb::<f32>::new(sample_rate as usize / 16);
 			let (prod, cons) = rb.split();
-			server_state.audio_sender.send(cons).unwrap();
-			(sample_rate, prod)
+			audio_sender.send(cons).unwrap();
+			prod
 		};
 
 		let active = self.active.clone();
 		Some(thread::spawn(move || {
-			let mut buf = vec![0f32; sample_rate / 16];
+			let mut buf = vec![0f32; sample_rate as usize / 16];
 			while active.load(Ordering::Relaxed) {
 				buf.par_chunks_exact_mut(2).enumerate().for_each(|(ii, samples)| {
 					let sample = playable.par_iter().map(|wave| {

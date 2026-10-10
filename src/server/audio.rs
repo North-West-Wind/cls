@@ -1,11 +1,12 @@
-use std::{format, io::{self, BufWriter, Write}, process::{Child, ChildStdin, Command, Stdio}, str::FromStr, sync::mpsc::Receiver, thread, time::{Duration, SystemTime}, vec};
+use std::{format, io::{self, BufWriter, Write}, process::{Child, ChildStdin, Command, Stdio}, str::FromStr, sync::{Arc, mpsc::Receiver}, thread, time::{Duration, SystemTime}, vec};
 
 use cmd_exists::cmd_exists;
 use cpal::{DeviceId, SampleFormat, traits::{DeviceTrait, HostTrait, StreamTrait}};
+use parking_lot::RwLock;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator};
 use ringbuf::{HeapCons, traits::Consumer};
 
-use crate::{common::{constant::{APP_NAME, ENDIANESS}, log}, server::AtomicServerState};
+use crate::{common::{constant::{APP_NAME, ENDIANESS}, log}, server::{AudioSettings, State}};
 
 const CHUNK_SIZE: usize = 1024;
 
@@ -34,12 +35,10 @@ fn spawn_pacat(sample_rate: u32) -> Pacat {
 	}
 }
 
-pub fn create_audio_player(atomic_server_state: AtomicServerState, rx: Receiver<HeapCons<f32>>) {
-	let server_state = atomic_server_state.clone();
-	let mut server_state = server_state.write();
-	if server_state.no_pacat || cmd_exists("pacat").is_err() {
+pub fn create_audio_player(state: Arc<RwLock<State>>, audio_settings: Arc<RwLock<AudioSettings>>, rx: Receiver<HeapCons<f32>>) {
+	if audio_settings.read().no_pacat || cmd_exists("pacat").is_err() {
 		// No pacat. Use cpal
-		let target_device = server_state.cpal_device.clone();
+		let target_device = audio_settings.read().cpal_device.clone();
 		let device = if target_device.is_empty() {
 			cpal::default_host().default_output_device().expect("Failed to get default output device")
 		} else {
@@ -58,14 +57,14 @@ pub fn create_audio_player(atomic_server_state: AtomicServerState, rx: Receiver<
 			let config = config.with_sample_rate(sample_rate);
 			(sample_rate, config.into())
 		};
-		server_state.sample_rate = sample_rate;
+		audio_settings.write().sample_rate = sample_rate;
 		log::info(format!("Sample rate: {}", sample_rate));
 		let err_callback = |err| {
 			log::error(err);
 		};
 		let mut audio_data = vec![];
 		let stream = device.build_output_stream(&config, move |data: &mut [f32], _| {
-			let volume = atomic_server_state.read().config.volume;
+			let volume = state.read().config.volume;
 			if let Ok(cons) = rx.try_recv() {
 				audio_data.push((cons, false));
 			}
@@ -73,19 +72,17 @@ pub fn create_audio_player(atomic_server_state: AtomicServerState, rx: Receiver<
 		}, err_callback, None).expect("Failed to create stream");
 		stream.play().unwrap();
 	} else {
-		let server_state = atomic_server_state.clone();
 		thread::spawn(move || {
 			let mut pacat_holder: Option<Pacat> = None;
 			let mut audio_data = vec![];
 			let mut buf = [0_f32; CHUNK_SIZE];
-			while server_state.read().running {
+			while state.read().running {
 				if let Ok(cons) = rx.try_recv() {
 					audio_data.push((cons, false));
 				}
 				let (sample_rate, available) = {
-					let server_state = server_state.read();
-					let sample_rate = server_state.sample_rate;
-					let volume = server_state.config.volume;
+					let sample_rate = audio_settings.read().sample_rate;
+					let volume = state.read().config.volume;
 					let available = read_samples(&mut buf, volume, &mut audio_data);
 					(sample_rate, available)
 				};

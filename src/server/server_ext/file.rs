@@ -1,11 +1,11 @@
-use std::{format, io::Read, path::Path, process::{Command, Stdio}, sync::{Arc, LazyLock, atomic::{AtomicBool, Ordering}}, thread::{self, JoinHandle}, time::Duration, vec};
+use std::{format, io::Read, process::{Command, Stdio}, sync::{Arc, LazyLock, atomic::{AtomicBool, Ordering}}, thread::{self, JoinHandle}, time::Duration, vec};
 
 use indexmap::IndexMap;
 use parking_lot::{Mutex, RwLock};
 use rayon::{iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator}, slice::ParallelSlice};
 use ringbuf::{HeapProd, HeapRb, traits::{Producer, Split}};
 
-use crate::{common::{base::file::SaveableFile, log}, server::ServerState};
+use crate::{common::log, server::AudioData};
 
 // This uses the CLOCK algorithm for replacement
 struct FileCache {
@@ -45,52 +45,32 @@ impl FileCache {
 }
 
 pub struct ServerFile {
-	pub base: SaveableFile,
-	lock: Arc<Mutex<()>>,
-	path: String
+	path: String,
+	volume: f32,
+	use_lock: bool
 }
 
 impl ServerFile {
-	pub fn new(path: String, server_state: &ServerState) -> Self {
-		let lock = if server_state.config.playlist_mode {
-			server_state.playlist_lock.clone()
-		} else {
-			Arc::new(Mutex::new(()))
-		};
-
-		Self::new_with_lock(path, lock, server_state)
+	pub fn new(path: String, volume: f32, use_lock: bool) -> Self {
+		Self {
+			path,
+			volume,
+			use_lock
+		}
 	}
 
-	pub fn new_with_lock(path: String, lock: Arc<Mutex<()>>, server_state: &ServerState) -> Self {
-		let pathed = Path::new(&path);
-		let parent = pathed.parent().unwrap().to_str().unwrap().to_string();
-		let name = pathed.file_name().unwrap().to_os_string().into_string().unwrap();
-		let base = match server_state.config.files.get(&parent) {
-			Some(map) => {
-				match map.get(&name) {
-					Some(entry) => entry.clone(),
-					None => SaveableFile::default(),
-				}
-			},
-			None => SaveableFile::default()
-		};
-
-		Self { base, lock, path }
-	}
-
-	pub fn play(&self, server_state: &mut ServerState) -> Option<JoinHandle<()>> {
-		let volume = self.base.volume as f32 / 100.0;
+	pub fn play(&self, sample_rate: u32, audio_data: &mut AudioData) -> Option<JoinHandle<()>> {
+		let sample_rate = sample_rate as usize;
 		let stopped = Arc::new(AtomicBool::new(false));
-		let (sample_rate, prod) = {
-			let sample_rate = server_state.sample_rate as usize;
+		let prod = {
 			let rb = HeapRb::<f32>::new(sample_rate / 16);
 			let (prod, cons) = rb.split();
-			server_state.audio_sender.send(cons).unwrap();
-			server_state.stoppable.push(stopped.clone());
-			(sample_rate, prod)
+			audio_data.audio_sender.send(cons).unwrap();
+			audio_data.stoppable.push(stopped.clone());
+			prod
 		};
 
-		match self.play_with_ffmpeg(volume, sample_rate, stopped, prod, self.lock.clone()) {
+		match self.play_with_ffmpeg(sample_rate, stopped, prod) {
 			Ok(thread) => Some(thread),
 			Err(err) => {
 				log::error(format!("Failed to play file with ffmpeg: {:?}", err));
@@ -99,9 +79,10 @@ impl ServerFile {
 		}
 	}
 
-	fn play_with_ffmpeg(&self, volume: f32, sample_rate: usize, stopped: Arc<AtomicBool>, mut prod: HeapProd<f32>, lock: Arc<Mutex<()>>) -> Result<JoinHandle<()>, Box<dyn std::error::Error>> {
+	fn play_with_ffmpeg(&self, sample_rate: usize, stopped: Arc<AtomicBool>, mut prod: HeapProd<f32>) -> Result<JoinHandle<()>, Box<dyn std::error::Error>> {
 		static MAX_SAMPLE: usize = 1024 * 1024; // ~1 MB for f32, 21 seconds with 48000 Hz
 		static FILE_CACHE: LazyLock<RwLock<FileCache>> = LazyLock::new(|| RwLock::new(FileCache::new(MAX_SAMPLE * 4))); // ~4 MB
+		static PLAYLIST_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 		let mut result = Command::new("ffmpeg").args([
 			"-loglevel", "-8",
 			"-i", &self.path,
@@ -112,8 +93,15 @@ impl ServerFile {
 		]).stdout(Stdio::piped()).spawn()?;
 		let mut stdout = result.stdout.take().unwrap();
 		let path = self.path.clone();
+		let volume = self.volume;
+		let use_lock = self.use_lock;
 		Ok(thread::spawn(move || {
-			let _locked = lock.lock();
+			let empty_lock = Mutex::new(());
+			let _locked = if use_lock {
+				PLAYLIST_LOCK.lock()
+			} else {
+				empty_lock.lock()
+			};
 			let mut load_file = || {
 				let mut buf_size = sample_rate * 4 / 16;
 				while buf_size % 4 != 0 {

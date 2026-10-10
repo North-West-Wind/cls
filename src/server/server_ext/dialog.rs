@@ -1,10 +1,10 @@
 use std::{sync::{Arc, atomic::{AtomicBool, Ordering}}, thread::{self, JoinHandle}, time::Duration};
 
-use parking_lot::Mutex;
+use parking_lot::RwLock;
 use rand::Rng;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::{common::base::dialog::Dialog, server::{AtomicServerState, server_ext::file::ServerFile}};
+use crate::{common::base::dialog::Dialog, server::{AudioData, server_ext::file::ServerFile}};
 
 #[derive(Clone, Default)]
 pub struct ServerDialog {
@@ -22,20 +22,13 @@ impl From<Dialog> for ServerDialog {
 }
 
 impl ServerDialog {
-	pub fn play(&self, server_state: AtomicServerState) -> Option<JoinHandle<()>> {
+	pub fn play(&self, sample_rate: u32, audio_data: Arc<RwLock<AudioData>>) -> Option<JoinHandle<()>> {
 		if self.base.files.is_empty() {
 			return None;
 		}
 
 		let active = self.active.clone();
-		let files = {
-			let server_state = server_state.read();
-			self.base.files.par_iter().map(|path| {
-				let mut file = ServerFile::new_with_lock(path.clone(), Arc::new(Mutex::new(())), &server_state);
-				file.base.volume = self.base.volume;
-				file
-			}).collect::<Vec<_>>()
-		};
+		let files = self.base.files.par_iter().map(|path| ServerFile::new(path.clone(), self.base.volume as f32 / 100.0, false)).collect::<Vec<_>>();
 		let delay = self.base.delay;
 		let random = self.base.random;
 		let sequential = self.base.sequential;
@@ -57,7 +50,7 @@ impl ServerDialog {
 				let file = &files[play_next];
 				play_next = (play_next + 1) % files.len();
 
-				let thread = file.play(&mut server_state.write());
+				let thread = file.play(sample_rate, &mut audio_data.write());
 				if !sequential {
 					thread::sleep(Duration::from_secs_f32(delay));
 				} else if let Some(thread) = thread {
