@@ -1,8 +1,8 @@
-use std::{cmp::Ordering, error::Error, fmt::Display, str::FromStr};
+use std::{cmp::Ordering, error::Error, fmt::Display, str::FromStr, sync::LazyLock};
 
 use handy_keys::{Key, Modifiers};
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseAnyKeyError;
@@ -15,7 +15,7 @@ impl Display for ParseAnyKeyError {
 
 impl Error for ParseAnyKeyError {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AnyKey {
 	M(Modifiers),
 	K(Key),
@@ -93,6 +93,21 @@ impl Ord for AnyKey {
 	}
 }
 
+impl Serialize for AnyKey {
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where S: serde::Serializer {
+		serializer.serialize_str(&self.to_string())
+	}
+}
+
+impl<'de> Deserialize<'de> for AnyKey {
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where D: serde::Deserializer<'de> {
+		let s: &str = Deserialize::deserialize(deserializer)?;
+		Self::from_str(s).map_err(de::Error::custom)
+	}
+}
+
 impl AnyKey {
 	pub fn split_modifiers(modifiers: Modifiers) -> Vec<AnyKey> {
 		let str = modifiers.to_string();
@@ -111,9 +126,9 @@ impl AnyKey {
 // 4. Number keys
 // 5. Symbol keys
 pub fn key_sorter(a: &str, b: &str) -> Ordering {
-	let regex_fn = Regex::new(r"F\d").unwrap();
-	let regex_a = regex_fn.is_match(a);
-	let regex_b = regex_fn.is_match(b);
+	static REGEX_FN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"F\d").unwrap());
+	let regex_a = REGEX_FN.is_match(a);
+	let regex_b = REGEX_FN.is_match(b);
 	if regex_a && !regex_b {
 		Ordering::Less
 	} else if !regex_a && regex_b {
