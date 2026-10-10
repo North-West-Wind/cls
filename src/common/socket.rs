@@ -45,7 +45,7 @@ pub enum ClientToServer {
 	StopDialog(u64),
 
 	// Starts from 21
-	SetLoopback(u8, String),
+	SetLoopbacks(Vec<String>),
 	SetSinkVolume(u32),
 	SetFile(String, SaveableFile),
 	SetWave(u64, SaveableWave),
@@ -99,8 +99,14 @@ pub fn decode_c2s(msg: &[u8]) -> Result<ClientToServer, Box<dyn std::error::Erro
 			Ok(StopDialog(id))
 		},
 		21 => {
-			let loopback = String::from_utf8(msg[2..].try_into()?)?;
-			Ok(SetLoopback(msg[1], loopback))
+			let mut offset = 5;
+			let mut loopbacks = vec![];
+			for _ in 0..u32::from_be_bytes(msg[1..5].try_into()?) as usize {
+				let len = u32::from_be_bytes(msg[offset..(offset + 4)].try_into()?) as usize;
+				loopbacks.push(String::from_utf8(msg[(offset + 4)..(offset + 4 + len)].try_into()?)?);
+				offset += 4 + len;
+			}
+			Ok(SetLoopbacks(loopbacks))
 		},
 		22 => {
 			let volume = u32::from_be_bytes(msg[1..].try_into()?);
@@ -205,9 +211,15 @@ pub fn encode_c2s(request: &ClientToServer) -> Vec<u8> {
 			buf.extend(uid.to_be_bytes());
 			buf
 		},
-		SetLoopback(id, loopback) => {
-			let mut buf = vec![21u8, *id];
-			buf.extend_from_slice(loopback.as_bytes());
+		SetLoopbacks(loopbacks) => {
+			let mut buf = vec![21u8];
+			buf.extend((loopbacks.len() as u32).to_be_bytes());
+			// Need ordering, don't use par_iter
+			loopbacks.iter().for_each(|name| {
+				let name_bytes = name.as_bytes();
+				buf.extend((name_bytes.len() as u32).to_be_bytes());
+				buf.extend_from_slice(name_bytes);
+			});
 			buf
 		},
 		SetSinkVolume(volume) => {

@@ -36,7 +36,6 @@ impl Default for SingleWave {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct SaveableWave {
-	#[serde(default)]
 	pub uid: u64,
 	pub label: String,
 	pub id: Option<u32>,

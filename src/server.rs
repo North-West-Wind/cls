@@ -44,7 +44,7 @@ pub(self) struct ServerState {
 	audio_data: Arc<RwLock<AudioData>>,
 	hotkeys: Arc<RwLock<Hotkeys>>, // Write lock should only ever be held by ServerState load_config
 	
-	pa_modules: HashMap<u8, (String, String)>, // ID -> (Name, Module num)
+	pa_modules: HashMap<String, String>, // ID -> (Name, Module num)
 
 	// Waves and Dialogs
 	waves: Arc<RwLock<HashMap<u64, ServerWave>>>,
@@ -117,17 +117,11 @@ impl ServerState {
 		(*self.dialogs.write()) = dialogs;
 
 		// Pulseaudio loopback reload
-		self.pa_modules.drain().for_each(|(_, (_, module_num))| { let _ = unload_module(&module_num); });
-		self.pa_modules.insert(0, (APP_NAME.to_string(), load_null_sink()));
-		if config.loopback_default {
-			self.pa_modules.insert(1, ("@DEFAULT_SINK".to_string(), loopback("@DEFAULT_SINK@")));
-		}
-		if !config.loopback_1.is_empty() {
-			self.pa_modules.insert(2, (config.loopback_1.clone(), loopback(&config.loopback_1)));
-		}
-		if !config.loopback_2.is_empty() {
-			self.pa_modules.insert(3, (config.loopback_2.clone(), loopback(&config.loopback_2)));
-		}
+		self.pa_modules.drain().for_each(|(_, module_num)| { let _ = unload_module(&module_num); });
+		self.pa_modules.insert(APP_NAME.to_string(), load_null_sink());
+		config.loopbacks.iter().for_each(|name| {
+			self.pa_modules.insert(name.clone(), loopback(name));
+		});
 	}
 
 	fn exit() -> io::Result<()> {
@@ -380,7 +374,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 		use ServerToClient::*;
 		match request.msg() {
 			Exit => {
-				server_state.pa_modules.drain().for_each(|(_, (_, module_num))| { let _ = unload_module(&module_num); });
+				server_state.pa_modules.drain().for_each(|(_, module_num)| { let _ = unload_module(&module_num); });
 				server_state.state.write().running = false;
 				request.reply(Success);
 			},
@@ -471,37 +465,30 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 				let matcher = SkimMatcherV2::default();
 				let sample_rate = server_state.audio_settings.read().sample_rate;
 				let config = &server_state.state.read().config;
-				let result = config.tabs.par_iter().filter_map(|tab| {
+				let result = config.files.par_iter().filter_map(|(tab, files)| {
 					if let Ok(entries) = read_dir(Path::new(tab)) {
 						entries.into_iter().par_bridge().filter_map(|entry| {
 							if let Ok(entry) = entry {
 								let path = entry.path();
 								if !path.is_dir() && let Some(score) = matcher.fuzzy_match(path.file_name().unwrap().to_str().unwrap(), &query) {
-									return Some((score, format!("{}", path.to_str().unwrap())))
+									let volume = if let Some(file) = files.get(entry.file_name().to_str().unwrap()) {
+										file.volume
+									} else {
+										100
+									};
+									return Some((score, format!("{}", path.to_str().unwrap()), volume))
 								}
 							}
 							None
-						}).max_by(|(a, _), (b, _)| a.cmp(b))
+						}).max_by(|(a, _, _), (b, _, _)| a.cmp(b))
 					} else {
 						None
 					}
-				}).max_by(|(a, _), (b, _)| a.cmp(b));
+				}).max_by(|(a, _, _), (b, _, _)| a.cmp(b));
 				match result {
-					Some((_, path)) => {
+					Some((_, path, volume)) => {
 						request.reply(Success);
-						let pathed = Path::new(&path);
-						let parent = pathed.parent().unwrap().to_str().unwrap().to_string();
-						let name = pathed.file_name().unwrap().to_os_string().into_string().unwrap();
-						let volume = match config.files.get(&parent) {
-							Some(map) => {
-								match map.get(&name) {
-									Some(entry) => entry.volume as f32 / 100.0,
-									None => 1.0,
-								}
-							},
-							None => 1.0
-						};
-						let file = ServerFile::new(path.clone(), volume, config.playlist_mode);
+						let file = ServerFile::new(path.clone(), volume as f32 / 100.0, config.playlist_mode);
 						let audio_data = server_state.audio_data.clone();
 						let broadcaster = broadcaster.clone();
 						let id = id.next();
@@ -545,26 +532,23 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 					}
 				}
 			},
-			SetLoopback(id, new) => {
-				match server_state.pa_modules.get(&id) {
-					Some((old, module_num)) => {
-						if *old == *new {
-							request.reply(Error(format!("Loopback {} is already set to {} ({})", id, old, module_num)));
-						} else {
-							let _ = unload_module(module_num);
-							if !new.is_empty() {
-								server_state.pa_modules.insert(*id, (new.clone(), loopback(&new)));
-							}
-							request.reply(Success);
-						}
-					},
-					None => {
-						if !new.is_empty() {
-							server_state.pa_modules.insert(*id, (new.clone(), loopback(&new)));
-						}
-						request.reply(Success);
+			SetLoopbacks(loopbacks) => {
+				// Unload old loopbacks
+				server_state.pa_modules.retain(|name, module_num| {
+					if loopbacks.contains(name) {
+						true
+					} else {
+						let _ = unload_module(module_num);
+						false
 					}
-				}
+				});
+				// Load new loopbacks
+				loopbacks.iter().for_each(|name| {
+					if !server_state.pa_modules.contains_key(name) {
+						server_state.pa_modules.insert(name.clone(), loopback(name));
+					}
+				});
+				request.reply(Success);
 			},
 			SetSinkVolume(volume) => {
 				server_state.state.write().config.volume = *volume;

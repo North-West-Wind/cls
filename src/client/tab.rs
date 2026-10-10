@@ -96,15 +96,11 @@ fn add_duration(client_state: AtomicClientState, tab: String) {
 	}
 }
 
-fn scan_tab(atomic_client_state: AtomicClientState, index: usize) -> Result<(), Box<dyn std::error::Error>> {
+fn scan_tab(atomic_client_state: AtomicClientState, tab: String) -> Result<(), Box<dyn std::error::Error>> {
 	let client_state = atomic_client_state.clone();
 	let client_state = client_state.read();
 	let fast_scan = client_state.config.fast_scan;
-	if index >= client_state.file_tabs.len() {
-		return Ok(());
-	}
-	let (tab, old_files) = client_state.file_tabs.get_index(index).unwrap();
-	let tab = tab.clone();
+	let Some(old_files) = client_state.file_tabs.get(&tab) else { return Ok(()) };
 	let old_files = old_files.clone();
 	drop(client_state);
 	let mut files = IndexMap::new();
@@ -131,22 +127,8 @@ fn scan_tab(atomic_client_state: AtomicClientState, index: usize) -> Result<(), 
 			}
 		}
 		files.sort_keys();
-		atomic_client_state.write().file_tabs[index] = files;
+		atomic_client_state.write().file_tabs.insert(tab.clone(), files);
 		add_duration(atomic_client_state, tab.clone());
-	}
-	Ok(())
-}
-
-fn scan_tabs(client_state: AtomicClientState) -> Result<(), Box<dyn std::error::Error>> {
-	let len = { client_state.read().file_tabs.len() };
-	let mut handles = vec![];
-	for ii in 0..len {
-		let client_state = client_state.clone();
-		let handle = thread::spawn(move || { let _ = scan_tab(client_state, ii); });
-		handles.push(handle);
-	}
-	for handle in handles {
-		handle.join().unwrap();
 	}
 	Ok(())
 }
@@ -159,12 +141,18 @@ pub fn scan(client_state: AtomicClientState, mode: Scanning) {
 	match mode {
 		Scanning::All => {
 			log::info("Scanning all tabs...");
-			let _ = scan_tabs(client_state.clone());
+			let tabs = client_state.read().file_tabs.keys().cloned().collect::<Vec<_>>();
+			tabs.par_iter().cloned().for_each(|tab| {
+				let client_state = client_state.clone();
+				thread::spawn(move || { let _ = scan_tab(client_state, tab); }).join().unwrap();
+			});
+			log::info(format!("File tabs order after scan all: {}", client_state.read().file_tabs.keys().cloned().collect::<Vec<_>>().join(", ")));
 			log::info("Scanned all tabs");
 		},
 		Scanning::One(index) => {
-			log::info(format!("Scanning tab {}...", index));
-			let _ = scan_tab(client_state.clone(), index);
+			let tab = client_state.read().file_tabs.keys()[index].clone();
+			log::info(format!("Scanning tab {}...", tab));
+			let _ = scan_tab(client_state.clone(), tab);
 			log::info(format!("Scanned tab {}", index));
 			let mut client_state = client_state.write();
 			client_state.scanning = Scanning::None;

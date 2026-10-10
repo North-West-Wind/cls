@@ -204,15 +204,14 @@ impl ClientState {
 		self.config = config::load();
 		self.dialogs.clear();
 
-		self.file_tabs = self.config.tabs.par_iter().map(|tab| {
+		self.file_tabs = self.config.files.par_iter().map(|(tab, config_files)| {
 			let mut files = IndexMap::new();
-			if let Some(config_files) = self.config.files.get(tab) {
-				config_files.iter().for_each(|(name, file)| {
-					files.insert(name.clone(), ClientFile::from(file.clone()));
-				});
-			}
+			config_files.iter().for_each(|(name, file)| {
+				files.insert(name.clone(), ClientFile::from(file.clone()));
+			});
 			(tab.clone(), files)
 		}).collect();
+		log::info(format!("File tabs order after load_config: {}", self.file_tabs.keys().cloned().collect::<Vec<_>>().join(", ")));
 		// REMEMBER TO SCAN TABS AFTER THIS
 
 		self.waves = self.config.waves.par_iter().map(|wave| ClientWave::from(Wave::from(wave))).collect();

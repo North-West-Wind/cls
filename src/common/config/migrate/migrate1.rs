@@ -1,12 +1,33 @@
-use std::{collections::{HashMap, HashSet}, path::Path, time::SystemTime, vec};
+use std::{collections::{HashMap, HashSet}, path::Path, vec};
 
 use config::Config;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
-use crate::common::base::{dialog::SaveableDialog, file::SaveableFile, wave::SaveableWave};
+use crate::common::base::{file::SaveableFile, wave::SingleWave};
 
 use super::{get_config_path, migrate0::ConfigV0};
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
+pub(crate) struct SaveableWave {
+	pub label: String,
+	pub id: Option<u32>,
+	pub keys: HashSet<String>,
+	pub waves: Vec<SingleWave>,
+	pub volume: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
+pub(crate) struct SaveableDialog {
+	pub label: String,
+	pub id: Option<u32>,
+	pub keys: HashSet<String>,
+	pub files: Vec<String>,
+	pub delay: f32,
+	pub random: bool,
+	pub sequential: bool,
+	pub volume: u32,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(default)]
@@ -51,26 +72,7 @@ impl ConfigV1 {
 			.build()
 			.expect("Failed to build config");
 	
-		let mut config = settings.try_deserialize::<ConfigV1>().expect("Failed to parse config");
-		
-		// Fixing UIDs on waves and dialogs
-		let mut now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64;
-		// Need to ensure uid doesn't repeat, don't use par_iter
-		config.waves.iter_mut().for_each(|wave| {
-			if wave.uid == 0 {
-				wave.uid = now;
-				now += 1;
-			}
-		});
-		config.dialogs.iter_mut().for_each(|dialog| {
-			if dialog.uid == 0 {
-				dialog.uid = now;
-				now += 1;
-			}
-		});
-		// TODO: Trigger save in some way later
-
-		config
+		settings.try_deserialize::<ConfigV1>().expect("Failed to parse config")
 	}
 
 	pub(super) fn from_v0(config: ConfigV0) -> ConfigV1 {

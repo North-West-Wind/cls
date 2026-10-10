@@ -17,7 +17,7 @@ pub fn load() -> SoundboardConfig {
 }
 
 pub fn save(config: &SoundboardConfig) {
-	let serialized = serde_json::to_string(config).expect("Failed to serialize app config");
+	let serialized = serde_json::to_string_pretty(config).expect("Failed to serialize app config");
 	let config_path = get_config_path(false);
 	config_path.parent().inspect(|parent| {
 		let _ = std::fs::create_dir_all(parent);

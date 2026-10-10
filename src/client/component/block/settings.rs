@@ -49,9 +49,7 @@ impl BlockRenderArea for SettingsBlock {
 			stop_key = format!("{}", keys.join(" + "));
 		}
 		self.left_right_line("Stop Key".to_string(), stop_key, width as usize, &mut lines);
-		self.left_right_line("Loopback Default".to_string(), config.loopback_default.to_string(), width as usize, &mut lines);
-		self.left_right_line("Loopback 1".to_string(), config.loopback_1.clone(), width as usize, &mut lines);
-		self.left_right_line("Loopback 2".to_string(), config.loopback_2.clone(), width as usize, &mut lines);
+		self.left_right_line("Loopbacks".to_string(), config.loopbacks.join(","), width as usize, &mut lines);
 		self.left_right_line("Playlist Mode".to_string(), config.playlist_mode.to_string(), width as usize, &mut lines);
 		self.left_right_line("Fast Scan".to_string(), config.fast_scan.to_string(), width as usize, &mut lines);
 		f.render_widget(Paragraph::new(lines).block(block), area);
@@ -125,34 +123,19 @@ impl SettingsBlock {
 				})));
 				true
 			},
-			// Loopback default toggle
+			// Loopbacks
 			1 => {
-				let mut client_state = client_state.write();
-				client_state.config.loopback_default = !client_state.config.loopback_default;
-				client_state.dirty = true;
-				client_state.request(ClientToServer::SetLoopback(1, if client_state.config.loopback_default { "@DEFAULT_SINK@" } else { "" }.to_string()));
-				true
-			},
-			// Additional loopback
-			2|3 => {
-				let selected = self.selected;
-				client_state.clone().read().popup_manager.push(PopupComponent::Input(InputPopup::new(String::new(), if self.selected == 2 { "Loopback 1" } else { "Loopback 2" }.to_string(), FLAG_NONE, move |value| {
+				let loopbacks = client_state.read().config.loopbacks.join(",");
+				client_state.clone().read().popup_manager.push(PopupComponent::Input(InputPopup::new(loopbacks, "Loopbacks (Comma-separated)".to_string(), FLAG_NONE, move |value| {
 					let mut client_state = client_state.write();
-					let loopback = value.to_string();
-					if selected == 2 {
-						client_state.config.loopback_1 = loopback.clone();
-						client_state.dirty = true;
-						client_state.request(ClientToServer::SetLoopback(2, loopback.clone()));
-					} else {
-						client_state.config.loopback_2 = loopback.clone();
-						client_state.dirty = true;
-						client_state.request(ClientToServer::SetLoopback(3, loopback.clone()));
-					}
+					client_state.config.loopbacks = value.split(",").map(|name| name.to_string()).collect();
+					client_state.dirty = true;
+					client_state.request(ClientToServer::SetLoopbacks(client_state.config.loopbacks.clone()));
 				})));
 				true
 			},
 			// Playlist mode toggle
-			4 => {
+			2 => {
 				let mut client_state = client_state.write();
 				client_state.config.playlist_mode = !client_state.config.playlist_mode;
 				client_state.dirty = true;
@@ -160,7 +143,7 @@ impl SettingsBlock {
 				true
 			},
 			// Fast scan toggle
-			5 => {
+			3 => {
 				let mut client_state = client_state.write();
 				client_state.config.fast_scan = !client_state.config.fast_scan;
 				client_state.dirty = true;
@@ -180,30 +163,18 @@ impl SettingsBlock {
 				true
 			},
 			1 => {
-				client_state.config.loopback_default = true;
+				client_state.config.loopbacks = vec!["@DEFAULT_SINK@".to_string()];
 				client_state.dirty = true;
-				client_state.request(ClientToServer::SetLoopback(1, "@DEFAULT_SINK@".to_string()));
+				client_state.request(ClientToServer::SetLoopbacks(client_state.config.loopbacks.clone()));
 				true
 			},
 			2 => {
-				client_state.config.loopback_1 = String::new();
-				client_state.dirty = true;
-				client_state.request(ClientToServer::SetLoopback(2, "".to_string()));
-				true
-			},
-			3 => {
-				client_state.config.loopback_2 = String::new();
-				client_state.dirty = true;
-				client_state.request(ClientToServer::SetLoopback(3, "".to_string()));
-				true
-			},
-			4 => {
 				client_state.config.playlist_mode = false;
 				client_state.dirty = true;
 				client_state.request(ClientToServer::SetPlaylistMode(false));
 				true
 			},
-			5 => {
+			3 => {
 				client_state.config.fast_scan = false;
 				client_state.dirty = true;
 				true
