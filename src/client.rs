@@ -6,14 +6,13 @@ use parking_lot::{Condvar, Mutex, RwLock};
 use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::{Alignment, Constraint, Direction, Layout, Rect}, style::{Color, Style}, widgets::{Block, BorderType, Borders, Paragraph}};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::{client::{client_ext::{file::ClientFile, wave::ClientWave}, component::{block::{BlockNavigation, BlockRender, BlockRenderArea, dialogs::DialogBlock, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::LogBlock, playing::PlayingBlock, results::ResultsBlock, search::SearchBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupComponent, PopupRender}}, listener::init_key_listener, sender::TcpSender, subscriber::TcpSubscriber, tab::scan}, common::{base::dialog::SaveableDialog, config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, MIN_HEIGHT, MIN_WIDTH, NO_RENDER_HEIGHT, NO_RENDER_WIDTH}, log, socket::{ClientToServer, ServerToClient}}};
+use crate::{client::{client_ext::{file::ClientFile, wave::ClientWave}, component::{block::{BlockNavigation, BlockRender, BlockRenderArea, dialogs::DialogBlock, files::FilesBlock, help::HelpBlock, info::InfoBlock, log::LogBlock, playing::PlayingBlock, results::ResultsBlock, search::SearchBlock, settings::SettingsBlock, tabs::TabsBlock, waves::WavesBlock}, popup::{PopupComponent, PopupRender}}, listener::init_key_listener, tab::scan, tcp::TcpClient}, common::{base::dialog::SaveableDialog, config::{self, SoundboardConfig}, constant::{ADDRESS, MIN_HEIGHT, MIN_WIDTH, NO_RENDER_HEIGHT, NO_RENDER_WIDTH}, log, socket::{ClientToServer, ServerToClient}}};
 
 mod client_ext;
 mod component;
 mod listener;
-mod sender;
-mod subscriber;
 mod tab;
+mod tcp;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum SelectionLayer {
@@ -163,7 +162,7 @@ pub(self) struct ClientState {
 	running: bool,
 
 	// Communication
-	tcp_sender: TcpSender,
+	client: TcpClient,
 
 	// Multi-threaded managers
 	redrawer: Redrawer,
@@ -237,7 +236,7 @@ impl ClientState {
 	}
 
 	fn request(&self, request: ClientToServer) -> bool {
-		match self.tcp_sender.send(request) {
+		match self.client.send(request) {
 			Ok(_) => true,
 			Err(err) => {
 				log::error(format!("TCP sender tx send error: {:?}", err));
@@ -269,7 +268,7 @@ impl ClientState {
 	fn exit(&mut self) {
 		self.running = false;
 		self.redrawer.notify();
-		self.tcp_sender.shutdown();
+		self.client.shutdown();
 	}
 }
 
@@ -279,14 +278,13 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 	let log_block = LogBlock::new(redrawer.clone());
 
 	// Sockets
-	let tcp_sender = TcpSender::connect(ADDRESS_COMMS);
-	let subscriber = TcpSubscriber::connect(ADDRESS_EVENT);
+	let (client, broadcast_rx) = TcpClient::connect(ADDRESS);
 
 	let client_state = Arc::new(RwLock::new(ClientState {
 		config: config::load(),
 		running: true,
 
-		tcp_sender,
+		client,
 
 		error: String::new(),
 		error_important: false,
@@ -337,7 +335,7 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 	let client_state_socket = client_state.clone();
 	thread::spawn(move || {
 		while client_state_socket.read().running {
-			match subscriber.recv() {
+			match broadcast_rx.recv() {
 				Ok(msg) => {
 					use ServerToClient::*;
 					match msg {
@@ -368,7 +366,6 @@ pub fn start_client(save_on_exit: bool) -> Result<(), Box<dyn std::error::Error>
 				Err(err) => log::error(format!("Failed to recv server broadcast: {:?}", err)),
 			}
 		}
-		subscriber.shutdown();
 	});
 
 	// Key listeners

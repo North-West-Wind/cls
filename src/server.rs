@@ -6,14 +6,13 @@ use parking_lot::RwLock;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelExtend, ParallelIterator};
 use ringbuf::HeapCons;
 
-use crate::{common::{config::{self, SoundboardConfig}, constant::{ADDRESS_COMMS, ADDRESS_EVENT, APP_NAME}, keyboard::AnyKey, log, socket::{ClientToServer, ServerToClient, encode_c2s}}, server::{audio::create_audio_player, broadcaster::TcpBroadcaster, keys::KeyCombo, pulseaudio::{load_null_sink, loopback, unload_module}, receiver::TcpReceiver, server_ext::{dialog::ServerDialog, file::ServerFile, wave::ServerWave}}};
+use crate::{common::{config::{self, SoundboardConfig}, constant::{ADDRESS, APP_NAME}, keyboard::AnyKey, log, socket::{ClientToServer, ServerToClient, encode_c2s}}, server::{audio::create_audio_player, keys::KeyCombo, pulseaudio::{load_null_sink, loopback, unload_module}, server_ext::{dialog::ServerDialog, file::ServerFile, wave::ServerWave}, tcp::TcpServer}};
 
 mod audio;
-mod broadcaster;
 mod keys;
 mod pulseaudio;
 mod server_ext;
-mod receiver;
+mod tcp;
 
 pub(self) struct State {
 	config: SoundboardConfig,
@@ -126,7 +125,7 @@ impl ServerState {
 
 	fn exit() -> io::Result<()> {
 		log::info("Exiting...");
-		let mut stream = TcpStream::connect(ADDRESS_COMMS)?;
+		let mut stream = TcpStream::connect(ADDRESS)?;
 		stream.write_all(&encode_c2s(&ClientToServer::Exit))?;
 		Ok(())
 	}
@@ -192,8 +191,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 	};
 
 	// Create sockets
-	let receiver = TcpReceiver::bind(ADDRESS_COMMS)?;
-	let broadcaster = TcpBroadcaster::bind(ADDRESS_EVENT)?;
+	let (server, request_rx) = TcpServer::bind(ADDRESS)?;
 
 	// ID generator for some server broadcasts
 	let id = IdGen::default();
@@ -217,7 +215,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 		let waves = server_state.waves.clone();
 		let dialogs = server_state.dialogs.clone();
 
-		let broadcaster = broadcaster.clone();
+		let server = server.clone();
 		let id = id.clone();
 		thread::spawn(move || {
 			#[cfg(target_os = "macos")]
@@ -293,15 +291,15 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 								};
 								let file = ServerFile::new(path.clone(), volume, config.playlist_mode);
 								let audio_data = audio_data.clone();
-								let broadcaster = broadcaster.clone();
+								let server = server.clone();
 								let id = id.next();
 								thread::spawn(move || {
-									broadcaster.send(ServerToClient::Playing(0, id, Path::new(&path).file_name().unwrap().to_str().unwrap().to_string()));
+									server.send(ServerToClient::Playing(0, id, Path::new(&path).file_name().unwrap().to_str().unwrap().to_string()));
 									let thread = file.play(sample_rate, &mut audio_data.write());
 									if let Some(thread) = thread {
 										let _ = thread.join();
 									}
-									broadcaster.send(ServerToClient::Stopping(id));
+									server.send(ServerToClient::Stopping(id));
 								});
 							});
 						}
@@ -313,16 +311,16 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 									if active && !wave.active.load(Ordering::Relaxed) {
 										let wave = wave.clone();
 										let mut audio_sender = audio_data.read().audio_sender.clone();
-										let broadcaster = broadcaster.clone();
+										let server = server.clone();
 										let id = id.next();
 										thread::spawn(move || {
-											broadcaster.send(ServerToClient::Playing(1, id, wave.base.label.clone()));
+											server.send(ServerToClient::Playing(1, id, wave.base.label.clone()));
 											wave.active.store(true, Ordering::Relaxed);
 											let thread = wave.play(sample_rate, &mut audio_sender);
 											if let Some(thread) = thread {
 												let _ = thread.join();
 											}
-											broadcaster.send(ServerToClient::Stopping(id));
+											server.send(ServerToClient::Stopping(id));
 										});
 									} else if !active {
 										wave.active.store(false, Ordering::Relaxed);
@@ -337,17 +335,17 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 								if let Some(dialog) = dialogs.read().get(uid) {
 									if active && !dialog.active.load(Ordering::Relaxed) {
 										let dialog = dialog.clone();
-										let broadcaster = broadcaster.clone();
+										let server = server.clone();
 										let audio_data = audio_data.clone();
 										let id = id.next();
 										thread::spawn(move || {
-											broadcaster.send(ServerToClient::Playing(2, id, dialog.base.label.clone()));
+											server.send(ServerToClient::Playing(2, id, dialog.base.label.clone()));
 											dialog.active.store(true, Ordering::Relaxed);
 											let thread = dialog.play(sample_rate, audio_data);
 											if let Some(thread) = thread {
 												let _ = thread.join();
 											}
-											broadcaster.send(ServerToClient::Stopping(id));
+											server.send(ServerToClient::Stopping(id));
 										});
 									} else if !active {
 										dialog.active.store(false, Ordering::Relaxed);
@@ -369,7 +367,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 
 	// Socket listener - the main thing keeping this running
 	while server_state.state.read().running {
-		let request = receiver.recv()?;
+		let request = request_rx.recv()?;
 		use ClientToServer::*;
 		use ServerToClient::*;
 		match request.msg() {
@@ -401,15 +399,15 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 				let file = ServerFile::new(path.clone(), volume, config.playlist_mode);
 				let name = Path::new(&path).file_name().unwrap().to_str().unwrap().to_string();
 				let audio_data = server_state.audio_data.clone();
-				let broadcaster = broadcaster.clone();
+				let server = server.clone();
 				let id = id.next();
 				thread::spawn(move || {
-					broadcaster.send(Playing(0, id, name));
+					server.send(Playing(0, id, name));
 					let thread = file.play(sample_rate, &mut audio_data.write());
 					if let Some(thread) = thread {
 						let _ = thread.join();
 					}
-					broadcaster.send(Stopping(id));
+					server.send(Stopping(id));
 				});
 			},
 			PlayWave(uid) => {
@@ -421,15 +419,15 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 						let wave = wave.clone();
 						let sample_rate = server_state.audio_settings.read().sample_rate;
 						let mut audio_sender = server_state.audio_data.read().audio_sender.clone();
-						let broadcaster = broadcaster.clone();
+						let server = server.clone();
 						let id = id.next();
 						thread::spawn(move || {
-							broadcaster.send(Playing(1, id, wave.base.label.clone()));
+							server.send(Playing(1, id, wave.base.label.clone()));
 							wave.active.store(true, Ordering::Relaxed);
 							if let Some(thread) = wave.play(sample_rate, &mut audio_sender) {
 								let _ = thread.join();
 							}
-							broadcaster.send(Stopping(id));
+							server.send(Stopping(id));
 						});
 					}
 				} else {
@@ -445,15 +443,15 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 						let dialog = dialog.clone();
 						let sample_rate = server_state.audio_settings.read().sample_rate;
 						let audio_data = server_state.audio_data.clone();
-						let broadcaster = broadcaster.clone();
+						let server = server.clone();
 						let id = id.next();
 						thread::spawn(move || {
-							broadcaster.send(Playing(2, id, dialog.base.label.clone()));
+							server.send(Playing(2, id, dialog.base.label.clone()));
 							dialog.active.store(true, Ordering::Relaxed);
 							if let Some(thread) = dialog.play(sample_rate, audio_data) {
 								let _ = thread.join();
 							}
-							broadcaster.send(Stopping(id));
+							server.send(Stopping(id));
 						});
 					}
 				} else {
@@ -490,15 +488,15 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 						request.reply(Success);
 						let file = ServerFile::new(path.clone(), volume as f32 / 100.0, config.playlist_mode);
 						let audio_data = server_state.audio_data.clone();
-						let broadcaster = broadcaster.clone();
+						let server = server.clone();
 						let id = id.next();
 						thread::spawn(move || {
-							broadcaster.send(Playing(0, id, Path::new(&path).file_name().unwrap().to_str().unwrap().to_string()));
+							server.send(Playing(0, id, Path::new(&path).file_name().unwrap().to_str().unwrap().to_string()));
 							let thread = file.play(sample_rate, &mut audio_data.write());
 							if let Some(thread) = thread {
 								let _ = thread.join();
 							}
-							broadcaster.send(Stopping(id));
+							server.send(Stopping(id));
 						});
 					},
 					None => {
@@ -675,8 +673,7 @@ pub fn start_server(no_pacat: bool, cpal_device: String, no_log: bool) -> Result
 		}
 	}
 
-	receiver.shutdown();
-	broadcaster.shutdown();
+	server.shutdown();
 
 	log::info("Done. Goodbye!");
 

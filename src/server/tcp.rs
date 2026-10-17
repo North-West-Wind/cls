@@ -1,4 +1,4 @@
-use std::{io::{self, Write}, net::{TcpListener, TcpStream}, sync::{Arc, atomic::{AtomicBool, Ordering}, mpsc::{self, RecvError}}, thread, time::Duration};
+use std::{io::{self, Write}, net::{TcpListener, TcpStream}, sync::{Arc, atomic::{AtomicBool, Ordering}, mpsc}, thread, time::Duration};
 
 use parking_lot::{Condvar, Mutex};
 
@@ -22,21 +22,25 @@ impl Request {
 	}
 }
 
-pub struct TcpReceiver {
+// Handles client requests and broadcasting
+#[derive(Debug, Clone)]
+pub struct TcpServer {
 	address: String,
 	running: Arc<AtomicBool>,
-	rx: mpsc::Receiver<Request>
+	clients: Arc<Mutex<Vec<TcpStream>>>
 }
 
-impl TcpReceiver {
-	pub fn bind(address: &str) -> io::Result<Self> {
+impl TcpServer {
+	pub fn bind(address: &str) -> io::Result<(Self, mpsc::Receiver<Request>)> {
 		let listener = TcpListener::bind(address)?;
-		log::info(format!("TCP receiver listening to {}", address));
+		log::info(format!("TCP server listening to {}", address));
 		let running = Arc::new(AtomicBool::new(true));
+		let clients = Arc::new(Mutex::new(vec![]));
 		let (tx, rx) = mpsc::channel();
 
 		{
 			let running = running.clone();
+			let clients = clients.clone();
 			thread::spawn(move || -> io::Result<()> {
 				while running.load(Ordering::Relaxed) {
 					match listener.accept() {
@@ -44,6 +48,7 @@ impl TcpReceiver {
 							log::info(format!("Receiver client connected from {}", addr));
 							stream.set_read_timeout(Some(Duration::from_secs(1)))?;
 							stream.set_write_timeout(Some(Duration::from_secs(3)))?;
+							clients.lock().push(stream.try_clone().unwrap());
 							let running = running.clone();
 							let tx = tx.clone();
 							thread::spawn(move || {
@@ -58,7 +63,7 @@ impl TcpReceiver {
 											}
 											match decode_c2s(&buf) {
 												Ok(msg) => {
-													log::info(format!("TCP receiver decoded c2s: {:?}", msg));
+													log::info(format!("TCP server decoded c2s: {:?}", msg));
 													let responder = Arc::new((Mutex::new(None), Condvar::new()));
 													let request = Request {
 														msg,
@@ -94,19 +99,23 @@ impl TcpReceiver {
 			});
 		}
 
-		Ok(Self {
+		Ok((Self {
 			address: address.to_string(),
 			running,
-			rx
-		})
+			clients,
+		}, rx))
 	}
 
-	pub fn recv(&self) -> Result<Request, RecvError> {
-		self.rx.recv()
+	pub fn send(&self, message: ServerToClient) {
+		log::info(format!("TCP server sending s2c: {:?}", message));
+		self.clients.lock().retain_mut(|client| {
+			client.write_all(&encode_s2c(&message)).is_ok()
+		});
 	}
 
 	pub fn shutdown(&self) {
 		self.running.store(false, Ordering::Relaxed);
+		self.clients.lock().clear();
 		// Connect to listener to break out of loop
 		TcpStream::connect(&self.address).unwrap();
 	}

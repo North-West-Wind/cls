@@ -4,7 +4,7 @@ use cpal::traits::{DeviceTrait, HostTrait};
 use clap::{command, Arg, ArgAction, Command};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::{client::start_client, common::{config, constant::ADDRESS_COMMS, log, socket::{ClientToServer, ReadToPause, ServerToClient, decode_s2c, encode_c2s}}, server::start_server};
+use crate::{client::start_client, common::{config, constant::ADDRESS, log, socket::{ClientToServer, ReadToPause, ServerToClient, decode_s2c, encode_c2s}}, server::start_server};
 
 mod client;
 mod common;
@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// All subcommands are currently used for IPC
 	if let Some((subcommand, matches)) = matches.subcommand() {
 		use ClientToServer::*;
-		let mut stream = TcpStream::connect(ADDRESS_COMMS)?;
+		let mut stream = TcpStream::connect(ADDRESS)?;
 		stream.set_read_timeout(Some(Duration::from_secs(3)))?;
 		stream.set_write_timeout(Some(Duration::from_secs(1)))?;
 		let mut buf = vec![];

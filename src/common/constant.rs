@@ -11,5 +11,4 @@ pub const ENDIANESS: &str = "be";
 #[cfg(target_endian = "little")]
 pub const ENDIANESS: &str = "le";
 
-pub const ADDRESS_COMMS: &str = "127.0.0.1:5630";
-pub const ADDRESS_EVENT: &str = "127.0.0.1:5631";
+pub const ADDRESS: &str = "127.0.0.1:5630";
